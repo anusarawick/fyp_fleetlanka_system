@@ -1,0 +1,49 @@
+from typing import Optional, Dict, Any
+
+from fastapi import Header, HTTPException, Depends
+
+from app.services.supabase_client import get_supabase_client
+
+
+def get_bearer_token(authorization: Optional[str] = Header(None)) -> Optional[str]:
+    if not authorization:
+        return None
+    if authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    return None
+
+
+def get_current_profile(token: Optional[str] = Depends(get_bearer_token)) -> Dict[str, Any]:
+    """
+    Fetch the current user's profile.
+    Profile is expected to be auto-created by the auth.users trigger.
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    # Use service role to bypass RLS and get profile by user ID
+    admin_client = get_supabase_client(use_service_role=True)
+    user_client = get_supabase_client(token)
+    
+    # Get user ID from token
+    try:
+        user = user_client.auth.get_user(token)
+        if not user or not user.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user_id = user.user.id
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Auth error: {str(e)}")
+    
+    # Fetch profile using admin client (bypasses RLS)
+    try:
+        response = admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
+        if response.data:
+            return response.data
+    except Exception:
+        pass
+    
+    # Profile not found - user needs to complete setup
+    raise HTTPException(
+        status_code=404, 
+        detail="Profile not found. Please complete account setup."
+    )
