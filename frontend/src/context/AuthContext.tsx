@@ -100,40 +100,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    async function handleInactiveDriverSignOut() {
+        setError("This driver account is inactive. Please contact your manager.");
+        pendingSignOutRef.current = true;
+        await supabase.auth.signOut();
+        setAccessToken(null);
+        setOrgId(null);
+        setRole(null);
+    }
+
+    async function fetchProfileForToken(accessTokenValue: string) {
+        return apiGet<{ org_id: string; role: string; status?: string; full_name?: string; phone?: string }>(
+            "/profiles/me",
+            accessTokenValue
+        );
+    }
+
+    async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
+        if (profile.role === "driver" && profile.status !== "active") {
+            await handleInactiveDriverSignOut();
+            return false;
+        }
+        if (expectedRole === "manager" && profile.role === "driver") {
+            setError("Driver accounts must use the Driver login.");
+            pendingSignOutRef.current = true;
+            await supabase.auth.signOut();
+            setAccessToken(null);
+            setOrgId(null);
+            setRole(null);
+            return false;
+        }
+        if (expectedRole === "driver" && profile.role !== "driver") {
+            setError("Manager accounts must use the Manager login.");
+            pendingSignOutRef.current = true;
+            await supabase.auth.signOut();
+            setAccessToken(null);
+            setOrgId(null);
+            setRole(null);
+            return false;
+        }
+        setOrgId(profile.org_id);
+        setRole(profile.role);
+        const nameValue = profile.full_name || "";
+        const phoneValue = profile.phone || "";
+        setFullName(nameValue);
+        setPhone(phoneValue);
+        localStorage.setItem("fleetlanka.profile.name", nameValue);
+        localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+        return true;
+    }
+
     async function loadProfile() {
         if (!token) return;
         setProfileLoading(true);
         try {
-            const profile = await apiGet<{ org_id: string; role: string; full_name?: string; phone?: string }>(
-                "/profiles/me",
-                token
-            );
-            if (expectedRole === "manager" && profile.role === "driver") {
-                setError("Driver accounts must use the Driver login.");
-                pendingSignOutRef.current = true;
-                await supabase.auth.signOut();
-                setAccessToken(null);
-                setOrgId(null);
-                setRole(null);
+            const profile = await fetchProfileForToken(token);
+            await applyProfile(profile);
+        } catch (err: any) {
+            const message = err?.message || "Profile load failed";
+            if (message.includes("Inactive driver account")) {
+                await handleInactiveDriverSignOut();
                 return;
             }
-            if (expectedRole === "driver" && profile.role !== "driver") {
-                setError("Manager accounts must use the Manager login.");
-                pendingSignOutRef.current = true;
-                await supabase.auth.signOut();
-                setAccessToken(null);
-                setOrgId(null);
-                setRole(null);
-                return;
-            }
-            setOrgId(profile.org_id);
-            setRole(profile.role);
-            const nameValue = profile.full_name || "";
-            const phoneValue = profile.phone || "";
-            setFullName(nameValue);
-            setPhone(phoneValue);
-            localStorage.setItem("fleetlanka.profile.name", nameValue);
-            localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+            throw err;
         } finally {
             setProfileLoading(false);
         }
@@ -185,11 +214,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     return;
                 }
             }
-            setAccessToken(data.session?.access_token ?? null);
-            setEmail(data.session?.user?.email ?? "");
-            if (loginRole) {
-                setRole(loginRole);
+            const sessionToken = data.session?.access_token ?? null;
+            if (!sessionToken) {
+                throw new Error("Login failed");
             }
+            const profile = await fetchProfileForToken(sessionToken);
+            const allowed = await applyProfile(profile);
+            if (!allowed) return;
+            setAccessToken(sessionToken);
+            setEmail(data.session?.user?.email ?? "");
         } catch (err: any) {
             setError(err.message || "Login failed");
         } finally {

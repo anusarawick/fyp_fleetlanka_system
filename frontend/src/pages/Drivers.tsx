@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 type Driver = {
   id: string;
+  email?: string;
   full_name?: string;
   phone?: string;
   role?: string;
@@ -310,8 +311,7 @@ export default function Drivers(props: DriversProps) {
                   placeholder="e.g., driver@fleetlanka.lk"
                   value={props.driverEmail}
                   onChange={(e) => props.setDriverEmail(e.target.value)}
-                  required={!props.editingDriverId}
-                  disabled={!!props.editingDriverId}
+                  required
                 />
               </label>
               <label>
@@ -367,6 +367,7 @@ export default function Drivers(props: DriversProps) {
             </div>
             <div className="details-grid">
               <div className="detail-item"><span>Name</span><strong>{viewTarget.full_name || "Driver"}</strong></div>
+              <div className="detail-item"><span>Email</span><strong>{viewTarget.email || "--"}</strong></div>
               <div className="detail-item"><span>Phone</span><strong>{viewTarget.phone || "--"}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{formatStatus(viewTarget.status || "active")}</strong></div>
               <div className="detail-item"><span>Driver ID</span><strong>{viewTarget.id}</strong></div>

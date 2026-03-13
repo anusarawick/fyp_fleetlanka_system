@@ -709,6 +709,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             if (editingDriverId) {
                 const payload = {
+                    email: driverEmail || undefined,
                     status: driverStatus || undefined,
                     full_name: driverName || undefined,
                     phone: driverPhone || undefined,
@@ -745,7 +746,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     function handleEditDriver(driver: Driver) {
         setEditingDriverId(driver.id);
         setDriverName(driver.full_name || "");
-        setDriverEmail("");
+        setDriverEmail(driver.email || "");
         setDriverPhone(driver.phone || "");
         setDriverStatus(driver.status || "active");
         setDriverPassword("");

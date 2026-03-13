@@ -9,6 +9,17 @@ from app.services.supabase_client import get_supabase_client
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 
+def _profile_with_email(admin_client, row: dict) -> dict:
+    email = None
+    try:
+        user_resp = admin_client.auth.admin.get_user_by_id(row["id"])
+        user = user_resp.user if user_resp else None
+        email = getattr(user, "email", None)
+    except Exception:
+        email = None
+    return {**row, "email": email}
+
+
 @router.get("", response_model=List[DriverOut])
 def list_drivers(
     profile: dict = Depends(require_manager_profile),
@@ -23,7 +34,7 @@ def list_drivers(
         .eq("role", "driver")
         .execute()
     )
-    return response.data or []
+    return [_profile_with_email(admin_client, row) for row in (response.data or [])]
 
 
 @router.post("", response_model=DriverOut)
@@ -63,7 +74,7 @@ def create_driver(
     if not profile_resp.data:
         raise HTTPException(status_code=500, detail="Profile was not created")
 
-    return profile_resp.data
+    return _profile_with_email(admin_client, profile_resp.data)
 
 
 @router.patch("/{driver_id}", response_model=DriverOut)
@@ -77,15 +88,31 @@ def update_driver(
         raise HTTPException(status_code=401, detail="Missing bearer token")
 
     admin_client = get_supabase_client(use_service_role=True)
+    profile_updates = payload.model_dump(exclude_none=True, exclude={"email"})
+    if payload.email is not None:
+        try:
+            admin_client.auth.admin.update_user_by_id(
+                driver_id,
+                {
+                    "email": payload.email,
+                    "user_metadata": {
+                        "status": payload.status,
+                        "full_name": payload.full_name,
+                        "phone": payload.phone,
+                    },
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Email update failed: {exc}")
     response = (
         admin_client.table("profiles")
-        .update(payload.model_dump(exclude_none=True))
+        .update(profile_updates)
         .eq("id", driver_id)
         .execute()
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
-    return response.data[0]
+    return _profile_with_email(admin_client, response.data[0])
 
 
 @router.delete("/{driver_id}")

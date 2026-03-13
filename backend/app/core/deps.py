@@ -42,7 +42,11 @@ def get_current_profile(token: Optional[str] = Depends(get_bearer_token)) -> Dic
     try:
         response = admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
         if response.data:
+            if response.data.get("role") == "driver" and response.data.get("status") != "active":
+                raise HTTPException(status_code=403, detail="Inactive driver account")
             return response.data
+    except HTTPException:
+        raise
     except Exception:
         pass
     
