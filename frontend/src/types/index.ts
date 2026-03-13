@@ -9,6 +9,7 @@ export type Vehicle = {
   vehicle_type?: string;
   year?: number;
   status?: string;
+  mileage?: number;
   odometer_km?: number;
   transmission_type?: string;
   engine_size_cc?: number;

@@ -8,6 +8,7 @@ type Vehicle = {
   vehicle_type?: string;
   year?: number;
   status?: string;
+  mileage?: number;
   odometer_km?: number;
   transmission_type?: string;
   engine_size_cc?: number;
@@ -42,6 +43,8 @@ type ManagementProps = {
   setYear: (v: string) => void;
   vehicleStatus: string;
   setVehicleStatus: (v: string) => void;
+  vehicleMileage: string;
+  setVehicleMileage: (v: string) => void;
   vehicleOdometer: string;
   setVehicleOdometer: (v: string) => void;
   transmissionType: string;
@@ -74,12 +77,31 @@ export default function Management(props: ManagementProps) {
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [viewTarget, setViewTarget] = useState<Vehicle | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
-  const totalPages = Math.max(1, Math.ceil(props.vehicles.length / rowsPerPage));
+  const filteredVehicles = props.vehicles.filter((vehicle) => {
+    if (statusFilter === "all") return true;
+    return (vehicle.status || "").toLowerCase() === statusFilter;
+  }).filter((vehicle) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      vehicle.plate_no,
+      vehicle.make,
+      vehicle.model,
+      vehicle.vehicle_type,
+      vehicle.status,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredVehicles.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
-  const paginatedVehicles = props.vehicles.slice(
+  const paginatedVehicles = filteredVehicles.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
@@ -92,7 +114,7 @@ export default function Management(props: ManagementProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [rowsPerPage, props.vehicles.length]);
+  }, [rowsPerPage, statusFilter, searchTerm, props.vehicles.length]);
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -119,9 +141,25 @@ export default function Management(props: ManagementProps) {
     setShowVehicleModal(false);
   }
 
+  function handleMileageChange(nextMileage: string) {
+    props.setVehicleMileage(nextMileage);
+    if (!props.editingVehicleId) {
+      const shouldSyncOdometer =
+        props.vehicleOdometer.trim() === "" || props.vehicleOdometer === props.vehicleMileage;
+      if (shouldSyncOdometer) {
+        props.setVehicleOdometer(nextMileage);
+      }
+    }
+  }
+
   function formatRiskLabel(level?: "low" | "medium" | "high") {
     if (!level) return "No result";
     return `${level.charAt(0).toUpperCase()}${level.slice(1)} risk`;
+  }
+
+  function formatMakeModel(vehicle: Vehicle) {
+    const parts = [vehicle.make, vehicle.model].filter((value) => value && value.trim().length > 0);
+    return parts.length ? parts.join(" ") : "--";
   }
 
   return (
@@ -161,17 +199,40 @@ export default function Management(props: ManagementProps) {
         ) : (
           <>
             <div className="table-controls">
-              <label className="table-controls__label">
-                Rows
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Plate, make, model..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Status
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="all">All</option>
+                    <option value="active">Active</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
               <div className="table-pagination">
                 <span className="table-pagination__meta">
                   Page {currentPage} of {totalPages}
@@ -194,14 +255,18 @@ export default function Management(props: ManagementProps) {
                 </button>
               </div>
             </div>
-            <div className="table management-table" style={{ ["--table-columns" as any]: 7 }}>
+            {filteredVehicles.length === 0 ? (
+              <p className="empty">No vehicles match the selected status.</p>
+            ) : (
+            <div className="table management-table" style={{ ["--table-columns" as any]: 8 }}>
               <div className="table__head management-table__head">
                 <span>Plate</span>
-                <span>Make</span>
-                <span>Model</span>
+                <span>Make / Model</span>
                 <span>Type</span>
                 <span>Year</span>
+                <span>Odometer</span>
                 <span>Maintenance Risk</span>
+                <span>Status</span>
                 <span>Actions</span>
               </div>
               {paginatedVehicles.map((v) => (
@@ -211,10 +276,12 @@ export default function Management(props: ManagementProps) {
                     return (
                       <>
                   <span className="management-table__cell management-table__cell--plate" data-label="Plate">{v.plate_no}</span>
-                  <span className="management-table__cell" data-label="Make">{v.make || "--"}</span>
-                  <span className="management-table__cell" data-label="Model">{v.model || "--"}</span>
+                  <span className="management-table__cell" data-label="Make / Model">{formatMakeModel(v)}</span>
                   <span className="management-table__cell" data-label="Type">{v.vehicle_type || "--"}</span>
                   <span className="management-table__cell management-table__cell--year" data-label="Year">{v.year || "--"}</span>
+                  <span className="management-table__cell management-table__cell--odometer" data-label="Odometer">
+                    {v.odometer_km ?? "--"}
+                  </span>
                   <span className="management-table__cell management-table__cell--risk" data-label="Maintenance Risk">
                     {latestPrediction ? (
                       <span className={`risk-pill risk-pill--${latestPrediction.risk_level}`}>
@@ -223,6 +290,15 @@ export default function Management(props: ManagementProps) {
                       </span>
                     ) : (
                       <span className="muted">Not run</span>
+                    )}
+                  </span>
+                  <span className="management-table__cell management-table__cell--status" data-label="Status">
+                    {v.status ? (
+                      <span className={`risk-pill ${v.status === "active" ? "risk-pill--low" : v.status === "maintenance" ? "risk-pill--medium" : "risk-pill--high"}`}>
+                        {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                      </span>
+                    ) : (
+                      <span className="muted">--</span>
                     )}
                   </span>
                   <span className="table__actions management-table__actions" data-label="Actions">
@@ -296,6 +372,7 @@ export default function Management(props: ManagementProps) {
                 </div>
               ))}
             </div>
+            )}
           </>
         )}
       </section>
@@ -373,7 +450,16 @@ export default function Management(props: ManagementProps) {
                 </select>
               </label>
               <label>
-                Odometer (km)
+                Mileage (km)
+                <input
+                  type="number"
+                  placeholder="e.g., 120000"
+                  value={props.vehicleMileage}
+                  onChange={(e) => handleMileageChange(e.target.value)}
+                />
+              </label>
+              <label>
+                Latest Odometer (km)
                 <input
                   type="number"
                   placeholder="e.g., 125000"
@@ -476,7 +562,7 @@ export default function Management(props: ManagementProps) {
 
       {viewTarget && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Vehicle details">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Vehicle details">
             <div className="modal__header">
               <div>
                 <h3>Vehicle Details</h3>
@@ -486,13 +572,13 @@ export default function Management(props: ManagementProps) {
                 ✕
               </button>
             </div>
-            <div className="details-grid">
+            <div className="details-grid details-grid--scroll">
               <div className="detail-item"><span>Plate</span><strong>{viewTarget.plate_no}</strong></div>
-              <div className="detail-item"><span>Make</span><strong>{viewTarget.make || "--"}</strong></div>
-              <div className="detail-item"><span>Model</span><strong>{viewTarget.model || "--"}</strong></div>
+              <div className="detail-item"><span>Make / Model</span><strong>{formatMakeModel(viewTarget)}</strong></div>
               <div className="detail-item"><span>Vehicle Type</span><strong>{viewTarget.vehicle_type || "--"}</strong></div>
               <div className="detail-item"><span>Year</span><strong>{viewTarget.year || "--"}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{viewTarget.status || "--"}</strong></div>
+              <div className="detail-item"><span>Mileage (km)</span><strong>{viewTarget.mileage ?? "--"}</strong></div>
               <div className="detail-item"><span>Odometer (km)</span><strong>{viewTarget.odometer_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Transmission</span><strong>{viewTarget.transmission_type || "--"}</strong></div>
               <div className="detail-item"><span>Engine Size (cc)</span><strong>{viewTarget.engine_size_cc ?? "--"}</strong></div>

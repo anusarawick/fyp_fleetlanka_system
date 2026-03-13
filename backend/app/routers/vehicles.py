@@ -29,6 +29,8 @@ def create_vehicle(
     
     supabase = get_supabase_client(token)
     data = payload.model_dump()
+    if data.get("odometer_km") is None and data.get("mileage") is not None:
+        data["odometer_km"] = data["mileage"]
     data["org_id"] = profile["org_id"]
     response = supabase.table("vehicles").insert(data).execute()
     if not response.data:

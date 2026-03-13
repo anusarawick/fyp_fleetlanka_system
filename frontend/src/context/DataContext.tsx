@@ -66,6 +66,8 @@ type DataContextType = {
     setYear: (v: string) => void;
     vehicleStatus: string;
     setVehicleStatus: (v: string) => void;
+    vehicleMileage: string;
+    setVehicleMileage: (v: string) => void;
     vehicleOdometer: string;
     setVehicleOdometer: (v: string) => void;
     transmissionType: string;
@@ -224,6 +226,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [vehicleType, setVehicleType] = useState("");
     const [year, setYear] = useState("");
     const [vehicleStatus, setVehicleStatus] = useState("active");
+    const [vehicleMileage, setVehicleMileage] = useState("");
     const [vehicleOdometer, setVehicleOdometer] = useState("");
     const [transmissionType, setTransmissionType] = useState("");
     const [engineSizeCc, setEngineSizeCc] = useState("");
@@ -554,6 +557,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDriverScores([]);
         setMaintenancePredictions([]);
         setMlVehicleId("");
+        setVehicleMileage("");
     }
 
     // Handlers
@@ -571,7 +575,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 vehicle_type: vehicleType || undefined,
                 year: year ? Number(year) : undefined,
                 status: vehicleStatus || undefined,
-                odometer_km: vehicleOdometer ? Number(vehicleOdometer) : undefined,
+                mileage: vehicleMileage ? Number(vehicleMileage) : undefined,
+                odometer_km: vehicleOdometer
+                    ? Number(vehicleOdometer)
+                    : vehicleMileage
+                      ? Number(vehicleMileage)
+                      : undefined,
                 transmission_type: transmissionType || undefined,
                 engine_size_cc: engineSizeCc ? Number(engineSizeCc) : undefined,
                 accident_history_count: accidentHistoryCount ? Number(accidentHistoryCount) : undefined,
@@ -595,6 +604,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setVehicleType("");
             setYear("");
             setVehicleStatus("active");
+            setVehicleMileage("");
             setVehicleOdometer("");
             setTransmissionType("");
             setEngineSizeCc("");
@@ -621,6 +631,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setVehicleType(vehicle.vehicle_type || "");
         setYear(vehicle.year ? String(vehicle.year) : "");
         setVehicleStatus(vehicle.status || "active");
+        setVehicleMileage(
+            vehicle.mileage !== undefined && vehicle.mileage !== null
+                ? String(vehicle.mileage)
+                : ""
+        );
         setVehicleOdometer(
             vehicle.odometer_km !== undefined && vehicle.odometer_km !== null
                 ? String(vehicle.odometer_km)
@@ -653,6 +668,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setVehicleType("");
         setYear("");
         setVehicleStatus("active");
+        setVehicleMileage("");
         setVehicleOdometer("");
         setTransmissionType("");
         setEngineSizeCc("");
@@ -1096,7 +1112,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 year,
                 setYear,
                 vehicleStatus,
+                vehicleMileage,
                 setVehicleStatus,
+                setVehicleMileage,
                 vehicleOdometer,
                 setVehicleOdometer,
                 transmissionType,

@@ -12,6 +12,7 @@ class VehicleCreate(BaseModel):
     vehicle_type: Optional[str] = None
     year: Optional[int] = None
     status: Optional[str] = "active"
+    mileage: Optional[float] = None
     odometer_km: Optional[float] = None
     transmission_type: Optional[str] = None
     engine_size_cc: Optional[int] = None
@@ -31,6 +32,7 @@ class VehicleUpdate(BaseModel):
     vehicle_type: Optional[str] = None
     year: Optional[int] = None
     status: Optional[str] = None
+    mileage: Optional[float] = None
     odometer_km: Optional[float] = None
     transmission_type: Optional[str] = None
     engine_size_cc: Optional[int] = None
@@ -52,6 +54,7 @@ class VehicleOut(BaseModel):
     vehicle_type: Optional[str] = None
     year: Optional[int] = None
     status: Optional[str] = None
+    mileage: Optional[float] = None
     odometer_km: Optional[float] = None
     transmission_type: Optional[str] = None
     engine_size_cc: Optional[int] = None

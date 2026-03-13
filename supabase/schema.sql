@@ -95,6 +95,7 @@ create table if not exists public.vehicles (
   vehicle_type text,
   year int,
   status text default 'active',
+  mileage numeric,
   odometer_km numeric,
   transmission_type text,
   engine_size_cc int,

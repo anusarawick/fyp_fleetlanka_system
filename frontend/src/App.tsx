@@ -342,6 +342,8 @@ function ManagerRoutes() {
               setYear={data.setYear}
               vehicleStatus={data.vehicleStatus}
               setVehicleStatus={data.setVehicleStatus}
+              vehicleMileage={data.vehicleMileage}
+              setVehicleMileage={data.setVehicleMileage}
               vehicleOdometer={data.vehicleOdometer}
               setVehicleOdometer={data.setVehicleOdometer}
               transmissionType={data.transmissionType}

@@ -881,6 +881,13 @@ body {
   margin-bottom: 14px;
 }
 
+.table-controls__filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .table-controls__label {
   display: inline-flex;
   align-items: center;
@@ -889,9 +896,18 @@ body {
   color: var(--muted);
 }
 
+.table-controls__label--search {
+  min-width: 240px;
+}
+
 .table-controls__label select {
   width: auto;
   min-width: 72px;
+  padding: 8px 12px;
+}
+
+.table-controls__label input {
+  min-width: 220px;
   padding: 8px 12px;
 }
 
@@ -910,6 +926,12 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.details-grid--scroll {
+  max-height: min(68vh, 720px);
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .detail-item {
@@ -965,13 +987,18 @@ body {
   color: #b91c1c;
 }
 
+.risk-pill--neutral {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
 .management-table {
   overflow-x: auto;
 }
 
 .management-table__head,
 .management-table__row {
-  grid-template-columns: minmax(110px, 1.1fr) minmax(100px, 0.95fr) minmax(100px, 0.95fr) minmax(88px, 0.8fr) minmax(70px, 0.6fr) minmax(150px, 1.2fr) minmax(88px, 0.7fr);
+  grid-template-columns: minmax(110px, 1fr) minmax(150px, 1.3fr) minmax(88px, 0.75fr) minmax(70px, 0.55fr) minmax(110px, 0.9fr) minmax(150px, 1.15fr) minmax(100px, 0.8fr) minmax(88px, 0.7fr);
 }
 
 .management-table__row > span,
@@ -981,6 +1008,16 @@ body {
 
 .management-table__cell--year {
   white-space: nowrap;
+}
+
+.management-table__cell--odometer {
+  white-space: nowrap;
+}
+
+.management-table__cell--status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .management-table__cell--risk {
@@ -1017,6 +1054,11 @@ body {
 
 .modal--wide {
   width: min(860px, 94vw);
+}
+
+.modal--details {
+  max-height: min(82vh, 860px);
+  overflow: hidden;
 }
 
 .modal .form {
@@ -1854,6 +1896,10 @@ textarea {
   .table-controls {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .table-controls__filters {
+    width: 100%;
   }
 
   .table-pagination {
