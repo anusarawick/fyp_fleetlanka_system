@@ -458,15 +458,17 @@ export default function Management(props: ManagementProps) {
                   onChange={(e) => handleMileageChange(e.target.value)}
                 />
               </label>
-              <label>
-                Latest Odometer (km)
-                <input
-                  type="number"
-                  placeholder="e.g., 125000"
-                  value={props.vehicleOdometer}
-                  onChange={(e) => props.setVehicleOdometer(e.target.value)}
-                />
-              </label>
+              {props.editingVehicleId && (
+                <label>
+                  Latest Odometer (km)
+                  <input
+                    type="number"
+                    placeholder="e.g., 125000"
+                    value={props.vehicleOdometer}
+                    onChange={(e) => props.setVehicleOdometer(e.target.value)}
+                  />
+                </label>
+              )}
               <label>
                 Transmission Type
                 <select value={props.transmissionType} onChange={(e) => props.setTransmissionType(e.target.value)}>
