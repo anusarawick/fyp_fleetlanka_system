@@ -10,6 +10,15 @@ export type Vehicle = {
   year?: number;
   status?: string;
   odometer_km?: number;
+  transmission_type?: string;
+  engine_size_cc?: number;
+  accident_history_count?: number;
+  fuel_efficiency?: number;
+  maintenance_history?: string;
+  reported_issues_count?: number;
+  tire_condition?: string;
+  brake_condition?: string;
+  battery_status?: string;
 };
 
 export type Driver = {

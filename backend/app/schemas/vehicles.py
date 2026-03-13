@@ -13,6 +13,15 @@ class VehicleCreate(BaseModel):
     year: Optional[int] = None
     status: Optional[str] = "active"
     odometer_km: Optional[float] = None
+    transmission_type: Optional[str] = None
+    engine_size_cc: Optional[int] = None
+    accident_history_count: Optional[int] = None
+    fuel_efficiency: Optional[float] = None
+    maintenance_history: Optional[str] = None
+    reported_issues_count: Optional[int] = None
+    tire_condition: Optional[str] = None
+    brake_condition: Optional[str] = None
+    battery_status: Optional[str] = None
 
 
 class VehicleUpdate(BaseModel):
@@ -23,6 +32,15 @@ class VehicleUpdate(BaseModel):
     year: Optional[int] = None
     status: Optional[str] = None
     odometer_km: Optional[float] = None
+    transmission_type: Optional[str] = None
+    engine_size_cc: Optional[int] = None
+    accident_history_count: Optional[int] = None
+    fuel_efficiency: Optional[float] = None
+    maintenance_history: Optional[str] = None
+    reported_issues_count: Optional[int] = None
+    tire_condition: Optional[str] = None
+    brake_condition: Optional[str] = None
+    battery_status: Optional[str] = None
 
 
 class VehicleOut(BaseModel):
@@ -35,6 +53,15 @@ class VehicleOut(BaseModel):
     year: Optional[int] = None
     status: Optional[str] = None
     odometer_km: Optional[float] = None
+    transmission_type: Optional[str] = None
+    engine_size_cc: Optional[int] = None
+    accident_history_count: Optional[int] = None
+    fuel_efficiency: Optional[float] = None
+    maintenance_history: Optional[str] = None
+    reported_issues_count: Optional[int] = None
+    tire_condition: Optional[str] = None
+    brake_condition: Optional[str] = None
+    battery_status: Optional[str] = None
 
 
 class VehicleOutMinimal(BaseModel):

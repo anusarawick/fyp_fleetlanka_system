@@ -1,5 +1,4 @@
-import { FormEvent, useState } from "react";
-import { MaintenancePrediction } from "../types";
+import { FormEvent, useEffect, useState } from "react";
 
 type Vehicle = {
   id: string;
@@ -8,6 +7,23 @@ type Vehicle = {
   model?: string;
   vehicle_type?: string;
   year?: number;
+  status?: string;
+  odometer_km?: number;
+  transmission_type?: string;
+  engine_size_cc?: number;
+  accident_history_count?: number;
+  fuel_efficiency?: number;
+  maintenance_history?: string;
+  reported_issues_count?: number;
+  tire_condition?: string;
+  brake_condition?: string;
+  battery_status?: string;
+};
+
+type MaintenancePrediction = {
+  vehicle_id: string;
+  probability: number;
+  risk_level: "low" | "medium" | "high";
 };
 
 type ManagementProps = {
@@ -24,30 +40,59 @@ type ManagementProps = {
   setVehicleType: (v: string) => void;
   year: string;
   setYear: (v: string) => void;
+  vehicleStatus: string;
+  setVehicleStatus: (v: string) => void;
+  vehicleOdometer: string;
+  setVehicleOdometer: (v: string) => void;
+  transmissionType: string;
+  setTransmissionType: (v: string) => void;
+  engineSizeCc: string;
+  setEngineSizeCc: (v: string) => void;
+  accidentHistoryCount: string;
+  setAccidentHistoryCount: (v: string) => void;
+  fuelEfficiency: string;
+  setFuelEfficiency: (v: string) => void;
+  maintenanceHistory: string;
+  setMaintenanceHistory: (v: string) => void;
+  reportedIssuesCount: string;
+  setReportedIssuesCount: (v: string) => void;
+  tireCondition: string;
+  setTireCondition: (v: string) => void;
+  brakeCondition: string;
+  setBrakeCondition: (v: string) => void;
+  batteryStatus: string;
+  setBatteryStatus: (v: string) => void;
   activeTrips: number;
   editingVehicleId: string | null;
   onSaveVehicle: (e: FormEvent) => void;
   onEditVehicle: (vehicle: Vehicle) => void;
   onCancelEdit: () => void;
   onDeleteVehicle: (vehicleId: string) => void;
-  onRunMaintenanceCheck: (vehicleId: string) => void;
 };
 
 export default function Management(props: ManagementProps) {
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [viewTarget, setViewTarget] = useState<Vehicle | null>(null);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [page, setPage] = useState(1);
 
-  function renderRiskBadge(vehicleId: string) {
-    const prediction = props.maintenancePredictionMap[vehicleId];
-    if (!prediction) return <span className="pill">Not checked</span>;
-    const label = `${prediction.risk_level.toUpperCase()} ${(prediction.probability * 100).toFixed(0)}%`;
-    const className =
-      prediction.risk_level === "high"
-        ? "pill pill--danger"
-        : prediction.risk_level === "medium"
-          ? "pill pill--warning"
-          : "pill pill--success";
-    return <span className={className}>{label}</span>;
-  }
+  const totalPages = Math.max(1, Math.ceil(props.vehicles.length / rowsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedVehicles = props.vehicles.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  );
+
+  useEffect(() => {
+    if (!props.editingVehicleId && !props.loading) {
+      setShowVehicleModal(false);
+    }
+  }, [props.editingVehicleId, props.loading]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [rowsPerPage, props.vehicles.length]);
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -55,76 +100,43 @@ export default function Management(props: ManagementProps) {
     setDeleteTarget(null);
   }
 
+  function openCreateModal() {
+    props.onCancelEdit();
+    setShowVehicleModal(true);
+  }
+
+  function openEditModal(vehicle: Vehicle) {
+    props.onEditVehicle(vehicle);
+    setShowVehicleModal(true);
+  }
+
+  async function handleVehicleSubmit(e: FormEvent) {
+    await props.onSaveVehicle(e);
+  }
+
+  function closeVehicleModal() {
+    props.onCancelEdit();
+    setShowVehicleModal(false);
+  }
+
+  function formatRiskLabel(level?: "low" | "medium" | "high") {
+    if (!level) return "No result";
+    return `${level.charAt(0).toUpperCase()}${level.slice(1)} risk`;
+  }
+
   return (
     <section className="section">
       <div className="grid">
         <section className="card">
           <div className="card__header">
-            <h3>{props.editingVehicleId ? "✏️ Edit Vehicle" : "🚚 Add New Vehicle"}</h3>
+            <h3>Fleet Actions</h3>
           </div>
-          <form className="form" onSubmit={props.onSaveVehicle}>
-            <label>
-              Plate Number
-              <input
-                placeholder="e.g., WP CAB-1234"
-                value={props.plateNo}
-                onChange={(e) => props.setPlateNo(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Make
-              <input
-                placeholder="e.g., Toyota"
-                value={props.make}
-                onChange={(e) => props.setMake(e.target.value)}
-              />
-            </label>
-            <label>
-              Model
-              <input
-                placeholder="e.g., Hiace"
-                value={props.model}
-                onChange={(e) => props.setModel(e.target.value)}
-              />
-            </label>
-            <label>
-              Vehicle Type
-              <select
-                value={props.vehicleType}
-                onChange={(e) => props.setVehicleType(e.target.value)}
-              >
-                <option value="">Select type</option>
-                <option value="Car">Car</option>
-                <option value="SUV">SUV</option>
-                <option value="Truck">Truck</option>
-                <option value="Bus">Bus</option>
-                <option value="Motorcycle">Motorcycle</option>
-                <option value="Van">Van</option>
-              </select>
-            </label>
-            <label>
-              Year
-              <input
-                type="number"
-                placeholder="e.g., 2022"
-                value={props.year}
-                onChange={(e) => props.setYear(e.target.value)}
-              />
-            </label>
-            <button className="btn" type="submit" disabled={props.loading}>
-              {props.loading ? "Saving..." : props.editingVehicleId ? "Save Changes" : "+ Add Vehicle"}
-            </button>
-            {props.editingVehicleId && (
-              <button
-                className="btn btn--secondary"
-                type="button"
-                onClick={props.onCancelEdit}
-              >
-                Cancel
-              </button>
-            )}
-          </form>
+          <p className="muted">
+            Create vehicles only when needed and edit them inline from the list.
+          </p>
+          <button className="btn" type="button" onClick={openCreateModal}>
+            + Add Vehicle
+          </button>
         </section>
 
         <section className="card">
@@ -143,60 +155,368 @@ export default function Management(props: ManagementProps) {
       <section className="card" style={{ marginTop: "24px" }}>
         <div className="card__header">
           <h3>📋 Current Vehicles</h3>
-          {props.vehicles.length > 0 && <span className="pill">{props.vehicles.length}</span>}
         </div>
         {props.vehicles.length === 0 ? (
           <p className="empty">No vehicles added yet.</p>
         ) : (
-          <div className="table" style={{ ["--table-columns" as any]: 7 }}>
-            <div className="table__head">
-              <span>Plate</span>
-              <span>Make</span>
-              <span>Model</span>
-              <span>Type</span>
-              <span>Year</span>
-              <span>ML Risk</span>
-              <span>Actions</span>
-            </div>
-            {props.vehicles.map((v) => (
-              <div className="table__row" key={v.id}>
-                <span>{v.plate_no}</span>
-                <span>{v.make || "--"}</span>
-                <span>{v.model || "--"}</span>
-                <span>{v.vehicle_type || "--"}</span>
-                <span>{v.year || "--"}</span>
-                <span>{renderRiskBadge(v.id)}</span>
-                <span className="table__actions">
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => props.onRunMaintenanceCheck(v.id)}
-                    disabled={props.loading}
-                  >
-                    ML Check
-                  </button>
-                  <button className="btn btn--secondary" type="button" onClick={() => props.onEditVehicle(v)}>
-                    Edit
-                  </button>
-                  <button
-                    className="btn btn--danger"
-                    type="button"
-                    onClick={() => setDeleteTarget(v)}
-                    disabled={props.loading}
-                  >
-                    Delete
-                  </button>
+          <>
+            <div className="table-controls">
+              <label className="table-controls__label">
+                Rows
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+              <div className="table-pagination">
+                <span className="table-pagination__meta">
+                  Page {currentPage} of {totalPages}
                 </span>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+            <div className="table management-table" style={{ ["--table-columns" as any]: 7 }}>
+              <div className="table__head management-table__head">
+                <span>Plate</span>
+                <span>Make</span>
+                <span>Model</span>
+                <span>Type</span>
+                <span>Year</span>
+                <span>Maintenance Risk</span>
+                <span>Actions</span>
+              </div>
+              {paginatedVehicles.map((v) => (
+                <div className="table__row management-table__row management-table__row--vehicles" key={v.id}>
+                  {(() => {
+                    const latestPrediction = props.maintenancePredictionMap[v.id];
+                    return (
+                      <>
+                  <span className="management-table__cell management-table__cell--plate" data-label="Plate">{v.plate_no}</span>
+                  <span className="management-table__cell" data-label="Make">{v.make || "--"}</span>
+                  <span className="management-table__cell" data-label="Model">{v.model || "--"}</span>
+                  <span className="management-table__cell" data-label="Type">{v.vehicle_type || "--"}</span>
+                  <span className="management-table__cell management-table__cell--year" data-label="Year">{v.year || "--"}</span>
+                  <span className="management-table__cell management-table__cell--risk" data-label="Maintenance Risk">
+                    {latestPrediction ? (
+                      <span className={`risk-pill risk-pill--${latestPrediction.risk_level}`}>
+                        {formatRiskLabel(latestPrediction.risk_level)}
+                        <strong>{Math.round(latestPrediction.probability * 100)}%</strong>
+                      </span>
+                    ) : (
+                      <span className="muted">Not run</span>
+                    )}
+                  </span>
+                  <span className="table__actions management-table__actions" data-label="Actions">
+                    <button
+                      className="icon-action"
+                      type="button"
+                      onClick={() => setViewTarget(v)}
+                      aria-label={`View ${v.plate_no}`}
+                      title="View vehicle"
+                    >
+                      <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="3"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      className="icon-action"
+                      type="button"
+                      onClick={() => openEditModal(v)}
+                      aria-label={`Edit ${v.plate_no}`}
+                      title="Edit vehicle"
+                    >
+                      <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      className="icon-action icon-action--danger"
+                      type="button"
+                      onClick={() => setDeleteTarget(v)}
+                      disabled={props.loading}
+                      aria-label={`Delete ${v.plate_no}`}
+                      title="Delete vehicle"
+                    >
+                      <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </span>
+                      </>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
+
+      {showVehicleModal && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide" role="dialog" aria-modal="true" aria-label="Vehicle form">
+            <div className="modal__header">
+              <div>
+                <h3>{props.editingVehicleId ? "Edit Vehicle" : "Add Vehicle"}</h3>
+                <p className="modal__subtle">
+                  {props.editingVehicleId ? "Update fleet details in one place." : "Create a vehicle record for fleet operations."}
+                </p>
+              </div>
+              <button className="modal__close" type="button" onClick={closeVehicleModal} aria-label="Close vehicle form">
+                ✕
+              </button>
+            </div>
+            <form className="form form--two-col form--scroll" onSubmit={handleVehicleSubmit}>
+              <label>
+                Plate Number
+                <input
+                  placeholder="e.g., WP CAB-1234"
+                  value={props.plateNo}
+                  onChange={(e) => props.setPlateNo(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Make
+                <input
+                  placeholder="e.g., Toyota"
+                  value={props.make}
+                  onChange={(e) => props.setMake(e.target.value)}
+                />
+              </label>
+              <label>
+                Model
+                <input
+                  placeholder="e.g., Prius"
+                  value={props.model}
+                  onChange={(e) => props.setModel(e.target.value)}
+                />
+              </label>
+              <label>
+                Vehicle Type
+                <select
+                  value={props.vehicleType}
+                  onChange={(e) => props.setVehicleType(e.target.value)}
+                >
+                  <option value="">Select type</option>
+                  <option value="Car">Car</option>
+                  <option value="SUV">SUV</option>
+                  <option value="Truck">Truck</option>
+                  <option value="Bus">Bus</option>
+                  <option value="Motorcycle">Motorcycle</option>
+                  <option value="Van">Van</option>
+                </select>
+              </label>
+              <label>
+                Year
+                <input
+                  type="number"
+                  placeholder="e.g., 2022"
+                  value={props.year}
+                  onChange={(e) => props.setYear(e.target.value)}
+                />
+              </label>
+              <label>
+                Status
+                <select value={props.vehicleStatus} onChange={(e) => props.setVehicleStatus(e.target.value)}>
+                  <option value="active">active</option>
+                  <option value="inactive">inactive</option>
+                  <option value="maintenance">maintenance</option>
+                </select>
+              </label>
+              <label>
+                Odometer (km)
+                <input
+                  type="number"
+                  placeholder="e.g., 125000"
+                  value={props.vehicleOdometer}
+                  onChange={(e) => props.setVehicleOdometer(e.target.value)}
+                />
+              </label>
+              <label>
+                Transmission Type
+                <select value={props.transmissionType} onChange={(e) => props.setTransmissionType(e.target.value)}>
+                  <option value="">Select transmission</option>
+                  <option value="Automatic">Automatic</option>
+                  <option value="Manual">Manual</option>
+                </select>
+              </label>
+              <label>
+                Engine Size (cc)
+                <input
+                  type="number"
+                  placeholder="e.g., 1500"
+                  value={props.engineSizeCc}
+                  onChange={(e) => props.setEngineSizeCc(e.target.value)}
+                />
+              </label>
+              <label>
+                Accident History Count
+                <input
+                  type="number"
+                  min="0"
+                  value={props.accidentHistoryCount}
+                  onChange={(e) => props.setAccidentHistoryCount(e.target.value)}
+                />
+              </label>
+              <label>
+                Fuel Efficiency
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g., 12.5"
+                  value={props.fuelEfficiency}
+                  onChange={(e) => props.setFuelEfficiency(e.target.value)}
+                />
+              </label>
+              <label>
+                Maintenance History
+                <select value={props.maintenanceHistory} onChange={(e) => props.setMaintenanceHistory(e.target.value)}>
+                  <option value="">Select history</option>
+                  <option value="Good">Good</option>
+                  <option value="Average">Average</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </label>
+              <label>
+                Reported Issues Count
+                <input
+                  type="number"
+                  min="0"
+                  value={props.reportedIssuesCount}
+                  onChange={(e) => props.setReportedIssuesCount(e.target.value)}
+                />
+              </label>
+              <label>
+                Tire Condition
+                <select value={props.tireCondition} onChange={(e) => props.setTireCondition(e.target.value)}>
+                  <option value="">Select tire condition</option>
+                  <option value="New">New</option>
+                  <option value="Good">Good</option>
+                  <option value="Worn Out">Worn Out</option>
+                </select>
+              </label>
+              <label>
+                Brake Condition
+                <select value={props.brakeCondition} onChange={(e) => props.setBrakeCondition(e.target.value)}>
+                  <option value="">Select brake condition</option>
+                  <option value="New">New</option>
+                  <option value="Good">Good</option>
+                  <option value="Worn Out">Worn Out</option>
+                </select>
+              </label>
+              <label>
+                Battery Status
+                <select value={props.batteryStatus} onChange={(e) => props.setBatteryStatus(e.target.value)}>
+                  <option value="">Select battery status</option>
+                  <option value="Good">Good</option>
+                  <option value="Weak">Weak</option>
+                </select>
+              </label>
+              <div className="modal__actions">
+                <button className="btn btn--secondary" type="button" onClick={closeVehicleModal}>
+                  Cancel
+                </button>
+                <button className="btn" type="submit" disabled={props.loading}>
+                  {props.loading ? "Saving..." : props.editingVehicleId ? "Save Changes" : "Add Vehicle"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {viewTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Vehicle details">
+            <div className="modal__header">
+              <div>
+                <h3>Vehicle Details</h3>
+                <p className="modal__subtle">Full vehicle record from the current fleet table.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setViewTarget(null)} aria-label="Close vehicle details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid">
+              <div className="detail-item"><span>Plate</span><strong>{viewTarget.plate_no}</strong></div>
+              <div className="detail-item"><span>Make</span><strong>{viewTarget.make || "--"}</strong></div>
+              <div className="detail-item"><span>Model</span><strong>{viewTarget.model || "--"}</strong></div>
+              <div className="detail-item"><span>Vehicle Type</span><strong>{viewTarget.vehicle_type || "--"}</strong></div>
+              <div className="detail-item"><span>Year</span><strong>{viewTarget.year || "--"}</strong></div>
+              <div className="detail-item"><span>Status</span><strong>{viewTarget.status || "--"}</strong></div>
+              <div className="detail-item"><span>Odometer (km)</span><strong>{viewTarget.odometer_km ?? "--"}</strong></div>
+              <div className="detail-item"><span>Transmission</span><strong>{viewTarget.transmission_type || "--"}</strong></div>
+              <div className="detail-item"><span>Engine Size (cc)</span><strong>{viewTarget.engine_size_cc ?? "--"}</strong></div>
+              <div className="detail-item"><span>Accident History</span><strong>{viewTarget.accident_history_count ?? "--"}</strong></div>
+              <div className="detail-item"><span>Fuel Efficiency</span><strong>{viewTarget.fuel_efficiency ?? "--"}</strong></div>
+              <div className="detail-item"><span>Maintenance History</span><strong>{viewTarget.maintenance_history || "--"}</strong></div>
+              <div className="detail-item"><span>Reported Issues</span><strong>{viewTarget.reported_issues_count ?? "--"}</strong></div>
+              <div className="detail-item"><span>Tire Condition</span><strong>{viewTarget.tire_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Brake Condition</span><strong>{viewTarget.brake_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Battery Status</span><strong>{viewTarget.battery_status || "--"}</strong></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteTarget && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal" role="dialog" aria-modal="true" aria-label="Confirm delete">
-            <h3>Delete Vehicle?</h3>
+            <div className="modal__header">
+              <h3>Delete Vehicle?</h3>
+              <button className="modal__close" type="button" onClick={() => setDeleteTarget(null)} aria-label="Close delete dialog">
+                ✕
+              </button>
+            </div>
             <p className="muted">
               Are you sure you want to delete <strong>{deleteTarget.plate_no}</strong>? This action
               cannot be undone.

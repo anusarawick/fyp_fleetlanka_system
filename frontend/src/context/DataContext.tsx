@@ -64,6 +64,28 @@ type DataContextType = {
     setVehicleType: (v: string) => void;
     year: string;
     setYear: (v: string) => void;
+    vehicleStatus: string;
+    setVehicleStatus: (v: string) => void;
+    vehicleOdometer: string;
+    setVehicleOdometer: (v: string) => void;
+    transmissionType: string;
+    setTransmissionType: (v: string) => void;
+    engineSizeCc: string;
+    setEngineSizeCc: (v: string) => void;
+    accidentHistoryCount: string;
+    setAccidentHistoryCount: (v: string) => void;
+    fuelEfficiency: string;
+    setFuelEfficiency: (v: string) => void;
+    maintenanceHistory: string;
+    setMaintenanceHistory: (v: string) => void;
+    reportedIssuesCount: string;
+    setReportedIssuesCount: (v: string) => void;
+    tireCondition: string;
+    setTireCondition: (v: string) => void;
+    brakeCondition: string;
+    setBrakeCondition: (v: string) => void;
+    batteryStatus: string;
+    setBatteryStatus: (v: string) => void;
     editingVehicleId: string | null;
 
     // Driver form state
@@ -147,6 +169,8 @@ type DataContextType = {
     setMaintFeatures: (v: string) => void;
     fuelFeatures: string;
     setFuelFeatures: (v: string) => void;
+    mlVehicleId: string;
+    setMlVehicleId: (v: string) => void;
     maintResult: string | null;
     fuelResult: string | null;
     maintenancePredictionMap: Record<string, MaintenancePrediction>;
@@ -199,6 +223,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [model, setModel] = useState("");
     const [vehicleType, setVehicleType] = useState("");
     const [year, setYear] = useState("");
+    const [vehicleStatus, setVehicleStatus] = useState("active");
+    const [vehicleOdometer, setVehicleOdometer] = useState("");
+    const [transmissionType, setTransmissionType] = useState("");
+    const [engineSizeCc, setEngineSizeCc] = useState("");
+    const [accidentHistoryCount, setAccidentHistoryCount] = useState("0");
+    const [fuelEfficiency, setFuelEfficiency] = useState("");
+    const [maintenanceHistory, setMaintenanceHistory] = useState("");
+    const [reportedIssuesCount, setReportedIssuesCount] = useState("0");
+    const [tireCondition, setTireCondition] = useState("");
+    const [brakeCondition, setBrakeCondition] = useState("");
+    const [batteryStatus, setBatteryStatus] = useState("");
     const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
 
     // Driver form
@@ -252,6 +287,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // ML state
     const [maintFeatures, setMaintFeatures] = useState("");
     const [fuelFeatures, setFuelFeatures] = useState("");
+    const [mlVehicleId, setMlVehicleId] = useState("");
     const [maintResult, setMaintResult] = useState<string | null>(null);
     const [fuelResult, setFuelResult] = useState<string | null>(null);
 
@@ -473,6 +509,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceBookings([]);
                     setDriverScores([]);
                     setMaintenancePredictions([]);
+                    setMlVehicleId("");
                     return;
                 }
 
@@ -516,6 +553,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setServiceBookings([]);
         setDriverScores([]);
         setMaintenancePredictions([]);
+        setMlVehicleId("");
     }
 
     // Handlers
@@ -532,6 +570,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 model: model || undefined,
                 vehicle_type: vehicleType || undefined,
                 year: year ? Number(year) : undefined,
+                status: vehicleStatus || undefined,
+                odometer_km: vehicleOdometer ? Number(vehicleOdometer) : undefined,
+                transmission_type: transmissionType || undefined,
+                engine_size_cc: engineSizeCc ? Number(engineSizeCc) : undefined,
+                accident_history_count: accidentHistoryCount ? Number(accidentHistoryCount) : undefined,
+                fuel_efficiency: fuelEfficiency ? Number(fuelEfficiency) : undefined,
+                maintenance_history: maintenanceHistory || undefined,
+                reported_issues_count: reportedIssuesCount ? Number(reportedIssuesCount) : undefined,
+                tire_condition: tireCondition || undefined,
+                brake_condition: brakeCondition || undefined,
+                battery_status: batteryStatus || undefined,
             };
             if (editingVehicleId) {
                 const updated = await apiPatch<Vehicle>(`/vehicles/${editingVehicleId}`, payload, token);
@@ -545,6 +594,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setModel("");
             setVehicleType("");
             setYear("");
+            setVehicleStatus("active");
+            setVehicleOdometer("");
+            setTransmissionType("");
+            setEngineSizeCc("");
+            setAccidentHistoryCount("0");
+            setFuelEfficiency("");
+            setMaintenanceHistory("");
+            setReportedIssuesCount("0");
+            setTireCondition("");
+            setBrakeCondition("");
+            setBatteryStatus("");
             setEditingVehicleId(null);
         } catch (err: any) {
             setError(err.message || "Create failed");
@@ -560,6 +620,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setModel(vehicle.model || "");
         setVehicleType(vehicle.vehicle_type || "");
         setYear(vehicle.year ? String(vehicle.year) : "");
+        setVehicleStatus(vehicle.status || "active");
+        setVehicleOdometer(
+            vehicle.odometer_km !== undefined && vehicle.odometer_km !== null
+                ? String(vehicle.odometer_km)
+                : ""
+        );
+        setTransmissionType(vehicle.transmission_type || "");
+        setEngineSizeCc(
+            vehicle.engine_size_cc !== undefined && vehicle.engine_size_cc !== null
+                ? String(vehicle.engine_size_cc)
+                : ""
+        );
+        setAccidentHistoryCount(String(vehicle.accident_history_count ?? 0));
+        setFuelEfficiency(
+            vehicle.fuel_efficiency !== undefined && vehicle.fuel_efficiency !== null
+                ? String(vehicle.fuel_efficiency)
+                : ""
+        );
+        setMaintenanceHistory(vehicle.maintenance_history || "");
+        setReportedIssuesCount(String(vehicle.reported_issues_count ?? 0));
+        setTireCondition(vehicle.tire_condition || "");
+        setBrakeCondition(vehicle.brake_condition || "");
+        setBatteryStatus(vehicle.battery_status || "");
     }
 
     function handleCancelVehicleEdit() {
@@ -569,6 +652,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setModel("");
         setVehicleType("");
         setYear("");
+        setVehicleStatus("active");
+        setVehicleOdometer("");
+        setTransmissionType("");
+        setEngineSizeCc("");
+        setAccidentHistoryCount("0");
+        setFuelEfficiency("");
+        setMaintenanceHistory("");
+        setReportedIssuesCount("0");
+        setTireCondition("");
+        setBrakeCondition("");
+        setBatteryStatus("");
     }
 
     async function handleDeleteVehicle(vehicleId: string) {
@@ -1001,6 +1095,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setVehicleType,
                 year,
                 setYear,
+                vehicleStatus,
+                setVehicleStatus,
+                vehicleOdometer,
+                setVehicleOdometer,
+                transmissionType,
+                setTransmissionType,
+                engineSizeCc,
+                setEngineSizeCc,
+                accidentHistoryCount,
+                setAccidentHistoryCount,
+                fuelEfficiency,
+                setFuelEfficiency,
+                maintenanceHistory,
+                setMaintenanceHistory,
+                reportedIssuesCount,
+                setReportedIssuesCount,
+                tireCondition,
+                setTireCondition,
+                brakeCondition,
+                setBrakeCondition,
+                batteryStatus,
+                setBatteryStatus,
                 editingVehicleId,
                 driverName,
                 setDriverName,
@@ -1068,6 +1184,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setMaintFeatures,
                 fuelFeatures,
                 setFuelFeatures,
+                mlVehicleId,
+                setMlVehicleId,
                 maintResult,
                 fuelResult,
                 maintenancePredictionMap,

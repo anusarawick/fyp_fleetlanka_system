@@ -340,13 +340,34 @@ function ManagerRoutes() {
               setVehicleType={data.setVehicleType}
               year={data.year}
               setYear={data.setYear}
+              vehicleStatus={data.vehicleStatus}
+              setVehicleStatus={data.setVehicleStatus}
+              vehicleOdometer={data.vehicleOdometer}
+              setVehicleOdometer={data.setVehicleOdometer}
+              transmissionType={data.transmissionType}
+              setTransmissionType={data.setTransmissionType}
+              engineSizeCc={data.engineSizeCc}
+              setEngineSizeCc={data.setEngineSizeCc}
+              accidentHistoryCount={data.accidentHistoryCount}
+              setAccidentHistoryCount={data.setAccidentHistoryCount}
+              fuelEfficiency={data.fuelEfficiency}
+              setFuelEfficiency={data.setFuelEfficiency}
+              maintenanceHistory={data.maintenanceHistory}
+              setMaintenanceHistory={data.setMaintenanceHistory}
+              reportedIssuesCount={data.reportedIssuesCount}
+              setReportedIssuesCount={data.setReportedIssuesCount}
+              tireCondition={data.tireCondition}
+              setTireCondition={data.setTireCondition}
+              brakeCondition={data.brakeCondition}
+              setBrakeCondition={data.setBrakeCondition}
+              batteryStatus={data.batteryStatus}
+              setBatteryStatus={data.setBatteryStatus}
               activeTrips={data.activeTrips}
               editingVehicleId={data.editingVehicleId}
               onSaveVehicle={data.handleSaveVehicle}
               onEditVehicle={data.handleEditVehicle}
               onCancelEdit={data.handleCancelVehicleEdit}
               onDeleteVehicle={data.handleDeleteVehicle}
-              onRunMaintenanceCheck={data.runVehicleMaintenanceCheck}
             />
           </>
         }
@@ -498,6 +519,10 @@ function ManagerRoutes() {
           <>
             <Topbar title="ML Predictions" subtitle="Run model inference" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <MLPredictions
+              vehicles={data.vehicles}
+              mlVehicleId={data.mlVehicleId}
+              setMlVehicleId={data.setMlVehicleId}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               maintFeatures={data.maintFeatures}
               setMaintFeatures={data.setMaintFeatures}
               fuelFeatures={data.fuelFeatures}
@@ -507,6 +532,7 @@ function ManagerRoutes() {
               loading={loading}
               onPredictMaintenance={data.handlePredictMaintenance}
               onPredictFuel={data.handlePredictFuel}
+              onRunVehicleMaintenanceCheck={data.runVehicleMaintenanceCheck}
             />
           </>
         }
