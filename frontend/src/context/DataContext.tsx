@@ -21,6 +21,7 @@ import {
     ServiceBooking,
     DriverScore,
     Alert,
+    MaintenancePrediction,
 } from "../types";
 
 type DataContextType = {
@@ -34,6 +35,7 @@ type DataContextType = {
     serviceCenters: ServiceCenter[];
     serviceBookings: ServiceBooking[];
     driverScores: DriverScore[];
+    maintenancePredictions: MaintenancePrediction[];
 
     // Computed values
     activeTrips: number;
@@ -58,6 +60,8 @@ type DataContextType = {
     setMake: (v: string) => void;
     model: string;
     setModel: (v: string) => void;
+    vehicleType: string;
+    setVehicleType: (v: string) => void;
     year: string;
     setYear: (v: string) => void;
     editingVehicleId: string | null;
@@ -145,6 +149,7 @@ type DataContextType = {
     setFuelFeatures: (v: string) => void;
     maintResult: string | null;
     fuelResult: string | null;
+    maintenancePredictionMap: Record<string, MaintenancePrediction>;
 
     // Handlers
     handleSaveVehicle: (e: FormEvent) => Promise<void>;
@@ -164,6 +169,7 @@ type DataContextType = {
     handleAddBooking: (e: FormEvent) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
+    runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
     buildAlerts: () => Alert[];
 
     // Reset on logout
@@ -185,11 +191,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [serviceCenters, setServiceCenters] = useState<ServiceCenter[]>([]);
     const [serviceBookings, setServiceBookings] = useState<ServiceBooking[]>([]);
     const [driverScores, setDriverScores] = useState<DriverScore[]>([]);
+    const [maintenancePredictions, setMaintenancePredictions] = useState<MaintenancePrediction[]>([]);
 
     // Vehicle form
     const [plateNo, setPlateNo] = useState("");
     const [make, setMake] = useState("");
     const [model, setModel] = useState("");
+    const [vehicleType, setVehicleType] = useState("");
     const [year, setYear] = useState("");
     const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
 
@@ -397,6 +405,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
             .slice(0, 5);
     }, [driverScores]);
 
+    const maintenancePredictionMap = useMemo(() => {
+        const latestByVehicle: Record<string, MaintenancePrediction> = {};
+        for (const prediction of maintenancePredictions) {
+            if (!latestByVehicle[prediction.vehicle_id]) {
+                latestByVehicle[prediction.vehicle_id] = prediction;
+            }
+        }
+        return latestByVehicle;
+    }, [maintenancePredictions]);
+
     useEffect(() => {
         if (!token || role !== "driver") return;
         if (completedTrips.length === 0) return;
@@ -454,10 +472,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceCenters([]);
                     setServiceBookings([]);
                     setDriverScores([]);
+                    setMaintenancePredictions([]);
                     return;
                 }
 
-                const [v, d, t, f, m, doc, sc, sb, ds] = await Promise.all([
+                const [v, d, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
                     apiGet<Vehicle[]>("/vehicles", token),
                     apiGet<Driver[]>("/drivers", token),
                     apiGet<Trip[]>("/trips", token),
@@ -467,6 +486,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     apiGet<ServiceCenter[]>("/service-centers", token),
                     apiGet<ServiceBooking[]>("/service-bookings", token),
                     apiGet<DriverScore[]>("/driver-scores", token),
+                    apiGet<MaintenancePrediction[]>("/ml/maintenance/predictions", token),
                 ]);
                 setVehicles(v);
                 setDrivers(d);
@@ -477,6 +497,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setServiceCenters(sc);
                 setServiceBookings(sb);
                 setDriverScores(ds);
+                setMaintenancePredictions(mp);
             } catch (e: any) {
                 setError(e.message);
             }
@@ -494,6 +515,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setServiceCenters([]);
         setServiceBookings([]);
         setDriverScores([]);
+        setMaintenancePredictions([]);
     }
 
     // Handlers
@@ -508,6 +530,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 plate_no: plateNo,
                 make: make || undefined,
                 model: model || undefined,
+                vehicle_type: vehicleType || undefined,
                 year: year ? Number(year) : undefined,
             };
             if (editingVehicleId) {
@@ -520,6 +543,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setPlateNo("");
             setMake("");
             setModel("");
+            setVehicleType("");
             setYear("");
             setEditingVehicleId(null);
         } catch (err: any) {
@@ -534,6 +558,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setPlateNo(vehicle.plate_no);
         setMake(vehicle.make || "");
         setModel(vehicle.model || "");
+        setVehicleType(vehicle.vehicle_type || "");
         setYear(vehicle.year ? String(vehicle.year) : "");
     }
 
@@ -542,6 +567,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setPlateNo("");
         setMake("");
         setModel("");
+        setVehicleType("");
         setYear("");
     }
 
@@ -873,6 +899,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    async function runVehicleMaintenanceCheck(vehicleId: string) {
+        if (!token) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const result = await apiPost<{
+                vehicle_id: string;
+                prediction: number;
+                probability: number;
+                threshold_used: number;
+                risk_level: "low" | "medium" | "high";
+            }>(`/ml/maintenance/by-vehicle/${vehicleId}`, {}, token);
+
+            const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
+            setMaintenancePredictions((prev) => {
+                const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
+                return [...latest, ...rest];
+            });
+            setMaintResult(
+                JSON.stringify({
+                    vehicle_id: result.vehicle_id,
+                    prediction: result.prediction,
+                    probability: Number(result.probability.toFixed(4)),
+                    risk_level: result.risk_level,
+                })
+            );
+        } catch (err: any) {
+            setError(err.message || "Vehicle prediction failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     function buildAlerts(): Alert[] {
         const alerts: Alert[] = [];
         const now = new Date().getTime();
@@ -922,6 +981,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 serviceCenters,
                 serviceBookings,
                 driverScores,
+                maintenancePredictions,
                 activeTrips,
                 fuelCostTotal,
                 currency,
@@ -937,6 +997,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setMake,
                 model,
                 setModel,
+                vehicleType,
+                setVehicleType,
                 year,
                 setYear,
                 editingVehicleId,
@@ -1008,6 +1070,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setFuelFeatures,
                 maintResult,
                 fuelResult,
+                maintenancePredictionMap,
                 handleSaveVehicle,
                 handleEditVehicle,
                 handleCancelVehicleEdit,
@@ -1025,6 +1088,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleAddBooking,
                 handlePredictMaintenance,
                 handlePredictFuel,
+                runVehicleMaintenanceCheck,
                 buildAlerts,
                 resetData,
             }}

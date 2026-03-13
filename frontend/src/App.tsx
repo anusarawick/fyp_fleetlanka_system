@@ -328,6 +328,7 @@ function ManagerRoutes() {
             <Topbar title="Fleet Management" subtitle="Create and manage data" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Management
               vehicles={data.vehicles}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               loading={loading}
               plateNo={data.plateNo}
               setPlateNo={data.setPlateNo}
@@ -335,6 +336,8 @@ function ManagerRoutes() {
               setMake={data.setMake}
               model={data.model}
               setModel={data.setModel}
+              vehicleType={data.vehicleType}
+              setVehicleType={data.setVehicleType}
               year={data.year}
               setYear={data.setYear}
               activeTrips={data.activeTrips}
@@ -343,6 +346,7 @@ function ManagerRoutes() {
               onEditVehicle={data.handleEditVehicle}
               onCancelEdit={data.handleCancelVehicleEdit}
               onDeleteVehicle={data.handleDeleteVehicle}
+              onRunMaintenanceCheck={data.runVehicleMaintenanceCheck}
             />
           </>
         }

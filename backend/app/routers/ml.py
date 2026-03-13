@@ -205,6 +205,25 @@ def _read_maintenance_model_version() -> str:
         return "maintenance_model_unknown"
 
 
+@router.get("/maintenance/predictions")
+def list_maintenance_predictions(
+    vehicle_id: Optional[str] = None,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> list[dict]:
+    token = _require_token(token)
+    supabase = get_supabase_client(token)
+    query = (
+        supabase.table("maintenance_predictions")
+        .select("*")
+        .order("predicted_at", desc=True)
+    )
+    if vehicle_id:
+        query = query.eq("vehicle_id", vehicle_id)
+    response = query.execute()
+    return response.data or []
+
+
 @router.post("/maintenance")
 def predict_maintenance(
     payload: MaintenanceRequest,

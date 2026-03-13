@@ -57,6 +57,10 @@ This folder contains training scripts and model utilities for:
   - Builds feature record from vehicle + maintenance data, predicts, and persists a snapshot in `maintenance_predictions`.
   - `Vehicle_Model` mapping prefers `vehicles.vehicle_type` (Car/SUV/Truck/Bus/Motorcycle/Van), then falls back to `vehicles.model`.
   - Requires latest DB migration (`supabase/migrations/20260310_maintenance_ml_integration.sql`).
+- Prediction history endpoint:
+  - `GET /ml/maintenance/predictions`
+  - Optional query param: `vehicle_id`
+  - Returns persisted maintenance prediction snapshots ordered by latest first.
 
 ## Leakage validation
 - Script: `app/ml/validate_maintenance_model.py`

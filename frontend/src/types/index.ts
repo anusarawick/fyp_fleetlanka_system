@@ -6,6 +6,7 @@ export type Vehicle = {
   plate_no: string;
   make?: string;
   model?: string;
+  vehicle_type?: string;
   year?: number;
   status?: string;
   odometer_km?: number;
@@ -86,4 +87,17 @@ export type DriverScore = {
   distance_score?: number;
   consistency_score?: number;
   computed_at: string;
+};
+
+export type MaintenancePrediction = {
+  id: string;
+  org_id: string;
+  vehicle_id: string;
+  prediction: number;
+  probability: number;
+  risk_level: "low" | "medium" | "high";
+  threshold_used?: number;
+  model_version?: string;
+  input_features?: Record<string, unknown>;
+  predicted_at: string;
 };
