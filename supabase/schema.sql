@@ -92,9 +92,19 @@ create table if not exists public.vehicles (
   plate_no text not null,
   make text,
   model text,
+  vehicle_type text,
   year int,
   status text default 'active',
   odometer_km numeric,
+  transmission_type text,
+  engine_size_cc int,
+  accident_history_count int default 0,
+  fuel_efficiency numeric,
+  maintenance_history text,
+  reported_issues_count int default 0,
+  tire_condition text,
+  brake_condition text,
+  battery_status text,
   created_at timestamptz not null default now(),
   unique (org_id, plate_no)
 );
@@ -204,6 +214,37 @@ create table if not exists public.service_bookings (
   created_at timestamptz not null default now()
 );
 
+-- Driver score snapshots
+create table if not exists public.driver_scores (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  driver_id uuid not null references public.profiles(id) on delete cascade,
+  driver_name text,
+  overall_score int not null check (overall_score between 0 and 100),
+  speed_score numeric,
+  idle_score numeric,
+  distance_score numeric,
+  consistency_score numeric,
+  computed_at timestamptz not null default now()
+);
+
+-- Maintenance prediction snapshots
+create table if not exists public.maintenance_predictions (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  prediction int not null check (prediction in (0, 1)),
+  probability numeric not null check (probability >= 0 and probability <= 1),
+  risk_level text not null check (risk_level in ('low', 'medium', 'high')),
+  threshold_used numeric,
+  model_version text,
+  input_features jsonb,
+  predicted_at timestamptz not null default now()
+);
+
+create index if not exists maint_pred_org_vehicle_time_idx
+  on public.maintenance_predictions (org_id, vehicle_id, predicted_at desc);
+
 -- Enable RLS
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
@@ -216,6 +257,8 @@ alter table public.documents enable row level security;
 alter table public.alerts enable row level security;
 alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
+alter table public.driver_scores enable row level security;
+alter table public.maintenance_predictions enable row level security;
 
 -- Organizations policies
 create policy "org_select" on public.organizations
@@ -261,6 +304,14 @@ create policy "centers_org" on public.service_centers
   with check (org_id = public.current_org_id());
 
 create policy "bookings_org" on public.service_bookings
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "driver_scores_org" on public.driver_scores
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "maintenance_predictions_org" on public.maintenance_predictions
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 

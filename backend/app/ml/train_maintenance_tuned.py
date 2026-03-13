@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 import joblib
 import pandas as pd
@@ -15,19 +16,20 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-def build_training_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, dict]:
-    target_col = "Need_Maintenance"
-    work = df.copy().dropna(subset=[target_col])
-    y = work[target_col].astype(int)
-    X = work.drop(columns=[target_col])
+from app.ml.train_maintenance import build_training_frame
 
-    metadata = {
-        "target": target_col,
-        "data_source": "processed",
-        "feature_columns": list(X.columns),
-    }
-    return X, y, metadata
+TUNED_RF_PARAMS = {
+    "n_estimators": 220,
+    "max_depth": 12,
+    "min_samples_split": 12,
+    "min_samples_leaf": 1,
+    "max_features": "log2",
+}
+TUNED_DECISION_THRESHOLD = 0.35
 
 
 def main() -> None:
@@ -65,7 +67,7 @@ def main() -> None:
         steps=[
             ("preprocessor", preprocessor),
             ("smote", SMOTE(random_state=42)),
-            ("classifier", RandomForestClassifier(n_estimators=300, random_state=42)),
+            ("classifier", RandomForestClassifier(random_state=42, **TUNED_RF_PARAMS)),
         ]
     )
     model.fit(X_train, y_train)
@@ -82,6 +84,9 @@ def main() -> None:
         **metadata,
         "numeric_features": numeric_features,
         "categorical_features": categorical_features,
+        "selected_hyperparameters": TUNED_RF_PARAMS,
+        "decision_threshold": TUNED_DECISION_THRESHOLD,
+        "selection_objective": "0.6*recall_1 + 0.4*f1_1",
     }
     (models_dir / "maintenance_model_meta.json").write_text(json.dumps(metadata, indent=2))
 

@@ -5,6 +5,10 @@ from fastapi import Header, HTTPException, Depends
 from app.services.supabase_client import get_supabase_client
 
 
+MANAGER_ROLES = {"owner", "manager"}
+DRIVER_ROLES = {"driver"}
+
+
 def get_bearer_token(authorization: Optional[str] = Header(None)) -> Optional[str]:
     if not authorization:
         return None
@@ -47,3 +51,19 @@ def get_current_profile(token: Optional[str] = Depends(get_bearer_token)) -> Dic
         status_code=404, 
         detail="Profile not found. Please complete account setup."
     )
+
+
+def require_manager_profile(
+    profile: Dict[str, Any] = Depends(get_current_profile),
+) -> Dict[str, Any]:
+    if profile.get("role") not in MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Manager access required")
+    return profile
+
+
+def require_manager_or_driver_profile(
+    profile: Dict[str, Any] = Depends(get_current_profile),
+) -> Dict[str, Any]:
+    if profile.get("role") not in MANAGER_ROLES.union(DRIVER_ROLES):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return profile

@@ -253,6 +253,9 @@ function DriverRoutes() {
   const {
     vehicles,
     trips,
+    driverScore,
+    driverScoreLabel,
+    driverScoreBreakdown,
     selectedVehicle,
     setSelectedVehicle,
     activeTripId,
@@ -270,6 +273,9 @@ function DriverRoutes() {
       selectedVehicle={selectedVehicle}
       setSelectedVehicle={setSelectedVehicle}
       activeTripId={activeTripId}
+      driverScore={driverScore}
+      driverScoreLabel={driverScoreLabel}
+      driverScoreBreakdown={driverScoreBreakdown}
       startTrip={startTrip}
       stopTrip={stopTrip}
       geoSupported={geoSupported}
@@ -475,6 +481,7 @@ function ManagerRoutes() {
               vehicleCount={data.vehicles.length}
               driverCount={data.drivers.length}
               activeTrips={data.activeTrips}
+              topPerformers={data.topPerformers}
               onExportFuel={() => exportFuel(data.fuelLogs)}
               onExportMaintenance={() => exportMaintenance(data.maintenance)}
             />

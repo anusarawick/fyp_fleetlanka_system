@@ -74,3 +74,16 @@ export type Alert = {
   title: string;
   meta: string;
 };
+
+export type DriverScore = {
+  id: string;
+  org_id: string;
+  driver_id: string;
+  driver_name?: string;
+  overall_score: number;
+  speed_score?: number;
+  idle_score?: number;
+  distance_score?: number;
+  consistency_score?: number;
+  computed_at: string;
+};

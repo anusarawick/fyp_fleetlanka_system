@@ -10,6 +10,9 @@ type Trip = {
   start_time: string;
   end_time?: string;
   distance_km?: number;
+  duration_min?: number;
+  avg_speed_kmh?: number;
+  idle_min?: number;
   start_location?: string;
   end_location?: string;
   status?: string;
@@ -22,6 +25,14 @@ type DriverProps = {
   selectedVehicle: string;
   setSelectedVehicle: (v: string) => void;
   activeTripId: string | null;
+  driverScore: number;
+  driverScoreLabel: "Excellent" | "Good" | "Average" | "Needs work";
+  driverScoreBreakdown: {
+    speed: number;
+    idle: number;
+    distance: number;
+    consistency: number;
+  };
   startTrip: () => void;
   stopTrip: () => void;
   geoSupported?: boolean;
@@ -35,7 +46,12 @@ export default function DriverTrips(props: DriverProps) {
   const activeTrip = props.trips.find(t => t.id === props.activeTripId);
   const completedTrips = props.trips.filter(t => t.end_time);
   const upcomingTrips = props.trips.filter(t => !t.end_time && t.id !== props.activeTripId);
-  const driverScore = 87; // Mock score
+  const scorePillClass =
+    props.driverScore >= 85
+      ? "pwa-pill--success"
+      : props.driverScore >= 70
+        ? "pwa-pill--active"
+        : "pwa-pill--scheduled";
 
   return (
     <div className="pwa-app">
@@ -140,18 +156,40 @@ export default function DriverTrips(props: DriverProps) {
               <circle
                 className="pwa-score-circle__progress"
                 cx="50" cy="50" r="45"
-                strokeDasharray={`${driverScore * 2.83} 283`}
+                strokeDasharray={`${props.driverScore * 2.83} 283`}
               />
             </svg>
             <div className="pwa-score-circle__value">
-              <span className="pwa-score-circle__number">{driverScore}</span>
+              <span className="pwa-score-circle__number">{props.driverScore}</span>
               <span className="pwa-score-circle__max">/100</span>
             </div>
           </div>
           <div className="pwa-score-info">
             <span className="pwa-score-label">Driver Score</span>
-            <span className="pwa-pill pwa-pill--success">Excellent</span>
+            <span className={`pwa-pill ${scorePillClass}`}>{props.driverScoreLabel}</span>
             <a className="pwa-link">View Details →</a>
+          </div>
+        </div>
+
+        <div className="pwa-section">
+          <div className="pwa-section__title">Score Breakdown</div>
+          <div className="pwa-summary-grid">
+            <div className="pwa-summary-item">
+              <span className="pwa-summary-item__value">{props.driverScoreBreakdown.speed}</span>
+              <span className="pwa-summary-item__label">Speed</span>
+            </div>
+            <div className="pwa-summary-item">
+              <span className="pwa-summary-item__value">{props.driverScoreBreakdown.idle}</span>
+              <span className="pwa-summary-item__label">Idle</span>
+            </div>
+            <div className="pwa-summary-item">
+              <span className="pwa-summary-item__value">{props.driverScoreBreakdown.distance}</span>
+              <span className="pwa-summary-item__label">Distance</span>
+            </div>
+            <div className="pwa-summary-item">
+              <span className="pwa-summary-item__value">{props.driverScoreBreakdown.consistency}</span>
+              <span className="pwa-summary-item__label">Consistency</span>
+            </div>
           </div>
         </div>
 

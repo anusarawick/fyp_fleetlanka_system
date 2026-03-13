@@ -18,6 +18,7 @@ type AnalyticsProps = {
   vehicleCount: number;
   driverCount: number;
   activeTrips: number;
+  topPerformers: { driverId: string; driverName: string; score: number }[];
   onExportFuel: () => void;
   onExportMaintenance: () => void;
 };
@@ -142,6 +143,24 @@ export default function Analytics(props: AnalyticsProps) {
                 <li key={m.id}>
                   <div className="list__title">{m.predicted_due_date}</div>
                   <div className="list__meta">Scheduled</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="card__header">
+            <h3>Top Performing Drivers</h3>
+          </div>
+          {props.topPerformers.length === 0 ? (
+            <p className="muted empty">No driver scores recorded yet.</p>
+          ) : (
+            <ul className="list">
+              {props.topPerformers.map((d) => (
+                <li key={d.driverId}>
+                  <div className="list__title">{d.driverName}</div>
+                  <div className="list__meta">Score: {d.score}/100</div>
                 </li>
               ))}
             </ul>

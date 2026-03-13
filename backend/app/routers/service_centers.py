@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.service_centers import (
     ServiceCenterCreate,
     ServiceCenterOut,
@@ -20,7 +20,10 @@ def _require_token(token: Optional[str]) -> str:
 
 
 @router.get("", response_model=List[ServiceCenterOut])
-def list_centers(token: Optional[str] = Depends(get_bearer_token)) -> List[ServiceCenterOut]:
+def list_centers(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[ServiceCenterOut]:
     token = _require_token(token)
     supabase = get_supabase_client(token)
     response = supabase.table("service_centers").select("*").execute()
@@ -30,7 +33,7 @@ def list_centers(token: Optional[str] = Depends(get_bearer_token)) -> List[Servi
 @router.post("", response_model=ServiceCenterOut)
 def create_center(
     payload: ServiceCenterCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> ServiceCenterOut:
     token = _require_token(token)
@@ -48,6 +51,7 @@ def create_center(
 def update_center(
     center_id: str,
     payload: ServiceCenterUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> ServiceCenterOut:
     token = _require_token(token)
@@ -65,7 +69,9 @@ def update_center(
 
 @router.delete("/{center_id}")
 def delete_center(
-    center_id: str, token: Optional[str] = Depends(get_bearer_token)
+    center_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)

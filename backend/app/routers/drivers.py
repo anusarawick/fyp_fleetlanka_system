@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.drivers import DriverCreate, DriverOut, DriverUpdate
 from app.services.supabase_client import get_supabase_client
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 @router.get("", response_model=List[DriverOut])
 def list_drivers(
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> List[DriverOut]:
     org_id = profile["org_id"]
@@ -29,7 +29,7 @@ def list_drivers(
 @router.post("", response_model=DriverOut)
 def create_driver(
     payload: DriverCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> DriverOut:
     org_id = profile["org_id"]
@@ -69,6 +69,7 @@ def create_driver(
 def update_driver(
     driver_id: str,
     payload: DriverUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> DriverOut:
     if not token:
@@ -88,7 +89,9 @@ def update_driver(
 
 @router.delete("/{driver_id}")
 def delete_driver(
-    driver_id: str, token: Optional[str] = Depends(get_bearer_token)
+    driver_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
 ) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")

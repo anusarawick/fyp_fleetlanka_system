@@ -19,6 +19,7 @@ import {
     Document,
     ServiceCenter,
     ServiceBooking,
+    DriverScore,
     Alert,
 } from "../types";
 
@@ -32,6 +33,7 @@ type DataContextType = {
     documents: Document[];
     serviceCenters: ServiceCenter[];
     serviceBookings: ServiceBooking[];
+    driverScores: DriverScore[];
 
     // Computed values
     activeTrips: number;
@@ -39,6 +41,15 @@ type DataContextType = {
     currency: Intl.NumberFormat;
     geoSupported: boolean;
     upcomingDocs: Document[];
+    driverScore: number;
+    driverScoreLabel: "Excellent" | "Good" | "Average" | "Needs work";
+    driverScoreBreakdown: {
+        speed: number;
+        idle: number;
+        distance: number;
+        consistency: number;
+    };
+    topPerformers: Array<{ driverId: string; driverName: string; score: number }>;
 
     // Vehicle form state
     plateNo: string;
@@ -162,7 +173,7 @@ type DataContextType = {
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: ReactNode }) {
-    const { token, orgId, role, setError, setLoading, loading } = useAuth();
+    const { token, orgId, role, fullName, setError, setLoading, loading } = useAuth();
 
     // Entity state
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -173,6 +184,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [serviceCenters, setServiceCenters] = useState<ServiceCenter[]>([]);
     const [serviceBookings, setServiceBookings] = useState<ServiceBooking[]>([]);
+    const [driverScores, setDriverScores] = useState<DriverScore[]>([]);
 
     // Vehicle form
     const [plateNo, setPlateNo] = useState("");
@@ -192,6 +204,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [selectedVehicle, setSelectedVehicle] = useState("");
     const [activeTripId, setActiveTripId] = useState<string | null>(null);
     const watchIdRef = useRef<number | null>(null);
+    const lastSavedScoreSignatureRef = useRef<string>("");
 
     // Fuel form
     const [fuelVehicle, setFuelVehicle] = useState("");
@@ -256,12 +269,195 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return date <= now + fourteenDays;
     });
 
+    const completedTrips = useMemo(() => trips.filter((t) => !!t.end_time), [trips]);
+
+    const driverScoreBreakdown = useMemo(() => {
+        if (completedTrips.length === 0) {
+            return { speed: 70, idle: 70, distance: 70, consistency: 70 };
+        }
+
+        const avg = (arr: number[]) =>
+            arr.length ? arr.reduce((sum, value) => sum + value, 0) / arr.length : 0;
+
+        const avgSpeedValues = completedTrips
+            .map((t) => t.avg_speed_kmh)
+            .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+
+        const speedScores = avgSpeedValues.map((speed) => {
+            if (speed >= 40 && speed <= 80) return 100;
+            if (speed < 40) return Math.max(0, 100 - (40 - speed) * 2.5);
+            return Math.max(0, 100 - (speed - 80) * 3.5);
+        });
+        const speedScore = speedScores.length ? avg(speedScores) : 70;
+
+        const idleRatios = completedTrips
+            .map((t) => {
+                const idle = t.idle_min;
+                const duration = t.duration_min;
+                if (
+                    typeof idle !== "number" ||
+                    typeof duration !== "number" ||
+                    !Number.isFinite(idle) ||
+                    !Number.isFinite(duration) ||
+                    duration <= 0
+                ) {
+                    return null;
+                }
+                return idle / duration;
+            })
+            .filter((ratio): ratio is number => ratio !== null);
+        const idleScores = idleRatios.map((ratio) => {
+            if (ratio <= 0.1) return 100;
+            if (ratio >= 0.5) return 0;
+            return Math.max(0, 100 - ((ratio - 0.1) / 0.4) * 100);
+        });
+        const idleScore = idleScores.length ? avg(idleScores) : 70;
+
+        const distanceEfficiency = completedTrips
+            .map((t) => {
+                const distance = t.distance_km;
+                const duration = t.duration_min;
+                if (
+                    typeof distance !== "number" ||
+                    typeof duration !== "number" ||
+                    !Number.isFinite(distance) ||
+                    !Number.isFinite(duration) ||
+                    distance <= 0 ||
+                    duration <= 0
+                ) {
+                    return null;
+                }
+                const derivedSpeed = (distance / duration) * 60;
+                if (derivedSpeed >= 30 && derivedSpeed <= 75) return 100;
+                if (derivedSpeed < 30) return Math.max(0, 100 - (30 - derivedSpeed) * 2.5);
+                return Math.max(0, 100 - (derivedSpeed - 75) * 3.0);
+            })
+            .filter((score): score is number => score !== null);
+        const distanceScore = distanceEfficiency.length ? avg(distanceEfficiency) : 70;
+
+        const durationValues = completedTrips
+            .map((t) => t.duration_min)
+            .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+        let consistencyScore = 70;
+        if (durationValues.length >= 2) {
+            const meanDuration = avg(durationValues);
+            const variance =
+                durationValues.reduce((sum, value) => sum + (value - meanDuration) ** 2, 0) /
+                durationValues.length;
+            const stdDev = Math.sqrt(variance);
+            const cv = stdDev / meanDuration;
+            consistencyScore = Math.max(0, Math.min(100, 100 - cv * 120));
+        }
+
+        const weighted =
+            speedScore * 0.35 +
+            idleScore * 0.25 +
+            distanceScore * 0.2 +
+            consistencyScore * 0.2;
+        return {
+            speed: Math.round(Math.max(0, Math.min(100, speedScore))),
+            idle: Math.round(Math.max(0, Math.min(100, idleScore))),
+            distance: Math.round(Math.max(0, Math.min(100, distanceScore))),
+            consistency: Math.round(Math.max(0, Math.min(100, consistencyScore))),
+        };
+    }, [completedTrips]);
+
+    const driverScore = useMemo(() => {
+        const weighted =
+            driverScoreBreakdown.speed * 0.35 +
+            driverScoreBreakdown.idle * 0.25 +
+            driverScoreBreakdown.distance * 0.2 +
+            driverScoreBreakdown.consistency * 0.2;
+        return Math.round(Math.max(0, Math.min(100, weighted)));
+    }, [driverScoreBreakdown]);
+
+    const driverScoreLabel: "Excellent" | "Good" | "Average" | "Needs work" =
+        driverScore >= 85
+            ? "Excellent"
+            : driverScore >= 70
+                ? "Good"
+                : driverScore >= 55
+                    ? "Average"
+                    : "Needs work";
+
+    const topPerformers = useMemo(() => {
+        const latestByDriver = new Map<string, DriverScore>();
+        for (const row of driverScores) {
+            if (!latestByDriver.has(row.driver_id)) {
+                latestByDriver.set(row.driver_id, row);
+            }
+        }
+        return Array.from(latestByDriver.values())
+            .map((row) => ({
+                driverId: row.driver_id,
+                driverName: row.driver_name || "Driver",
+                score: row.overall_score,
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+    }, [driverScores]);
+
+    useEffect(() => {
+        if (!token || role !== "driver") return;
+        if (completedTrips.length === 0) return;
+
+        const lastTrip = completedTrips[0];
+        const signature = [
+            completedTrips.length,
+            lastTrip?.id || "",
+            lastTrip?.end_time || "",
+            driverScore,
+            driverScoreBreakdown.speed,
+            driverScoreBreakdown.idle,
+            driverScoreBreakdown.distance,
+            driverScoreBreakdown.consistency,
+        ].join("|");
+
+        if (lastSavedScoreSignatureRef.current === signature) return;
+        lastSavedScoreSignatureRef.current = signature;
+
+        apiPost<DriverScore>(
+            "/driver-scores/me",
+            {
+                overall_score: driverScore,
+                speed_score: driverScoreBreakdown.speed,
+                idle_score: driverScoreBreakdown.idle,
+                distance_score: driverScoreBreakdown.distance,
+                consistency_score: driverScoreBreakdown.consistency,
+            },
+            token
+        )
+            .then((saved) => {
+                setDriverScores((prev) => [saved, ...prev].slice(0, 200));
+            })
+            .catch(() => {
+                // Keep app flow uninterrupted if snapshot save fails.
+            });
+    }, [token, role, completedTrips, driverScore, driverScoreBreakdown]);
+
     // Data loading
     useEffect(() => {
-        if (!token) return;
+        if (!token || !role) return;
         const load = async () => {
             try {
-                const [v, d, t, f, m, doc, sc, sb] = await Promise.all([
+                if (role === "driver") {
+                    const [v, t] = await Promise.all([
+                        apiGet<Vehicle[]>("/vehicles", token),
+                        apiGet<Trip[]>("/trips", token),
+                    ]);
+                    setVehicles(v);
+                    setTrips(t);
+                    setDrivers([]);
+                    setFuelLogs([]);
+                    setMaintenance([]);
+                    setDocuments([]);
+                    setServiceCenters([]);
+                    setServiceBookings([]);
+                    setDriverScores([]);
+                    return;
+                }
+
+                const [v, d, t, f, m, doc, sc, sb, ds] = await Promise.all([
                     apiGet<Vehicle[]>("/vehicles", token),
                     apiGet<Driver[]>("/drivers", token),
                     apiGet<Trip[]>("/trips", token),
@@ -270,6 +466,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     apiGet<Document[]>("/documents", token),
                     apiGet<ServiceCenter[]>("/service-centers", token),
                     apiGet<ServiceBooking[]>("/service-bookings", token),
+                    apiGet<DriverScore[]>("/driver-scores", token),
                 ]);
                 setVehicles(v);
                 setDrivers(d);
@@ -279,12 +476,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setDocuments(doc);
                 setServiceCenters(sc);
                 setServiceBookings(sb);
+                setDriverScores(ds);
             } catch (e: any) {
                 setError(e.message);
             }
         };
         load();
-    }, [token]);
+    }, [token, role]);
 
     function resetData() {
         setVehicles([]);
@@ -295,6 +493,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDocuments([]);
         setServiceCenters([]);
         setServiceBookings([]);
+        setDriverScores([]);
     }
 
     // Handlers
@@ -722,11 +921,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 documents,
                 serviceCenters,
                 serviceBookings,
+                driverScores,
                 activeTrips,
                 fuelCostTotal,
                 currency,
                 geoSupported,
                 upcomingDocs,
+                driverScore,
+                driverScoreLabel,
+                driverScoreBreakdown,
+                topPerformers,
                 plateNo,
                 setPlateNo,
                 make,

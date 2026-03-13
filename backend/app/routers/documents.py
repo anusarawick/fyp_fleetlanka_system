@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.documents import DocumentCreate, DocumentOut, DocumentUpdate
 from app.services.supabase_client import get_supabase_client
 
@@ -16,7 +16,10 @@ def _require_token(token: Optional[str]) -> str:
 
 
 @router.get("", response_model=List[DocumentOut])
-def list_documents(token: Optional[str] = Depends(get_bearer_token)) -> List[DocumentOut]:
+def list_documents(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[DocumentOut]:
     token = _require_token(token)
     supabase = get_supabase_client(token)
     response = supabase.table("documents").select("*").execute()
@@ -26,7 +29,7 @@ def list_documents(token: Optional[str] = Depends(get_bearer_token)) -> List[Doc
 @router.post("", response_model=DocumentOut)
 def create_document(
     payload: DocumentCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> DocumentOut:
     token = _require_token(token)
@@ -44,6 +47,7 @@ def create_document(
 def update_document(
     doc_id: str,
     payload: DocumentUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> DocumentOut:
     token = _require_token(token)
@@ -60,7 +64,11 @@ def update_document(
 
 
 @router.delete("/{doc_id}")
-def delete_document(doc_id: str, token: Optional[str] = Depends(get_bearer_token)) -> dict:
+def delete_document(
+    doc_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)
     response = supabase.table("documents").delete().eq("id", doc_id).execute()

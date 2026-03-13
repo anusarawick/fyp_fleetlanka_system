@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.maintenance import MaintenanceCreate, MaintenanceOut, MaintenanceUpdate
 from app.services.supabase_client import get_supabase_client
 
@@ -16,7 +16,10 @@ def _require_token(token: Optional[str]) -> str:
 
 
 @router.get("", response_model=List[MaintenanceOut])
-def list_maintenance(token: Optional[str] = Depends(get_bearer_token)) -> List[MaintenanceOut]:
+def list_maintenance(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[MaintenanceOut]:
     token = _require_token(token)
     supabase = get_supabase_client(token)
     response = (
@@ -28,7 +31,7 @@ def list_maintenance(token: Optional[str] = Depends(get_bearer_token)) -> List[M
 @router.post("", response_model=MaintenanceOut)
 def create_maintenance(
     payload: MaintenanceCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> MaintenanceOut:
     token = _require_token(token)
@@ -46,6 +49,7 @@ def create_maintenance(
 def update_maintenance(
     maintenance_id: str,
     payload: MaintenanceUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> MaintenanceOut:
     token = _require_token(token)
@@ -63,7 +67,9 @@ def update_maintenance(
 
 @router.delete("/{maintenance_id}")
 def delete_maintenance(
-    maintenance_id: str, token: Optional[str] = Depends(get_bearer_token)
+    maintenance_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)

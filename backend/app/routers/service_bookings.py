@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.service_bookings import (
     ServiceBookingCreate,
     ServiceBookingOut,
@@ -20,7 +20,10 @@ def _require_token(token: Optional[str]) -> str:
 
 
 @router.get("", response_model=List[ServiceBookingOut])
-def list_bookings(token: Optional[str] = Depends(get_bearer_token)) -> List[ServiceBookingOut]:
+def list_bookings(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[ServiceBookingOut]:
     token = _require_token(token)
     supabase = get_supabase_client(token)
     response = supabase.table("service_bookings").select("*").execute()
@@ -30,7 +33,7 @@ def list_bookings(token: Optional[str] = Depends(get_bearer_token)) -> List[Serv
 @router.post("", response_model=ServiceBookingOut)
 def create_booking(
     payload: ServiceBookingCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> ServiceBookingOut:
     token = _require_token(token)
@@ -48,6 +51,7 @@ def create_booking(
 def update_booking(
     booking_id: str,
     payload: ServiceBookingUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> ServiceBookingOut:
     token = _require_token(token)
@@ -65,7 +69,9 @@ def update_booking(
 
 @router.delete("/{booking_id}")
 def delete_booking(
-    booking_id: str, token: Optional[str] = Depends(get_bearer_token)
+    booking_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)
