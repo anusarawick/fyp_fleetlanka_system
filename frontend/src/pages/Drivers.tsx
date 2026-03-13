@@ -35,6 +35,7 @@ export default function Drivers(props: DriversProps) {
   const [viewTarget, setViewTarget] = useState<Driver | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [resetPasswordEnabled, setResetPasswordEnabled] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -46,7 +47,7 @@ export default function Drivers(props: DriversProps) {
     .filter((driver) => {
       const query = searchTerm.trim().toLowerCase();
       if (!query) return true;
-      return [driver.full_name, driver.phone, driver.status]
+      return [driver.full_name, driver.email, driver.phone, driver.status]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
@@ -76,11 +77,13 @@ export default function Drivers(props: DriversProps) {
 
   function openCreateModal() {
     props.onCancelEdit();
+    setResetPasswordEnabled(false);
     setShowDriverModal(true);
   }
 
   function openEditModal(driver: Driver) {
     props.onEditDriver(driver);
+    setResetPasswordEnabled(false);
     setShowDriverModal(true);
   }
 
@@ -90,6 +93,7 @@ export default function Drivers(props: DriversProps) {
 
   function closeDriverModal() {
     props.onCancelEdit();
+    setResetPasswordEnabled(false);
     setShowDriverModal(false);
   }
 
@@ -142,7 +146,7 @@ export default function Drivers(props: DriversProps) {
                   Search
                   <input
                     type="search"
-                    placeholder="Name, phone, status..."
+                    placeholder="Name, email, phone..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -192,23 +196,25 @@ export default function Drivers(props: DriversProps) {
             {filteredDrivers.length === 0 ? (
               <p className="empty">No drivers match the current filters.</p>
             ) : (
-            <div className="table" style={{ ["--table-columns" as any]: 4 }}>
-              <div className="table__head">
+            <div className="table drivers-table" style={{ ["--table-columns" as any]: 5 }}>
+              <div className="table__head drivers-table__head">
                 <span>Name</span>
+                <span>Email</span>
                 <span>Phone</span>
                 <span>Status</span>
                 <span>Actions</span>
               </div>
               {paginatedDrivers.map((d) => (
-                <div className="table__row" key={d.id}>
-                  <span>{d.full_name || "Driver"}</span>
-                  <span>{d.phone || "--"}</span>
-                  <span>
+                <div className="table__row drivers-table__row" key={d.id}>
+                  <span className="drivers-table__cell" data-label="Name">{d.full_name || "Driver"}</span>
+                  <span className="drivers-table__cell" data-label="Email">{d.email || "--"}</span>
+                  <span className="drivers-table__cell" data-label="Phone">{d.phone || "--"}</span>
+                  <span className="drivers-table__cell drivers-table__cell--status" data-label="Status">
                     <span className={`risk-pill ${(d.status || "active") === "active" ? "risk-pill--low" : "risk-pill--high"}`}>
                       {formatStatus(d.status || "active")}
                     </span>
                   </span>
-                  <span className="table__actions">
+                  <span className="table__actions drivers-table__actions" data-label="Actions">
                     <button
                       className="icon-action"
                       type="button"
@@ -322,24 +328,63 @@ export default function Drivers(props: DriversProps) {
                   onChange={(e) => props.setDriverPhone(e.target.value)}
                 />
               </label>
-              <label>
-                Status
-                <select value={props.driverStatus} onChange={(e) => props.setDriverStatus(e.target.value)}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </label>
-              <label>
-                Temporary Password
-                <input
-                  type="password"
-                  placeholder="Minimum 6 characters"
-                  value={props.driverPassword}
-                  onChange={(e) => props.setDriverPassword(e.target.value)}
-                  required={!props.editingDriverId}
-                  disabled={!!props.editingDriverId}
-                />
-              </label>
+              <div className="form-toggle-row">
+                <label className="toggle-switch">
+                  <span className="toggle-switch__label">
+                    {props.driverStatus === "active" ? "Active" : "Inactive"}
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="toggle-switch__input"
+                    checked={props.driverStatus === "active"}
+                    onChange={(e) => props.setDriverStatus(e.target.checked ? "active" : "inactive")}
+                  />
+                  <span className="toggle-switch__track" aria-hidden="true">
+                    <span className="toggle-switch__thumb" />
+                  </span>
+                </label>
+              </div>
+              {props.editingDriverId ? (
+                <>
+                  <label className="toggle-switch">
+                    <span className="toggle-switch__label">Reset Password</span>
+                    <input
+                      type="checkbox"
+                      className="toggle-switch__input"
+                      checked={resetPasswordEnabled}
+                      onChange={(e) => {
+                        setResetPasswordEnabled(e.target.checked);
+                        if (!e.target.checked) props.setDriverPassword("");
+                      }}
+                    />
+                    <span className="toggle-switch__track" aria-hidden="true">
+                      <span className="toggle-switch__thumb" />
+                    </span>
+                  </label>
+                  {resetPasswordEnabled && (
+                    <label>
+                      New Password
+                      <input
+                        type="password"
+                        placeholder="Minimum 6 characters"
+                        value={props.driverPassword}
+                        onChange={(e) => props.setDriverPassword(e.target.value)}
+                      />
+                    </label>
+                  )}
+                </>
+              ) : (
+                <label>
+                  Temporary Password
+                  <input
+                    type="password"
+                    placeholder="Minimum 6 characters"
+                    value={props.driverPassword}
+                    onChange={(e) => props.setDriverPassword(e.target.value)}
+                    required
+                  />
+                </label>
+              )}
               <div className="modal__actions">
                 <button className="btn btn--secondary" type="button" onClick={closeDriverModal}>
                   Cancel

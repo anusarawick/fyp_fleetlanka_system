@@ -89,21 +89,25 @@ def update_driver(
 
     admin_client = get_supabase_client(use_service_role=True)
     profile_updates = payload.model_dump(exclude_none=True, exclude={"email"})
+    auth_updates = {}
+    user_metadata = {}
     if payload.email is not None:
+        auth_updates["email"] = payload.email
+    if payload.password is not None:
+        auth_updates["password"] = payload.password
+    if payload.status is not None:
+        user_metadata["status"] = payload.status
+    if payload.full_name is not None:
+        user_metadata["full_name"] = payload.full_name
+    if payload.phone is not None:
+        user_metadata["phone"] = payload.phone
+    if user_metadata:
+        auth_updates["user_metadata"] = user_metadata
+    if auth_updates:
         try:
-            admin_client.auth.admin.update_user_by_id(
-                driver_id,
-                {
-                    "email": payload.email,
-                    "user_metadata": {
-                        "status": payload.status,
-                        "full_name": payload.full_name,
-                        "phone": payload.phone,
-                    },
-                },
-            )
+            admin_client.auth.admin.update_user_by_id(driver_id, auth_updates)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Email update failed: {exc}")
+            raise HTTPException(status_code=400, detail=f"Driver auth update failed: {exc}")
     response = (
         admin_client.table("profiles")
         .update(profile_updates)

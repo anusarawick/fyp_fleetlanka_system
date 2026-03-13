@@ -152,6 +152,29 @@ export default function Management(props: ManagementProps) {
     }
   }
 
+  function maintenanceToggleEnabled() {
+    return props.vehicleStatus === "maintenance";
+  }
+
+  function activeToggleEnabled() {
+    return props.vehicleStatus === "active";
+  }
+
+  function handleVehicleActiveToggle(checked: boolean) {
+    if (maintenanceToggleEnabled()) return;
+    props.setVehicleStatus(checked ? "active" : "inactive");
+  }
+
+  function handleVehicleMaintenanceToggle(checked: boolean) {
+    if (checked) {
+      props.setVehicleStatus("maintenance");
+      return;
+    }
+    if (props.vehicleStatus === "maintenance") {
+      props.setVehicleStatus("inactive");
+    }
+  }
+
   function formatRiskLabel(level?: "low" | "medium" | "high") {
     if (!level) return "No result";
     return `${level.charAt(0).toUpperCase()}${level.slice(1)} risk`;
@@ -442,14 +465,6 @@ export default function Management(props: ManagementProps) {
                 />
               </label>
               <label>
-                Status
-                <select value={props.vehicleStatus} onChange={(e) => props.setVehicleStatus(e.target.value)}>
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                  <option value="maintenance">maintenance</option>
-                </select>
-              </label>
-              <label>
                 Mileage (km)
                 <input
                   type="number"
@@ -549,6 +564,33 @@ export default function Management(props: ManagementProps) {
                   <option value="Weak">Weak</option>
                 </select>
               </label>
+              <div className="form-toggle-row form-toggle-row--full">
+                <label className="toggle-switch">
+                  <span className="toggle-switch__label">Active</span>
+                  <input
+                    type="checkbox"
+                    className="toggle-switch__input"
+                    checked={activeToggleEnabled()}
+                    disabled={maintenanceToggleEnabled()}
+                    onChange={(e) => handleVehicleActiveToggle(e.target.checked)}
+                  />
+                  <span className="toggle-switch__track" aria-hidden="true">
+                    <span className="toggle-switch__thumb" />
+                  </span>
+                </label>
+                <label className="toggle-switch">
+                  <span className="toggle-switch__label">Maintenance</span>
+                  <input
+                    type="checkbox"
+                    className="toggle-switch__input"
+                    checked={maintenanceToggleEnabled()}
+                    onChange={(e) => handleVehicleMaintenanceToggle(e.target.checked)}
+                  />
+                  <span className="toggle-switch__track" aria-hidden="true">
+                    <span className="toggle-switch__thumb" />
+                  </span>
+                </label>
+              </div>
               <div className="modal__actions">
                 <button className="btn btn--secondary" type="button" onClick={closeVehicleModal}>
                   Cancel

@@ -25,6 +25,7 @@ class DriverOut(BaseModel):
 
 class DriverUpdate(BaseModel):
     email: Optional[EmailStr] = None
+    password: Optional[str] = None
     status: Optional[str] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None

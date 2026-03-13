@@ -710,6 +710,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingDriverId) {
                 const payload = {
                     email: driverEmail || undefined,
+                    password: driverPassword || undefined,
                     status: driverStatus || undefined,
                     full_name: driverName || undefined,
                     phone: driverPhone || undefined,
