@@ -388,6 +388,8 @@ function ManagerRoutes() {
               setDriverEmail={data.setDriverEmail}
               driverPhone={data.driverPhone}
               setDriverPhone={data.setDriverPhone}
+              driverStatus={data.driverStatus}
+              setDriverStatus={data.setDriverStatus}
               driverPassword={data.driverPassword}
               setDriverPassword={data.setDriverPassword}
               editingDriverId={data.editingDriverId}

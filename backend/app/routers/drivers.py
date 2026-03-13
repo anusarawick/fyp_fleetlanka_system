@@ -18,7 +18,7 @@ def list_drivers(
     admin_client = get_supabase_client(use_service_role=True)
     response = (
         admin_client.table("profiles")
-        .select("id, org_id, role, full_name, phone")
+        .select("id, org_id, role, status, full_name, phone")
         .eq("org_id", org_id)
         .eq("role", "driver")
         .execute()
@@ -43,6 +43,7 @@ def create_driver(
             "user_metadata": {
                 "org_id": org_id,
                 "role": "driver",
+                "status": payload.status or "active",
                 "full_name": payload.full_name,
                 "phone": payload.phone,
             },
@@ -54,7 +55,7 @@ def create_driver(
 
     profile_resp = (
         admin_client.table("profiles")
-        .select("id, org_id, role, full_name, phone")
+        .select("id, org_id, role, status, full_name, phone")
         .eq("id", user_id)
         .single()
         .execute()

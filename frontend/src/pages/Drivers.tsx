@@ -5,6 +5,7 @@ type Driver = {
   full_name?: string;
   phone?: string;
   role?: string;
+  status?: string;
 };
 
 type DriversProps = {
@@ -16,6 +17,8 @@ type DriversProps = {
   setDriverEmail: (v: string) => void;
   driverPhone: string;
   setDriverPhone: (v: string) => void;
+  driverStatus: string;
+  setDriverStatus: (v: string) => void;
   driverPassword: string;
   setDriverPassword: (v: string) => void;
   editingDriverId: string | null;
@@ -28,12 +31,28 @@ type DriversProps = {
 export default function Drivers(props: DriversProps) {
   const [deleteTarget, setDeleteTarget] = useState<Driver | null>(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
+  const [viewTarget, setViewTarget] = useState<Driver | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
-  const totalPages = Math.max(1, Math.ceil(props.drivers.length / rowsPerPage));
+  const filteredDrivers = props.drivers
+    .filter((driver) => {
+      if (statusFilter === "all") return true;
+      return (driver.status || "").toLowerCase() === statusFilter;
+    })
+    .filter((driver) => {
+      const query = searchTerm.trim().toLowerCase();
+      if (!query) return true;
+      return [driver.full_name, driver.phone, driver.status]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+
+  const totalPages = Math.max(1, Math.ceil(filteredDrivers.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
-  const paginatedDrivers = props.drivers.slice(
+  const paginatedDrivers = filteredDrivers.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
@@ -46,7 +65,7 @@ export default function Drivers(props: DriversProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [rowsPerPage, props.drivers.length]);
+  }, [rowsPerPage, statusFilter, searchTerm, props.drivers.length]);
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -73,6 +92,11 @@ export default function Drivers(props: DriversProps) {
     setShowDriverModal(false);
   }
 
+  function formatStatus(status?: string) {
+    if (!status) return "--";
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+
   return (
     <section className="section">
       <div className="stats" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: "24px" }}>
@@ -83,8 +107,8 @@ export default function Drivers(props: DriversProps) {
         </div>
         <div className="stat-card">
           <div className="stat-icon">✅</div>
-          <div className="stat-value">Active</div>
-          <div className="stat-label">All drivers onboarded</div>
+          <div className="stat-value">{props.drivers.filter((driver) => (driver.status || "active") === "active").length}</div>
+          <div className="stat-label">Active drivers</div>
         </div>
       </div>
 
@@ -112,17 +136,36 @@ export default function Drivers(props: DriversProps) {
         ) : (
           <>
             <div className="table-controls">
-              <label className="table-controls__label">
-                Rows
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Name, phone, status..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Status
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="all">All</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
               <div className="table-pagination">
                 <span className="table-pagination__meta">
                   Page {currentPage} of {totalPages}
@@ -145,19 +188,52 @@ export default function Drivers(props: DriversProps) {
                 </button>
               </div>
             </div>
+            {filteredDrivers.length === 0 ? (
+              <p className="empty">No drivers match the current filters.</p>
+            ) : (
             <div className="table" style={{ ["--table-columns" as any]: 4 }}>
               <div className="table__head">
                 <span>Name</span>
                 <span>Phone</span>
-                <span>Role</span>
+                <span>Status</span>
                 <span>Actions</span>
               </div>
               {paginatedDrivers.map((d) => (
                 <div className="table__row" key={d.id}>
                   <span>{d.full_name || "Driver"}</span>
                   <span>{d.phone || "--"}</span>
-                  <span>{d.role || "driver"}</span>
+                  <span>
+                    <span className={`risk-pill ${(d.status || "active") === "active" ? "risk-pill--low" : "risk-pill--high"}`}>
+                      {formatStatus(d.status || "active")}
+                    </span>
+                  </span>
                   <span className="table__actions">
+                    <button
+                      className="icon-action"
+                      type="button"
+                      onClick={() => setViewTarget(d)}
+                      aria-label={`View ${d.full_name || "driver"}`}
+                      title="View driver"
+                    >
+                      <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="3"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.75"
+                        />
+                      </svg>
+                    </button>
                     <button
                       className="icon-action"
                       type="button"
@@ -199,6 +275,7 @@ export default function Drivers(props: DriversProps) {
                 </div>
               ))}
             </div>
+            )}
           </>
         )}
       </section>
@@ -246,6 +323,13 @@ export default function Drivers(props: DriversProps) {
                 />
               </label>
               <label>
+                Status
+                <select value={props.driverStatus} onChange={(e) => props.setDriverStatus(e.target.value)}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label>
                 Temporary Password
                 <input
                   type="password"
@@ -265,6 +349,28 @@ export default function Drivers(props: DriversProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Driver details">
+            <div className="modal__header">
+              <div>
+                <h3>Driver Details</h3>
+                <p className="modal__subtle">Summary of the current driver record.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setViewTarget(null)} aria-label="Close driver details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid">
+              <div className="detail-item"><span>Name</span><strong>{viewTarget.full_name || "Driver"}</strong></div>
+              <div className="detail-item"><span>Phone</span><strong>{viewTarget.phone || "--"}</strong></div>
+              <div className="detail-item"><span>Status</span><strong>{formatStatus(viewTarget.status || "active")}</strong></div>
+              <div className="detail-item"><span>Driver ID</span><strong>{viewTarget.id}</strong></div>
+            </div>
           </div>
         </div>
       )}

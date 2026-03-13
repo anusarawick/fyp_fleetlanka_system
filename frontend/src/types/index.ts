@@ -26,6 +26,7 @@ export type Driver = {
   id: string;
   org_id: string;
   role: string;
+  status?: string;
   full_name?: string;
   phone?: string;
 };

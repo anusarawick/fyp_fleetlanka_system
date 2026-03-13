@@ -97,6 +97,8 @@ type DataContextType = {
     setDriverEmail: (v: string) => void;
     driverPhone: string;
     setDriverPhone: (v: string) => void;
+    driverStatus: string;
+    setDriverStatus: (v: string) => void;
     driverPassword: string;
     setDriverPassword: (v: string) => void;
     editingDriverId: string | null;
@@ -243,6 +245,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [driverName, setDriverName] = useState("");
     const [driverEmail, setDriverEmail] = useState("");
     const [driverPhone, setDriverPhone] = useState("");
+    const [driverStatus, setDriverStatus] = useState("active");
     const [driverPassword, setDriverPassword] = useState("");
     const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
 
@@ -706,6 +709,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             if (editingDriverId) {
                 const payload = {
+                    status: driverStatus || undefined,
                     full_name: driverName || undefined,
                     phone: driverPhone || undefined,
                 };
@@ -718,6 +722,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 const payload = {
                     email: driverEmail,
                     password: driverPassword,
+                    status: driverStatus || undefined,
                     full_name: driverName || undefined,
                     phone: driverPhone || undefined,
                 };
@@ -727,6 +732,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setDriverName("");
             setDriverEmail("");
             setDriverPhone("");
+            setDriverStatus("active");
             setDriverPassword("");
             setEditingDriverId(null);
         } catch (err: any) {
@@ -741,6 +747,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDriverName(driver.full_name || "");
         setDriverEmail("");
         setDriverPhone(driver.phone || "");
+        setDriverStatus(driver.status || "active");
         setDriverPassword("");
     }
 
@@ -749,6 +756,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDriverName("");
         setDriverEmail("");
         setDriverPhone("");
+        setDriverStatus("active");
         setDriverPassword("");
     }
 
@@ -1142,6 +1150,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setDriverEmail,
                 driverPhone,
                 setDriverPhone,
+                driverStatus,
+                setDriverStatus,
                 driverPassword,
                 setDriverPassword,
                 editingDriverId,

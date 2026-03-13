@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   org_id uuid not null references public.organizations(id),
   role text not null check (role in ('owner','manager','driver','service')),
+  status text not null default 'active' check (status in ('active','inactive')),
   full_name text,
   phone text,
   created_at timestamptz not null default now()
@@ -63,8 +64,8 @@ begin
     returning id into v_org_id;
   end if;
 
-  insert into public.profiles (id, org_id, role, full_name, phone)
-  values (new.id, v_org_id, v_role, v_full_name, v_phone)
+  insert into public.profiles (id, org_id, role, status, full_name, phone)
+  values (new.id, v_org_id, v_role, 'active', v_full_name, v_phone)
   on conflict (id) do nothing;
 
   return new;
