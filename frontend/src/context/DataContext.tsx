@@ -121,6 +121,7 @@ type DataContextType = {
     setFuelOdometer: (v: string) => void;
     fuelVendor: string;
     setFuelVendor: (v: string) => void;
+    editingFuelId: string | null;
 
     // Maintenance form state
     maintVehicle: string;
@@ -139,16 +140,22 @@ type DataContextType = {
     setMaintPredictedDate: (v: string) => void;
     maintNotes: string;
     setMaintNotes: (v: string) => void;
+    editingMaintenanceId: string | null;
 
     // Document form state
+    docOwnerType: "vehicle" | "driver";
+    setDocOwnerType: (v: "vehicle" | "driver") => void;
     docVehicle: string;
     setDocVehicle: (v: string) => void;
+    docDriver: string;
+    setDocDriver: (v: string) => void;
     docType: string;
     setDocType: (v: string) => void;
     docNumber: string;
     setDocNumber: (v: string) => void;
     docExpiry: string;
     setDocExpiry: (v: string) => void;
+    editingDocumentId: string | null;
 
     // Service center form state
     centerName: string;
@@ -191,8 +198,17 @@ type DataContextType = {
     startTrip: () => Promise<void>;
     stopTrip: () => Promise<void>;
     handleAddFuel: (e: FormEvent) => Promise<void>;
+    handleEditFuel: (fuelLog: FuelLog) => void;
+    handleCancelFuelEdit: () => void;
+    handleDeleteFuel: (fuelId: string) => Promise<void>;
     handleAddMaintenance: (e: FormEvent) => Promise<void>;
+    handleEditMaintenance: (record: Maintenance) => void;
+    handleCancelMaintenanceEdit: () => void;
+    handleDeleteMaintenance: (maintenanceId: string) => Promise<void>;
     handleAddDocument: (e: FormEvent) => Promise<void>;
+    handleEditDocument: (document: Document) => void;
+    handleCancelDocumentEdit: () => void;
+    handleDeleteDocument: (documentId: string) => Promise<void>;
     handleAddCenter: (e: FormEvent) => Promise<void>;
     handleAddBooking: (e: FormEvent) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
@@ -262,6 +278,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [fuelCost, setFuelCost] = useState("");
     const [fuelOdometer, setFuelOdometer] = useState("");
     const [fuelVendor, setFuelVendor] = useState("");
+    const [editingFuelId, setEditingFuelId] = useState<string | null>(null);
 
     // Maintenance form
     const [maintVehicle, setMaintVehicle] = useState("");
@@ -272,12 +289,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [maintNextDue, setMaintNextDue] = useState("");
     const [maintPredictedDate, setMaintPredictedDate] = useState("");
     const [maintNotes, setMaintNotes] = useState("");
+    const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
 
     // Document form
+    const [docOwnerType, setDocOwnerType] = useState<"vehicle" | "driver">("vehicle");
     const [docVehicle, setDocVehicle] = useState("");
+    const [docDriver, setDocDriver] = useState("");
     const [docType, setDocType] = useState("");
     const [docNumber, setDocNumber] = useState("");
     const [docExpiry, setDocExpiry] = useState("");
+    const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
 
     // Service center form
     const [centerName, setCenterName] = useState("");
@@ -561,6 +582,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintenancePredictions([]);
         setMlVehicleId("");
         setVehicleMileage("");
+        setEditingFuelId(null);
+        setFuelVehicle("");
+        setFuelDate("");
+        setFuelLiters("");
+        setFuelCost("");
+        setFuelOdometer("");
+        setFuelVendor("");
+        setEditingMaintenanceId(null);
+        setMaintVehicle("");
+        setMaintDate("");
+        setMaintType("");
+        setMaintCost("");
+        setMaintOdometer("");
+        setMaintNextDue("");
+        setMaintPredictedDate("");
+        setMaintNotes("");
+        setDocOwnerType("vehicle");
+        setDocVehicle("");
+        setDocDriver("");
+        setDocType("");
+        setDocNumber("");
+        setDocExpiry("");
+        setEditingDocumentId(null);
     }
 
     // Handlers
@@ -854,16 +898,59 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 odometer_km: fuelOdometer ? Number(fuelOdometer) : undefined,
                 vendor: fuelVendor || undefined,
             };
-            const created = await apiPost<FuelLog>("/fuel-logs", payload, token);
-            setFuelLogs((prev) => [created, ...prev]);
+            if (editingFuelId) {
+                const updated = await apiPatch<FuelLog>(`/fuel-logs/${editingFuelId}`, payload, token);
+                setFuelLogs((prev) => prev.map((log) => (log.id === updated.id ? updated : log)));
+            } else {
+                const created = await apiPost<FuelLog>("/fuel-logs", payload, token);
+                setFuelLogs((prev) => [created, ...prev]);
+            }
             setFuelVehicle("");
             setFuelDate("");
             setFuelLiters("");
             setFuelCost("");
             setFuelOdometer("");
             setFuelVendor("");
+            setEditingFuelId(null);
         } catch (err: any) {
             setError(err.message || "Create failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleEditFuel(fuelLog: FuelLog) {
+        setEditingFuelId(fuelLog.id);
+        setFuelVehicle(fuelLog.vehicle_id || "");
+        setFuelDate(fuelLog.fuel_date || "");
+        setFuelLiters(typeof fuelLog.liters === "number" ? String(fuelLog.liters) : "");
+        setFuelCost(typeof fuelLog.cost_lkr === "number" ? String(fuelLog.cost_lkr) : "");
+        setFuelOdometer(typeof fuelLog.odometer_km === "number" ? String(fuelLog.odometer_km) : "");
+        setFuelVendor(fuelLog.vendor || "");
+    }
+
+    function handleCancelFuelEdit() {
+        setEditingFuelId(null);
+        setFuelVehicle("");
+        setFuelDate("");
+        setFuelLiters("");
+        setFuelCost("");
+        setFuelOdometer("");
+        setFuelVendor("");
+    }
+
+    async function handleDeleteFuel(fuelId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/fuel-logs/${fuelId}`, token);
+            setFuelLogs((prev) => prev.filter((log) => log.id !== fuelId));
+            if (editingFuelId === fuelId) {
+                handleCancelFuelEdit();
+            }
+        } catch (err: any) {
+            setError(err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -886,8 +973,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 predicted_due_date: maintPredictedDate || undefined,
                 notes: maintNotes || undefined,
             };
-            const created = await apiPost<Maintenance>("/maintenance", payload, token);
-            setMaintenance((prev) => [created, ...prev]);
+            if (editingMaintenanceId) {
+                const updated = await apiPatch<Maintenance>(`/maintenance/${editingMaintenanceId}`, payload, token);
+                setMaintenance((prev) => prev.map((record) => (record.id === updated.id ? updated : record)));
+            } else {
+                const created = await apiPost<Maintenance>("/maintenance", payload, token);
+                setMaintenance((prev) => [created, ...prev]);
+            }
             setMaintVehicle("");
             setMaintDate("");
             setMaintType("");
@@ -896,8 +988,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setMaintNextDue("");
             setMaintPredictedDate("");
             setMaintNotes("");
+            setEditingMaintenanceId(null);
         } catch (err: any) {
             setError(err.message || "Create failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleEditMaintenance(record: Maintenance) {
+        setEditingMaintenanceId(record.id);
+        setMaintVehicle(record.vehicle_id || "");
+        setMaintDate(record.service_date || "");
+        setMaintType(record.service_type || "");
+        setMaintCost(typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "");
+        setMaintOdometer(typeof record.odometer_km === "number" ? String(record.odometer_km) : "");
+        setMaintNextDue(typeof record.next_service_due_km === "number" ? String(record.next_service_due_km) : "");
+        setMaintPredictedDate(record.predicted_due_date || "");
+        setMaintNotes(record.notes || "");
+    }
+
+    function handleCancelMaintenanceEdit() {
+        setEditingMaintenanceId(null);
+        setMaintVehicle("");
+        setMaintDate("");
+        setMaintType("");
+        setMaintCost("");
+        setMaintOdometer("");
+        setMaintNextDue("");
+        setMaintPredictedDate("");
+        setMaintNotes("");
+    }
+
+    async function handleDeleteMaintenance(maintenanceId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/maintenance/${maintenanceId}`, token);
+            setMaintenance((prev) => prev.filter((record) => record.id !== maintenanceId));
+            if (editingMaintenanceId === maintenanceId) {
+                handleCancelMaintenanceEdit();
+            }
+        } catch (err: any) {
+            setError(err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -910,20 +1044,78 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             if (!docType.trim()) throw new Error("Document type is required");
+            if (docOwnerType === "vehicle" && !docVehicle) {
+                throw new Error("Select a vehicle document owner");
+            }
+            if (docOwnerType === "driver" && !docDriver) {
+                throw new Error("Select a driver document owner");
+            }
             const payload = {
-                vehicle_id: docVehicle || undefined,
+                vehicle_id: docOwnerType === "vehicle" ? docVehicle || undefined : undefined,
+                driver_id: docOwnerType === "driver" ? docDriver || undefined : undefined,
                 doc_type: docType,
                 doc_number: docNumber || undefined,
                 expiry_date: docExpiry || undefined,
             };
-            const created = await apiPost<Document>("/documents", payload, token);
-            setDocuments((prev) => [created, ...prev]);
+            if (editingDocumentId) {
+                const updated = await apiPatch<Document>(`/documents/${editingDocumentId}`, payload, token);
+                setDocuments((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+            } else {
+                const created = await apiPost<Document>("/documents", payload, token);
+                setDocuments((prev) => [created, ...prev]);
+            }
+            setDocOwnerType("vehicle");
             setDocVehicle("");
+            setDocDriver("");
             setDocType("");
             setDocNumber("");
             setDocExpiry("");
+            setEditingDocumentId(null);
         } catch (err: any) {
             setError(err.message || "Create failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleEditDocument(document: Document) {
+        setEditingDocumentId(document.id);
+        if (document.driver_id) {
+            setDocOwnerType("driver");
+            setDocDriver(document.driver_id);
+            setDocVehicle("");
+        } else {
+            setDocOwnerType("vehicle");
+            setDocVehicle(document.vehicle_id || "");
+            setDocDriver("");
+        }
+        setDocType(document.doc_type || "");
+        setDocNumber(document.doc_number || "");
+        setDocExpiry(document.expiry_date || "");
+    }
+
+    function handleCancelDocumentEdit() {
+        setEditingDocumentId(null);
+        setDocOwnerType("vehicle");
+        setDocVehicle("");
+        setDocDriver("");
+        setDocType("");
+        setDocNumber("");
+        setDocExpiry("");
+    }
+
+    async function handleDeleteDocument(documentId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/documents/${documentId}`, token);
+            setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
+            if (editingDocumentId === documentId) {
+                handleCancelDocumentEdit();
+            }
+        } catch (err: any) {
+            setError(err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1073,8 +1265,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const date = new Date(d.expiry_date).getTime();
             if (date <= now + sevenDays) {
                 alerts.push({
-                    title: `Document expiring: ${d.doc_type}`,
-                    meta: `Expires ${d.expiry_date}`,
+                    title: `${date < now ? "Document expired" : "Document expiring"}: ${d.doc_type}`,
+                    meta: `${date < now ? "Expired" : "Expires"} ${d.expiry_date}`,
                 });
             }
         });
@@ -1172,6 +1364,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setFuelOdometer,
                 fuelVendor,
                 setFuelVendor,
+                editingFuelId,
                 maintVehicle,
                 setMaintVehicle,
                 maintDate,
@@ -1188,14 +1381,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setMaintPredictedDate,
                 maintNotes,
                 setMaintNotes,
+                editingMaintenanceId,
+                docOwnerType,
+                setDocOwnerType,
                 docVehicle,
                 setDocVehicle,
+                docDriver,
+                setDocDriver,
                 docType,
                 setDocType,
                 docNumber,
                 setDocNumber,
                 docExpiry,
                 setDocExpiry,
+                editingDocumentId,
                 centerName,
                 setCenterName,
                 centerPhone,
@@ -1230,8 +1429,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 startTrip,
                 stopTrip,
                 handleAddFuel,
+                handleEditFuel,
+                handleCancelFuelEdit,
+                handleDeleteFuel,
                 handleAddMaintenance,
+                handleEditMaintenance,
+                handleCancelMaintenanceEdit,
+                handleDeleteMaintenance,
                 handleAddDocument,
+                handleEditDocument,
+                handleCancelDocumentEdit,
+                handleDeleteDocument,
                 handleAddCenter,
                 handleAddBooking,
                 handlePredictMaintenance,

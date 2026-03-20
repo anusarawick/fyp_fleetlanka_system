@@ -422,7 +422,11 @@ function ManagerRoutes() {
               setFuelOdometer={data.setFuelOdometer}
               fuelVendor={data.fuelVendor}
               setFuelVendor={data.setFuelVendor}
+              editingFuelId={data.editingFuelId}
               onAddFuel={data.handleAddFuel}
+              onEditFuel={data.handleEditFuel}
+              onCancelFuelEdit={data.handleCancelFuelEdit}
+              onDeleteFuel={data.handleDeleteFuel}
             />
           </>
         }
@@ -454,6 +458,7 @@ function ManagerRoutes() {
               setMaintPredictedDate={data.setMaintPredictedDate}
               maintNotes={data.maintNotes}
               setMaintNotes={data.setMaintNotes}
+              editingMaintenanceId={data.editingMaintenanceId}
               centerName={data.centerName}
               setCenterName={data.setCenterName}
               centerPhone={data.centerPhone}
@@ -469,6 +474,9 @@ function ManagerRoutes() {
               bookingNotes={data.bookingNotes}
               setBookingNotes={data.setBookingNotes}
               onAddMaintenance={data.handleAddMaintenance}
+              onEditMaintenance={data.handleEditMaintenance}
+              onCancelMaintenanceEdit={data.handleCancelMaintenanceEdit}
+              onDeleteMaintenance={data.handleDeleteMaintenance}
               onAddCenter={data.handleAddCenter}
               onAddBooking={data.handleAddBooking}
             />
@@ -482,17 +490,26 @@ function ManagerRoutes() {
             <Topbar title="Documents" subtitle="Compliance tracking" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Documents
               vehicles={data.vehicles}
+              drivers={data.drivers}
               documents={data.documents}
               loading={loading}
+              docOwnerType={data.docOwnerType}
+              setDocOwnerType={data.setDocOwnerType}
               docVehicle={data.docVehicle}
               setDocVehicle={data.setDocVehicle}
+              docDriver={data.docDriver}
+              setDocDriver={data.setDocDriver}
               docType={data.docType}
               setDocType={data.setDocType}
               docNumber={data.docNumber}
               setDocNumber={data.setDocNumber}
               docExpiry={data.docExpiry}
               setDocExpiry={data.setDocExpiry}
+              editingDocumentId={data.editingDocumentId}
               onAddDocument={data.handleAddDocument}
+              onEditDocument={data.handleEditDocument}
+              onCancelDocumentEdit={data.handleCancelDocumentEdit}
+              onDeleteDocument={data.handleDeleteDocument}
             />
           </>
         }

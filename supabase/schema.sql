@@ -174,11 +174,16 @@ create table if not exists public.documents (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid references public.vehicles(id) on delete cascade,
+  driver_id uuid references public.profiles(id) on delete cascade,
   doc_type text not null,
   doc_number text,
   expiry_date date,
   file_url text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint documents_owner_check check (
+    (vehicle_id is not null and driver_id is null)
+    or (vehicle_id is null and driver_id is not null)
+  )
 );
 
 -- Alerts

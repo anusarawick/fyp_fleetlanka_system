@@ -67,9 +67,12 @@ export type Maintenance = {
 
 export type Document = {
   id: string;
+  vehicle_id?: string;
+  driver_id?: string;
   doc_type: string;
   doc_number?: string;
   expiry_date?: string;
+  file_url?: string;
 };
 
 export type ServiceCenter = {

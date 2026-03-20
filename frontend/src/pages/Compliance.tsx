@@ -19,6 +19,13 @@ export default function Compliance(props: ComplianceProps) {
   const now = new Date().getTime();
   const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
+  function getExpiryStatus(expiryDate?: string) {
+    if (!expiryDate) return null;
+    const date = new Date(expiryDate).getTime();
+    if (date < now) return { label: "Expired", tone: "danger" as const };
+    return { label: "Expiring Soon", tone: "warning" as const };
+  }
+
   const expiringDocs = props.documents.filter((d) => {
     if (!d.expiry_date) return false;
     const date = new Date(d.expiry_date).getTime();
@@ -39,17 +46,27 @@ export default function Compliance(props: ComplianceProps) {
       </p>
       <div className="grid">
         <section className="card">
-          <h3>Expiring Documents (30 days)</h3>
+          <h3>Expiring / Expired Documents (30 days)</h3>
           {expiringDocs.length === 0 ? (
             <p className="muted empty">No expiring documents.</p>
           ) : (
             <ul className="list">
-              {expiringDocs.map((d) => (
-                <li key={d.id}>
-                  <div className="list__title">{d.doc_type}</div>
-                  <div className="list__meta">{d.expiry_date}</div>
-                </li>
-              ))}
+              {expiringDocs.map((d) => {
+                const expiryStatus = getExpiryStatus(d.expiry_date);
+                return (
+                  <li key={d.id}>
+                    <div className="list__title">{d.doc_type}</div>
+                    <div className="list__meta">
+                      {d.expiry_date}{" "}
+                      {expiryStatus && (
+                        <span className={`pill pill--${expiryStatus.tone}`}>
+                          {expiryStatus.label}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
