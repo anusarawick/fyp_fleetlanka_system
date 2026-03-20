@@ -7,6 +7,7 @@ from app.services.supabase_client import get_supabase_client
 
 MANAGER_ROLES = {"owner", "manager"}
 DRIVER_ROLES = {"driver"}
+SERVICE_ROLES = {"service"}
 
 
 def get_bearer_token(authorization: Optional[str] = Header(None)) -> Optional[str]:
@@ -42,8 +43,8 @@ def get_current_profile(token: Optional[str] = Depends(get_bearer_token)) -> Dic
     try:
         response = admin_client.table("profiles").select("*").eq("id", user_id).single().execute()
         if response.data:
-            if response.data.get("role") == "driver" and response.data.get("status") != "active":
-                raise HTTPException(status_code=403, detail="Inactive driver account")
+            if response.data.get("role") in DRIVER_ROLES.union(SERVICE_ROLES) and response.data.get("status") != "active":
+                raise HTTPException(status_code=403, detail="Inactive account")
             return response.data
     except HTTPException:
         raise
@@ -71,3 +72,27 @@ def require_manager_or_driver_profile(
     if profile.get("role") not in MANAGER_ROLES.union(DRIVER_ROLES):
         raise HTTPException(status_code=403, detail="Access denied")
     return profile
+
+
+def require_service_profile(
+    profile: Dict[str, Any] = Depends(get_current_profile),
+) -> Dict[str, Any]:
+    if profile.get("role") not in SERVICE_ROLES:
+        raise HTTPException(status_code=403, detail="Service center access required")
+    return profile
+
+
+def get_current_service_center(
+    profile: Dict[str, Any] = Depends(require_service_profile),
+) -> Dict[str, Any]:
+    admin_client = get_supabase_client(use_service_role=True)
+    response = (
+        admin_client.table("service_centers")
+        .select("*")
+        .eq("profile_id", profile["id"])
+        .single()
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=403, detail="No service center is linked to this account")
+    return response.data

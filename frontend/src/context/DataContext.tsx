@@ -164,6 +164,11 @@ type DataContextType = {
     setCenterPhone: (v: string) => void;
     centerAddress: string;
     setCenterAddress: (v: string) => void;
+    centerPortalEmail: string;
+    setCenterPortalEmail: (v: string) => void;
+    centerPortalPassword: string;
+    setCenterPortalPassword: (v: string) => void;
+    editingCenterId: string | null;
 
     // Booking form state
     bookingVehicle: string;
@@ -174,6 +179,7 @@ type DataContextType = {
     setBookingDate: (v: string) => void;
     bookingNotes: string;
     setBookingNotes: (v: string) => void;
+    editingBookingId: string | null;
 
     // ML state
     maintFeatures: string;
@@ -210,7 +216,13 @@ type DataContextType = {
     handleCancelDocumentEdit: () => void;
     handleDeleteDocument: (documentId: string) => Promise<void>;
     handleAddCenter: (e: FormEvent) => Promise<void>;
+    handleEditCenter: (center: ServiceCenter) => void;
+    handleCancelCenterEdit: () => void;
+    handleDeleteCenter: (centerId: string) => Promise<void>;
     handleAddBooking: (e: FormEvent) => Promise<void>;
+    handleEditBooking: (booking: ServiceBooking) => void;
+    handleCancelBookingEdit: () => void;
+    handleDeleteBooking: (bookingId: string) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
@@ -304,12 +316,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [centerName, setCenterName] = useState("");
     const [centerPhone, setCenterPhone] = useState("");
     const [centerAddress, setCenterAddress] = useState("");
+    const [centerPortalEmail, setCenterPortalEmail] = useState("");
+    const [centerPortalPassword, setCenterPortalPassword] = useState("");
+    const [editingCenterId, setEditingCenterId] = useState<string | null>(null);
 
     // Booking form
     const [bookingVehicle, setBookingVehicle] = useState("");
     const [bookingCenter, setBookingCenter] = useState("");
     const [bookingDate, setBookingDate] = useState("");
     const [bookingNotes, setBookingNotes] = useState("");
+    const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
     // ML state
     const [maintFeatures, setMaintFeatures] = useState("");
@@ -539,6 +555,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setMlVehicleId("");
                     return;
                 }
+                if (role === "service") {
+                    setVehicles([]);
+                    setDrivers([]);
+                    setTrips([]);
+                    setFuelLogs([]);
+                    setMaintenance([]);
+                    setDocuments([]);
+                    setServiceCenters([]);
+                    setServiceBookings([]);
+                    setDriverScores([]);
+                    setMaintenancePredictions([]);
+                    setMlVehicleId("");
+                    return;
+                }
 
                 const [v, d, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
                     apiGet<Vehicle[]>("/vehicles", token),
@@ -598,6 +628,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintNextDue("");
         setMaintPredictedDate("");
         setMaintNotes("");
+        setCenterName("");
+        setCenterPhone("");
+        setCenterAddress("");
+        setCenterPortalEmail("");
+        setCenterPortalPassword("");
+        setEditingCenterId(null);
+        setBookingVehicle("");
+        setBookingCenter("");
+        setBookingDate("");
+        setBookingNotes("");
+        setEditingBookingId(null);
         setDocOwnerType("vehicle");
         setDocVehicle("");
         setDocDriver("");
@@ -1121,6 +1162,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    function handleEditCenter(center: ServiceCenter) {
+        setEditingCenterId(center.id);
+        setCenterName(center.name || "");
+        setCenterPhone(center.phone || "");
+        setCenterAddress(center.address || "");
+        setCenterPortalEmail("");
+        setCenterPortalPassword("");
+    }
+
+    function handleCancelCenterEdit() {
+        setEditingCenterId(null);
+        setCenterName("");
+        setCenterPhone("");
+        setCenterAddress("");
+        setCenterPortalEmail("");
+        setCenterPortalPassword("");
+    }
+
     async function handleAddCenter(e: FormEvent) {
         e.preventDefault();
         if (!token || !centerName) return;
@@ -1128,18 +1187,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             if (!centerName.trim()) throw new Error("Service center name is required");
+            if (!editingCenterId && ((centerPortalEmail && !centerPortalPassword) || (!centerPortalEmail && centerPortalPassword))) {
+                throw new Error("Portal email and password must both be provided to create a service center login");
+            }
             const payload = {
                 name: centerName,
                 phone: centerPhone || undefined,
                 address: centerAddress || undefined,
+                portal_email: centerPortalEmail || undefined,
+                portal_password: centerPortalPassword || undefined,
+                portal_contact_name: centerName || undefined,
             };
-            const created = await apiPost<ServiceCenter>("/service-centers", payload, token);
-            setServiceCenters((prev) => [created, ...prev]);
-            setCenterName("");
-            setCenterPhone("");
-            setCenterAddress("");
+            if (editingCenterId) {
+                const updated = await apiPatch<ServiceCenter>(`/service-centers/${editingCenterId}`, payload, token);
+                setServiceCenters((prev) => prev.map((center) => (center.id === updated.id ? updated : center)));
+            } else {
+                const created = await apiPost<ServiceCenter>("/service-centers", payload, token);
+                setServiceCenters((prev) => [created, ...prev]);
+            }
+            handleCancelCenterEdit();
         } catch (err: any) {
             setError(err.message || "Create failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleDeleteCenter(centerId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/service-centers/${centerId}`, token);
+            setServiceCenters((prev) => prev.filter((center) => center.id !== centerId));
+            if (editingCenterId === centerId) {
+                handleCancelCenterEdit();
+            }
+        } catch (err: any) {
+            setError(err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1152,20 +1237,65 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             if (!bookingDate) throw new Error("Booking date is required");
-            const payload = {
-                vehicle_id: bookingVehicle,
-                center_id: bookingCenter,
-                requested_date: bookingDate,
-                notes: bookingNotes || undefined,
-            };
-            const created = await apiPost<ServiceBooking>("/service-bookings", payload, token);
-            setServiceBookings((prev) => [created, ...prev]);
-            setBookingVehicle("");
-            setBookingCenter("");
-            setBookingDate("");
-            setBookingNotes("");
+            if (editingBookingId) {
+                const updated = await apiPatch<ServiceBooking>(
+                    `/service-bookings/${editingBookingId}`,
+                    {
+                        requested_date: bookingDate,
+                        notes: bookingNotes || undefined,
+                    },
+                    token
+                );
+                setServiceBookings((prev) => prev.map((booking) => (booking.id === updated.id ? updated : booking)));
+            } else {
+                const created = await apiPost<ServiceBooking>(
+                    "/service-bookings",
+                    {
+                        vehicle_id: bookingVehicle,
+                        center_id: bookingCenter,
+                        requested_date: bookingDate,
+                        notes: bookingNotes || undefined,
+                    },
+                    token
+                );
+                setServiceBookings((prev) => [created, ...prev]);
+            }
+            handleCancelBookingEdit();
         } catch (err: any) {
             setError(err.message || "Create failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function handleEditBooking(booking: ServiceBooking) {
+        setEditingBookingId(booking.id);
+        setBookingVehicle(booking.vehicle_id || "");
+        setBookingCenter(booking.center_id || "");
+        setBookingDate(booking.requested_date || "");
+        setBookingNotes(booking.notes || "");
+    }
+
+    function handleCancelBookingEdit() {
+        setEditingBookingId(null);
+        setBookingVehicle("");
+        setBookingCenter("");
+        setBookingDate("");
+        setBookingNotes("");
+    }
+
+    async function handleDeleteBooking(bookingId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/service-bookings/${bookingId}`, token);
+            setServiceBookings((prev) => prev.filter((booking) => booking.id !== bookingId));
+            if (editingBookingId === bookingId) {
+                handleCancelBookingEdit();
+            }
+        } catch (err: any) {
+            setError(err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1401,6 +1531,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setCenterPhone,
                 centerAddress,
                 setCenterAddress,
+                centerPortalEmail,
+                setCenterPortalEmail,
+                centerPortalPassword,
+                setCenterPortalPassword,
+                editingCenterId,
                 bookingVehicle,
                 setBookingVehicle,
                 bookingCenter,
@@ -1409,6 +1544,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setBookingDate,
                 bookingNotes,
                 setBookingNotes,
+                editingBookingId,
                 maintFeatures,
                 setMaintFeatures,
                 fuelFeatures,
@@ -1441,7 +1577,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleCancelDocumentEdit,
                 handleDeleteDocument,
                 handleAddCenter,
+                handleEditCenter,
+                handleCancelCenterEdit,
+                handleDeleteCenter,
                 handleAddBooking,
+                handleEditBooking,
+                handleCancelBookingEdit,
+                handleDeleteBooking,
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,

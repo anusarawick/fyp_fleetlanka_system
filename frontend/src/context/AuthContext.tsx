@@ -26,7 +26,7 @@ type AuthContextType = {
     setPassword: (v: string) => void;
     setError: (v: string | null) => void;
     setLoading: (v: boolean) => void;
-    handleLogin: (e: FormEvent, expectedRole?: "manager" | "driver") => Promise<void>;
+    handleLogin: (e: FormEvent, expectedRole?: "manager" | "driver" | "service") => Promise<void>;
     handleSignup: (e: FormEvent, name?: string, orgName?: string) => Promise<void>;
     handleUpdateProfile: (name: string, phone: string) => Promise<void>;
     handleChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -48,9 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [authReady, setAuthReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [expectedRole, setExpectedRole] = useState<"manager" | "driver" | null>(() => {
+    const [expectedRole, setExpectedRole] = useState<"manager" | "driver" | "service" | null>(() => {
         const stored = localStorage.getItem("fleetlanka.loginRole");
-        return stored === "manager" || stored === "driver" ? stored : null;
+        return stored === "manager" || stored === "driver" || stored === "service" ? stored : null;
     });
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     async function handleInactiveDriverSignOut() {
-        setError("This driver account is inactive. Please contact your manager.");
+        setError("This account is inactive. Please contact your manager.");
         pendingSignOutRef.current = true;
         await supabase.auth.signOut();
         setAccessToken(null);
@@ -117,12 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
-        if (profile.role === "driver" && profile.status !== "active") {
+        if ((profile.role === "driver" || profile.role === "service") && profile.status !== "active") {
             await handleInactiveDriverSignOut();
             return false;
         }
-        if (expectedRole === "manager" && profile.role === "driver") {
-            setError("Driver accounts must use the Driver login.");
+        if (expectedRole === "manager" && profile.role !== "manager" && profile.role !== "owner") {
+            setError("This account must use its dedicated login.");
             pendingSignOutRef.current = true;
             await supabase.auth.signOut();
             setAccessToken(null);
@@ -131,7 +131,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return false;
         }
         if (expectedRole === "driver" && profile.role !== "driver") {
-            setError("Manager accounts must use the Manager login.");
+            setError("This account must use its dedicated login.");
+            pendingSignOutRef.current = true;
+            await supabase.auth.signOut();
+            setAccessToken(null);
+            setOrgId(null);
+            setRole(null);
+            return false;
+        }
+        if (expectedRole === "service" && profile.role !== "service") {
+            setError("This account must use its dedicated login.");
             pendingSignOutRef.current = true;
             await supabase.auth.signOut();
             setAccessToken(null);
@@ -158,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await applyProfile(profile);
         } catch (err: any) {
             const message = err?.message || "Profile load failed";
-            if (message.includes("Inactive driver account")) {
+            if (message.includes("Inactive account")) {
                 await handleInactiveDriverSignOut();
                 return;
             }
@@ -173,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadProfile().catch((e) => setError(e.message));
     }, [token, expectedRole]);
 
-    async function handleLogin(e: FormEvent, loginRole?: "manager" | "driver") {
+    async function handleLogin(e: FormEvent, loginRole?: "manager" | "driver" | "service") {
         e.preventDefault();
         setError(null);
         setLoading(true);
@@ -194,14 +203,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 | "service"
                 | undefined;
             if (loginRole && metaRole) {
+                const isManager = metaRole === "manager" || metaRole === "owner";
                 const isDriver = metaRole === "driver";
-                if (loginRole === "manager" && isDriver) {
+                if (loginRole === "manager" && !isManager) {
                     pendingSignOutRef.current = true;
                     await supabase.auth.signOut();
                     setAccessToken(null);
                     setOrgId(null);
                     setRole(null);
-                    setError("Driver accounts must use the Driver login.");
+                    setError("This account must use its dedicated login.");
                     return;
                 }
                 if (loginRole === "driver" && !isDriver) {
@@ -210,7 +220,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setAccessToken(null);
                     setOrgId(null);
                     setRole(null);
-                    setError("Manager accounts must use the Manager login.");
+                    setError("This account must use its dedicated login.");
+                    return;
+                }
+                if (loginRole === "service" && metaRole !== "service") {
+                    pendingSignOutRef.current = true;
+                    await supabase.auth.signOut();
+                    setAccessToken(null);
+                    setOrgId(null);
+                    setRole(null);
+                    setError("This account must use its dedicated login.");
                     return;
                 }
             }

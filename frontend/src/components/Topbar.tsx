@@ -31,7 +31,12 @@ export default function Topbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const roleLabel = userRole === "manager" ? "Fleet Manager" : "Driver";
+  const roleLabel =
+    userRole === "manager" || userRole === "owner"
+      ? "Fleet Manager"
+      : userRole === "service"
+        ? "Service Center"
+        : "Driver";
   const initials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "MG";
 
   return (

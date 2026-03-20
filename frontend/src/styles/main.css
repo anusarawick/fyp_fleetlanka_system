@@ -251,6 +251,11 @@ body {
   color: var(--success);
 }
 
+.role-card--service .role-card__badge {
+  background: rgba(249, 115, 22, 0.14);
+  color: #9a3412;
+}
+
 /* ===== DRIVER AUTH (Mobile) ===== */
 .driver-auth {
   min-height: 100vh;
@@ -1114,6 +1119,151 @@ body {
   gap: 10px;
 }
 
+.centers-table {
+  overflow-x: auto;
+}
+
+.centers-table__head,
+.centers-table__row {
+  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.5fr) minmax(120px, 0.7fr) minmax(100px, 0.6fr);
+}
+
+.centers-table__row > span,
+.centers-table__head > span {
+  min-width: 0;
+}
+
+.centers-table__actions {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.bookings-table {
+  overflow-x: auto;
+}
+
+.bookings-table__head,
+.bookings-table__row {
+  grid-template-columns: minmax(120px, 0.9fr) minmax(120px, 0.95fr) minmax(180px, 1.2fr) minmax(120px, 0.8fr) minmax(100px, 0.6fr);
+}
+
+.bookings-table__row > span,
+.bookings-table__head > span {
+  min-width: 0;
+}
+
+.bookings-table__actions {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.service-portal-table {
+  overflow-x: auto;
+}
+
+.service-portal-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.service-portal-summary {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.service-portal-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.service-portal-summary__item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  display: grid;
+  gap: 4px;
+}
+
+.service-portal-summary__item span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.service-portal-summary__item strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.service-portal-table__head,
+.service-portal-table__row {
+  grid-template-columns: minmax(96px, 0.78fr) minmax(128px, 0.95fr) minmax(84px, 0.62fr) minmax(96px, 0.68fr) minmax(156px, 1.08fr) minmax(168px, 1.08fr);
+}
+
+.service-portal-table__row > span,
+.service-portal-table__head > span {
+  min-width: 0;
+}
+
+.service-portal-table__actions {
+  display: grid;
+  grid-template-columns: auto max-content;
+  justify-content: flex-start;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.service-portal-table__icon-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.service-portal-table__notes {
+  color: var(--ink);
+  line-height: 1.45;
+  display: inline-block;
+  width: 100%;
+}
+
+.service-portal-table .btn--compact {
+  min-width: 72px;
+  justify-content: center;
+  padding-inline: 10px;
+}
+
+.service-portal-table__action-btn {
+  min-width: 84px;
+}
+
+.service-portal-table__action-btn--pending {
+  min-width: 74px;
+  padding-inline: 8px;
+}
+
+.service-portal-table__action-group {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(96px, max-content);
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.service-portal-table__action-group--pending {
+  grid-template-columns: repeat(2, minmax(74px, max-content));
+  grid-auto-flow: unset;
+  grid-auto-columns: unset;
+}
+
+.service-portal-table__action-group--single {
+  grid-auto-columns: minmax(88px, max-content);
+}
+
 .documents-table {
   overflow-x: auto;
 }
@@ -1938,6 +2088,11 @@ textarea {
   color: var(--success);
 }
 
+.pill--info {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
 .pill--warning {
   background: var(--warning-light);
   color: #92400e;
@@ -2011,6 +2166,68 @@ textarea {
   .card--map {
     grid-column: span 12;
   }
+
+  .service-portal-table__head,
+  .service-portal-table__row {
+    grid-template-columns: minmax(88px, 0.72fr) minmax(108px, 0.88fr) minmax(76px, 0.56fr) minmax(84px, 0.64fr) minmax(112px, 0.9fr) minmax(132px, 1.05fr);
+  }
+
+  .service-portal-table__head {
+    display: none;
+  }
+
+  .service-portal-table__row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .service-portal-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .service-portal-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .service-portal-table__actions {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .service-portal-table__action-group,
+  .service-portal-table__action-group--pending {
+    width: 100%;
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    grid-template-columns: 1fr;
+  }
+
+  .service-portal-table__action-group--single {
+    width: auto;
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    grid-template-columns: minmax(88px, max-content);
+  }
+
+  .service-portal-table__action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .service-portal-table__row > .table__actions::before {
+    content: none;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2082,6 +2299,10 @@ textarea {
   .card__header {
     flex-wrap: wrap;
     gap: 10px;
+  }
+
+  .service-portal-summary__grid {
+    grid-template-columns: 1fr;
   }
 
   .management-table__head {
@@ -2219,6 +2440,121 @@ textarea {
   }
 
   .maintenance-table__row > .table__actions::before {
+    content: none;
+  }
+
+  .centers-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .centers-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .centers-table__row > .table__actions {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  .centers-table__row > .table__actions::before {
+    content: none;
+  }
+
+  .bookings-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .bookings-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .bookings-table__row > .table__actions {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  .bookings-table__row > .table__actions::before {
+    content: none;
+  }
+
+  .service-portal-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .service-portal-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .service-portal-table__row > .table__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+    align-items: center;
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__action-btn {
+    min-width: 88px;
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__icon-group {
+    width: auto;
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__action-group {
+    width: 100%;
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    grid-template-columns: 1fr;
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__action-group--pending {
+    grid-template-columns: repeat(2, minmax(74px, max-content));
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__action-group--single {
+    width: auto;
+    grid-template-columns: minmax(88px, max-content);
+  }
+
+  .service-portal-table__row > .table__actions .service-portal-table__action-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .service-portal-table__row > .table__actions::before {
     content: none;
   }
 

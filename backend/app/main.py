@@ -10,6 +10,7 @@ from app.routers.maintenance import router as maintenance_router
 from app.routers.documents import router as documents_router
 from app.routers.service_centers import router as service_centers_router
 from app.routers.service_bookings import router as service_bookings_router
+from app.routers.service_portal import router as service_portal_router
 from app.routers.ml import router as ml_router
 from app.routers.vehicles import router as vehicles_router
 from app.routers.driver_scores import router as driver_scores_router
@@ -41,5 +42,6 @@ app.include_router(maintenance_router)
 app.include_router(documents_router)
 app.include_router(service_centers_router)
 app.include_router(service_bookings_router)
+app.include_router(service_portal_router)
 app.include_router(ml_router)
 app.include_router(driver_scores_router)

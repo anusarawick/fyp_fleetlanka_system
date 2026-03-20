@@ -39,7 +39,12 @@ def create_booking(
     token = _require_token(token)
     org_id = profile["org_id"]
     supabase = get_supabase_client(token)
-    data = payload.model_dump()
+    if payload.status not in (None, "pending"):
+        raise HTTPException(status_code=403, detail="Managers can only create pending bookings")
+    if payload.service_notes is not None or payload.final_cost_lkr is not None or payload.completed_at is not None:
+        raise HTTPException(status_code=403, detail="Managers cannot set service notes, price, or completion data when creating bookings")
+    data = payload.model_dump(exclude={"service_notes", "final_cost_lkr", "completed_at"})
+    data["status"] = "pending"
     data["org_id"] = org_id
     response = supabase.table("service_bookings").insert(data).execute()
     if not response.data:
@@ -56,10 +61,30 @@ def update_booking(
 ) -> ServiceBookingOut:
     token = _require_token(token)
     supabase = get_supabase_client(token)
+    existing = (
+        supabase.table("service_bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if (existing.data.get("status") or "pending") != "pending":
+        raise HTTPException(status_code=403, detail="Managers can only edit pending bookings")
+    updates = payload.model_dump(exclude_none=True)
+    forbidden_fields = {"status", "service_notes", "final_cost_lkr", "completed_at"}
+    attempted_forbidden = forbidden_fields.intersection(updates.keys())
+    if attempted_forbidden:
+        raise HTTPException(status_code=403, detail="Managers cannot change booking status, service notes, price, or completion data")
+    if not updates:
+        return existing.data
     response = (
         supabase.table("service_bookings")
-        .update(payload.model_dump(exclude_none=True))
+        .update(updates)
         .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
         .execute()
     )
     if not response.data:
@@ -75,7 +100,25 @@ def delete_booking(
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)
-    response = supabase.table("service_bookings").delete().eq("id", booking_id).execute()
+    existing = (
+        supabase.table("service_bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if (existing.data.get("status") or "pending") != "pending":
+        raise HTTPException(status_code=403, detail="Managers can only delete pending bookings")
+    response = (
+        supabase.table("service_bookings")
+        .delete()
+        .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
     if response.data is None:
         raise HTTPException(status_code=400, detail="Delete failed")
     return {"status": "ok"}

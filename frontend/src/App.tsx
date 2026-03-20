@@ -23,10 +23,11 @@ import Management from "./pages/Management";
 import Maintenance from "./pages/Maintenance";
 import ProfileSettings from "./pages/ProfileSettings";
 import Drivers from "./pages/Drivers";
+import ServicePortal from "./pages/ServicePortal";
 import { useState } from "react";
 
 // ===== ROLE SELECTION PAGE =====
-function RoleSelection({ onSelectRole }: { onSelectRole: (role: "manager" | "driver") => void }) {
+function RoleSelection({ onSelectRole }: { onSelectRole: (role: "manager" | "driver" | "service") => void }) {
   return (
     <section className="auth auth--role-select">
       <div className="role-select">
@@ -59,6 +60,18 @@ function RoleSelection({ onSelectRole }: { onSelectRole: (role: "manager" | "dri
               <p>Start trips, track location, and log activities</p>
             </div>
             <span className="role-card__badge">Mobile App</span>
+          </button>
+
+          <button
+            className="role-card role-card--service"
+            onClick={() => onSelectRole("service")}
+          >
+            <div className="role-card__icon">🏪</div>
+            <div className="role-card__content">
+              <h3>Service Center</h3>
+              <p>Review assigned jobs, confirm bookings, and update service progress</p>
+            </div>
+            <span className="role-card__badge">Partner Portal</span>
           </button>
         </div>
       </div>
@@ -233,6 +246,62 @@ function DriverLogin({ onBack }: { onBack: () => void }) {
           </button>
         </form>
       </main>
+    </section>
+  );
+}
+
+function ServiceLogin({ onBack }: { onBack: () => void }) {
+  const { email, password, setEmail, setPassword, handleLogin, loading, error, setError } = useAuth();
+
+  async function onSubmit(e: React.FormEvent) {
+    await handleLogin(e, "service");
+  }
+
+  return (
+    <section className="auth">
+      <div className="auth__card">
+        <button className="auth__back" onClick={onBack}>← Back</button>
+        <div className="auth__header">
+          <span className="auth__icon">🏪</span>
+          <h2>Service Center Login</h2>
+          <p className="muted">Access the service portal for your assigned center.</p>
+        </div>
+
+        {error && (
+          <div className="alert alert--error">
+            <span>{error}</span>
+            <button className="alert__close" type="button" onClick={() => setError(null)}>
+              ×
+            </button>
+          </div>
+        )}
+
+        <form className="form" onSubmit={onSubmit}>
+          <label>
+            Portal Email
+            <input
+              type="email"
+              placeholder="servicecenter@partner.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          <button className="btn" type="submit" disabled={loading}>
+            {loading ? "Signing in..." : "Sign in to Portal"}
+          </button>
+        </form>
+      </div>
     </section>
   );
 }
@@ -465,6 +534,11 @@ function ManagerRoutes() {
               setCenterPhone={data.setCenterPhone}
               centerAddress={data.centerAddress}
               setCenterAddress={data.setCenterAddress}
+              centerPortalEmail={data.centerPortalEmail}
+              setCenterPortalEmail={data.setCenterPortalEmail}
+              centerPortalPassword={data.centerPortalPassword}
+              setCenterPortalPassword={data.setCenterPortalPassword}
+              editingCenterId={data.editingCenterId}
               bookingVehicle={data.bookingVehicle}
               setBookingVehicle={data.setBookingVehicle}
               bookingCenter={data.bookingCenter}
@@ -473,12 +547,19 @@ function ManagerRoutes() {
               setBookingDate={data.setBookingDate}
               bookingNotes={data.bookingNotes}
               setBookingNotes={data.setBookingNotes}
+              editingBookingId={data.editingBookingId}
               onAddMaintenance={data.handleAddMaintenance}
               onEditMaintenance={data.handleEditMaintenance}
               onCancelMaintenanceEdit={data.handleCancelMaintenanceEdit}
               onDeleteMaintenance={data.handleDeleteMaintenance}
               onAddCenter={data.handleAddCenter}
+              onEditCenter={data.handleEditCenter}
+              onCancelCenterEdit={data.handleCancelCenterEdit}
+              onDeleteCenter={data.handleDeleteCenter}
               onAddBooking={data.handleAddBooking}
+              onEditBooking={data.handleEditBooking}
+              onCancelBookingEdit={data.handleCancelBookingEdit}
+              onDeleteBooking={data.handleDeleteBooking}
             />
           </>
         }
@@ -605,14 +686,88 @@ function ManagerRoutes() {
   );
 }
 
+function ServiceRoutes() {
+  const {
+    handleSignOut,
+    loading,
+    email,
+    role,
+    fullName,
+    phone,
+    handleUpdateProfile,
+    handleChangePassword,
+    profileLoading,
+    token,
+  } = useAuth();
+
+  const resolvedName = fullName || (email ? email.split("@")[0] : "Service Center");
+  const userName = resolvedName.split(" ")[0];
+  const userRole = role || "service";
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/service" replace />} />
+      <Route
+        path="/service"
+        element={
+          <>
+            <Topbar
+              title="Service Center Dashboard"
+              subtitle="Assigned service work"
+              userName={userName}
+              userRole={userRole}
+              onSignOut={handleSignOut}
+            />
+            <ServicePortal token={token} />
+          </>
+        }
+      />
+      <Route
+        path="/service/bookings"
+        element={
+          <>
+            <Topbar
+              title="Service Bookings"
+              subtitle="Manage assigned bookings"
+              userName={userName}
+              userRole={userRole}
+              onSignOut={handleSignOut}
+            />
+            <ServicePortal token={token} initialTab="bookings" />
+          </>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <>
+            <Topbar title="Profile Settings" subtitle="Manage your account" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <ProfileSettings
+              email={email}
+              role={userRole}
+              name={fullName}
+              phone={phone}
+              profileLoading={profileLoading}
+              loading={loading}
+              onUpdateProfile={handleUpdateProfile}
+              onChangePassword={handleChangePassword}
+            />
+          </>
+        }
+      />
+      <Route path="*" element={<Navigate to="/service" replace />} />
+    </Routes>
+  );
+}
+
 function AppContent() {
   const { accessToken, role, profileLoading, error, setError, authReady } = useAuth();
-  const [selectedLoginRole, setSelectedLoginRole] = useState<"manager" | "driver" | null>(() => {
+  const [selectedLoginRole, setSelectedLoginRole] = useState<"manager" | "driver" | "service" | null>(() => {
     const stored = localStorage.getItem("fleetlanka.loginRole");
-    return stored === "manager" || stored === "driver" ? stored : null;
+    return stored === "manager" || stored === "driver" || stored === "service" ? stored : null;
   });
 
-  function handleSelectRole(selected: "manager" | "driver") {
+  function handleSelectRole(selected: "manager" | "driver" | "service") {
     localStorage.setItem("fleetlanka.loginRole", selected);
     setSelectedLoginRole(selected);
   }
@@ -636,7 +791,7 @@ function AppContent() {
             </button>
           </div>
         )}
-        {role === "driver" ? <DriverRoutes /> : <ManagerRoutes />}
+        {role === "driver" ? <DriverRoutes /> : role === "service" ? <ServiceRoutes /> : <ManagerRoutes />}
       </AppLayout>
     );
   }
@@ -648,6 +803,10 @@ function AppContent() {
 
   if (selectedLoginRole === "manager") {
     return <ManagerLogin onBack={() => setSelectedLoginRole(null)} />;
+  }
+
+  if (selectedLoginRole === "service") {
+    return <ServiceLogin onBack={() => setSelectedLoginRole(null)} />;
   }
 
   return <DriverLogin onBack={() => setSelectedLoginRole(null)} />;

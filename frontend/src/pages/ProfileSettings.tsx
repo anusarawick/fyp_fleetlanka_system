@@ -28,7 +28,12 @@ export default function ProfileSettings({
     const [confirmPassword, setConfirmPassword] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
 
-    const roleLabel = role === "manager" ? "Fleet Manager" : "Driver";
+    const roleLabel =
+        role === "manager" || role === "owner"
+            ? "Fleet Manager"
+            : role === "service"
+                ? "Service Center"
+                : "Driver";
     const initials = localName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "U";
 
     useEffect(() => {

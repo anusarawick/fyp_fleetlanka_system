@@ -6,6 +6,7 @@ type SidebarProps = {
 
 export default function Sidebar({ role }: SidebarProps) {
   const isDriver = role === "driver";
+  const isService = role === "service";
 
   return (
     <aside className="sidebar">
@@ -23,6 +24,16 @@ export default function Sidebar({ role }: SidebarProps) {
             <span className="nav-item__icon">🗺️</span>
             Driver Trips
           </NavLink>
+        ) : isService ? (
+          <>
+            <NavLink
+              to="/service"
+              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+            >
+              <span className="nav-item__icon">🏪</span>
+              Dashboard
+            </NavLink>
+          </>
         ) : (
           <>
             <NavLink

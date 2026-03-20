@@ -77,13 +77,24 @@ export type Document = {
 
 export type ServiceCenter = {
   id: string;
+  org_id?: string;
+  profile_id?: string;
   name: string;
+  phone?: string;
+  address?: string;
 };
 
 export type ServiceBooking = {
   id: string;
+  org_id?: string;
+  vehicle_id?: string;
+  center_id?: string;
   requested_date: string;
   status?: string;
+  notes?: string;
+  service_notes?: string;
+  completed_at?: string;
+  final_cost_lkr?: number;
 };
 
 export type Alert = {

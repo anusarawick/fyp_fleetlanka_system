@@ -203,6 +203,7 @@ create table if not exists public.alerts (
 create table if not exists public.service_centers (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
+  profile_id uuid references public.profiles(id) on delete set null,
   name text not null,
   phone text,
   address text,
@@ -218,6 +219,9 @@ create table if not exists public.service_bookings (
   requested_date date not null,
   status text default 'pending',
   notes text,
+  service_notes text,
+  completed_at timestamptz,
+  final_cost_lkr numeric,
   created_at timestamptz not null default now()
 );
 
