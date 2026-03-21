@@ -70,6 +70,10 @@ def _sync_maintenance_from_booking(admin_client, booking: dict, center: dict, *,
         admin_client.table("maintenance").insert(maintenance_data).execute()
 
 
+def _set_vehicle_status(admin_client, vehicle_id: str, status: str) -> None:
+    admin_client.table("vehicles").update({"status": status}).eq("id", vehicle_id).execute()
+
+
 @router.get("/me", response_model=ServicePortalMeOut)
 def get_service_portal_me(
     profile: dict = Depends(require_service_profile),
@@ -153,6 +157,12 @@ def update_service_portal_booking(
     }
     if next_status not in allowed_transitions.get(current_status, {current_status}):
         raise HTTPException(status_code=400, detail="Invalid booking status transition")
+    if (
+        current_status == "completed"
+        and existing.get("completion_review_status") == "approved"
+        and next_status == "completed"
+    ):
+        raise HTTPException(status_code=403, detail="Approved completion details are locked. Reopen the booking first to make changes.")
     if current_status == "confirmed" and next_status == "pending" and not (payload.service_notes or "").strip():
         raise HTTPException(status_code=400, detail="A service note is required when moving a confirmed booking back to pending")
     if current_status == "completed" and next_status == "confirmed" and not (payload.service_notes or "").strip():
@@ -161,10 +171,21 @@ def update_service_portal_booking(
     update_data = payload.model_dump(exclude_none=True)
     if next_status == "completed" and current_status != "completed":
         update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+        update_data["completion_review_status"] = "pending"
+        update_data["completion_review_notes"] = None
+        update_data["completion_reviewed_at"] = None
+        update_data["completion_reviewed_by"] = None
     elif "status" in update_data and next_status != "completed":
         update_data["completed_at"] = None
+        update_data["completion_review_status"] = None
+        update_data["completion_review_notes"] = None
+        update_data["completion_reviewed_at"] = None
+        update_data["completion_reviewed_by"] = None
         if current_status == "completed" and next_status == "confirmed":
             update_data["final_cost_lkr"] = None
+            update_data["proposed_tire_condition"] = None
+            update_data["proposed_brake_condition"] = None
+            update_data["proposed_battery_status"] = None
 
     response = (
         admin_client.table("service_bookings")
@@ -177,13 +198,18 @@ def update_service_portal_booking(
         raise HTTPException(status_code=400, detail="Update failed")
 
     row = response.data[0]
+    if current_status == "pending" and next_status == "confirmed":
+        _set_vehicle_status(admin_client, row["vehicle_id"], "maintenance")
+    elif current_status == "pending" and next_status == "cancelled":
+        _set_vehicle_status(admin_client, row["vehicle_id"], "active")
+    elif current_status == "confirmed" and next_status == "pending":
+        _set_vehicle_status(admin_client, row["vehicle_id"], "active")
+    elif current_status == "completed" and next_status == "confirmed":
+        _set_vehicle_status(admin_client, row["vehicle_id"], "maintenance")
+
     try:
-        if current_status != "completed" and next_status == "completed":
-            _sync_maintenance_from_booking(admin_client, row, center)
-        elif current_status == "completed" and next_status != "completed":
+        if current_status == "completed" and next_status != "completed":
             _sync_maintenance_from_booking(admin_client, row, center, remove=True)
-        elif next_status == "completed":
-            _sync_maintenance_from_booking(admin_client, row, center)
     except Exception as exc:
         message = str(exc)
         if "service_booking_id" in message or "service_center_id" in message:

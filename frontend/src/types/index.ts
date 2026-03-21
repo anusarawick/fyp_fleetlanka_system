@@ -95,6 +95,13 @@ export type ServiceBooking = {
   status?: string;
   notes?: string;
   service_notes?: string;
+  proposed_tire_condition?: string;
+  proposed_brake_condition?: string;
+  proposed_battery_status?: string;
+  completion_review_status?: string;
+  completion_review_notes?: string;
+  completion_reviewed_at?: string;
+  completion_reviewed_by?: string;
   completed_at?: string;
   final_cost_lkr?: number;
 };

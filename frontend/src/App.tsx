@@ -560,6 +560,7 @@ function ManagerRoutes() {
               onEditBooking={data.handleEditBooking}
               onCancelBookingEdit={data.handleCancelBookingEdit}
               onDeleteBooking={data.handleDeleteBooking}
+              onApproveBookingCompletion={data.handleApproveBookingCompletion}
             />
           </>
         }

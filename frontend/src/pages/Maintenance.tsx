@@ -35,6 +35,13 @@ type ServiceBooking = {
   status?: string;
   notes?: string;
   service_notes?: string;
+  proposed_tire_condition?: string;
+  proposed_brake_condition?: string;
+  proposed_battery_status?: string;
+  completion_review_status?: string;
+  completion_review_notes?: string;
+  completion_reviewed_at?: string;
+  completion_reviewed_by?: string;
   completed_at?: string;
   final_cost_lkr?: number;
 };
@@ -94,6 +101,7 @@ type MaintenanceProps = {
   onEditBooking: (booking: ServiceBooking) => void;
   onCancelBookingEdit: () => void;
   onDeleteBooking: (bookingId: string) => Promise<void>;
+  onApproveBookingCompletion: (bookingId: string) => Promise<void>;
 };
 
 export default function Maintenance(props: MaintenanceProps) {
@@ -115,6 +123,7 @@ export default function Maintenance(props: MaintenanceProps) {
   const [bookingPage, setBookingPage] = useState(1);
   const [selectedBooking, setSelectedBooking] = useState<ServiceBooking | null>(null);
   const [deleteBookingTarget, setDeleteBookingTarget] = useState<ServiceBooking | null>(null);
+  const [approveBookingTarget, setApproveBookingTarget] = useState<ServiceBooking | null>(null);
 
   const totalCost = props.maintenance.reduce((sum, m) => sum + (m.cost_lkr || 0), 0);
 
@@ -192,6 +201,10 @@ export default function Maintenance(props: MaintenanceProps) {
       booking.status,
       booking.notes,
       booking.service_notes,
+      booking.completion_review_status,
+      booking.proposed_tire_condition,
+      booking.proposed_brake_condition,
+      booking.proposed_battery_status,
       booking.vehicle_id ? vehicleLabelMap[booking.vehicle_id] : "",
       booking.center_id ? centerLabelMap[booking.center_id] : "",
       typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "",
@@ -224,6 +237,14 @@ export default function Maintenance(props: MaintenanceProps) {
   useEffect(() => {
     setBookingPage(1);
   }, [bookingRowsPerPage, bookingSearch, props.bookings.length]);
+
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const refreshed = props.bookings.find((booking) => booking.id === selectedBooking.id);
+    if (refreshed) {
+      setSelectedBooking(refreshed);
+    }
+  }, [props.bookings, selectedBooking]);
 
   useEffect(() => {
     if (!props.loading) {
@@ -266,6 +287,19 @@ export default function Maintenance(props: MaintenanceProps) {
     if (!deleteBookingTarget) return;
     await props.onDeleteBooking(deleteBookingTarget.id);
     setDeleteBookingTarget(null);
+  }
+
+  async function confirmBookingApproval() {
+    if (!approveBookingTarget) return;
+    await props.onApproveBookingCompletion(approveBookingTarget.id);
+    setApproveBookingTarget(null);
+    setSelectedBooking((current) =>
+      current && current.id === approveBookingTarget.id ? null : current
+    );
+  }
+
+  function isPendingCompletionReview(booking: ServiceBooking) {
+    return (booking.status || "pending") === "completed" && (booking.completion_review_status || "pending") !== "approved";
   }
 
   return (
@@ -769,6 +803,21 @@ export default function Maintenance(props: MaintenanceProps) {
                           <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
                         </svg>
                       </button>
+                      {isPendingCompletionReview(booking) && (
+                        <button
+                          className="icon-action"
+                          type="button"
+                          onClick={() => setApproveBookingTarget(booking)}
+                          disabled={props.loading}
+                          aria-label={`Approve completion ${booking.id}`}
+                          title="Approve completion updates"
+                        >
+                          <svg className="icon-action__svg" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7.5 12.5 10.5 15.5 16.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         className="icon-action"
                         type="button"
@@ -1149,12 +1198,49 @@ export default function Maintenance(props: MaintenanceProps) {
             <div className="details-grid">
               <div className="detail-item"><span>Date</span><strong>{selectedBooking.requested_date}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{selectedBooking.status || "pending"}</strong></div>
+              <div className="detail-item"><span>Review Status</span><strong>{selectedBooking.completion_review_status || "--"}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedBooking.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Center</span><strong>{centerLabelMap[selectedBooking.center_id || ""] || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{typeof selectedBooking.final_cost_lkr === "number" ? `Rs.${selectedBooking.final_cost_lkr.toLocaleString()}` : "--"}</strong></div>
               <div className="detail-item"><span>Completed At</span><strong>{selectedBooking.completed_at || "--"}</strong></div>
+              <div className="detail-item"><span>Tire Condition</span><strong>{selectedBooking.proposed_tire_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Brake Condition</span><strong>{selectedBooking.proposed_brake_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Battery Status</span><strong>{selectedBooking.proposed_battery_status || "--"}</strong></div>
+              <div className="detail-item detail-item--full"><span>Review Notes</span><strong>{selectedBooking.completion_review_notes || "--"}</strong></div>
+            </div>
+            {isPendingCompletionReview(selectedBooking) && (
+              <div className="modal__actions">
+                <button className="btn" type="button" disabled={props.loading} onClick={() => setApproveBookingTarget(selectedBooking)}>
+                  {props.loading ? "Approving..." : "Approve Vehicle Updates"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {approveBookingTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Confirm booking approval">
+            <div className="modal__header">
+              <h3>Approve Vehicle Updates?</h3>
+              <button className="modal__close" type="button" onClick={() => setApproveBookingTarget(null)} aria-label="Close approval dialog">
+                ✕
+              </button>
+            </div>
+            <p className="muted">
+              Approving this completed booking will write the linked maintenance record and apply the proposed vehicle updates for{" "}
+              <strong>{vehicleLabelMap[approveBookingTarget.vehicle_id || ""] || "Vehicle"}</strong>.
+            </p>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setApproveBookingTarget(null)}>
+                Cancel
+              </button>
+              <button className="btn" type="button" onClick={confirmBookingApproval} disabled={props.loading}>
+                {props.loading ? "Approving..." : "Approve"}
+              </button>
             </div>
           </div>
         </div>

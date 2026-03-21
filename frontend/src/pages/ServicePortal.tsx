@@ -30,6 +30,10 @@ type ServicePortalBooking = {
   status?: string;
   notes?: string;
   service_notes?: string;
+  proposed_tire_condition?: string;
+  proposed_brake_condition?: string;
+  proposed_battery_status?: string;
+  completion_review_status?: string;
   completed_at?: string;
   final_cost_lkr?: number;
   vehicle_plate_no?: string;
@@ -74,6 +78,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const [nextStatus, setNextStatus] = useState<"pending" | "confirmed" | "cancelled" | "completed">("confirmed");
   const [serviceNotes, setServiceNotes] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [proposedTireCondition, setProposedTireCondition] = useState("");
+  const [proposedBrakeCondition, setProposedBrakeCondition] = useState("");
+  const [proposedBatteryStatus, setProposedBatteryStatus] = useState("");
 
   async function loadPortal() {
     if (!token) return;
@@ -133,6 +140,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setNextStatus(status);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setProposedTireCondition(booking.proposed_tire_condition || "");
+    setProposedBrakeCondition(booking.proposed_brake_condition || "");
+    setProposedBatteryStatus(booking.proposed_battery_status || "");
   }
 
   function openDetailsModal(booking: ServicePortalBooking) {
@@ -141,6 +151,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setNextStatus((booking.status as "confirmed" | "cancelled" | "completed") || "confirmed");
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setProposedTireCondition(booking.proposed_tire_condition || "");
+    setProposedBrakeCondition(booking.proposed_brake_condition || "");
+    setProposedBatteryStatus(booking.proposed_battery_status || "");
   }
 
   function closeActionModal() {
@@ -148,6 +161,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setEditMode("transition");
     setServiceNotes("");
     setFinalCost("");
+    setProposedTireCondition("");
+    setProposedBrakeCondition("");
+    setProposedBatteryStatus("");
   }
 
   async function submitBookingUpdate() {
@@ -177,10 +193,16 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
           ? {
               service_notes: serviceNotes || undefined,
               final_cost_lkr: currentStatus === "completed" && finalCost ? Number(finalCost) : undefined,
+              proposed_tire_condition: currentStatus === "completed" ? proposedTireCondition || undefined : undefined,
+              proposed_brake_condition: currentStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
+              proposed_battery_status: currentStatus === "completed" ? proposedBatteryStatus || undefined : undefined,
             }
           : {
               status: nextStatus,
               service_notes: serviceNotes || undefined,
+              proposed_tire_condition: nextStatus === "completed" ? proposedTireCondition || undefined : undefined,
+              proposed_brake_condition: nextStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
+              proposed_battery_status: nextStatus === "completed" ? proposedBatteryStatus || undefined : undefined,
               final_cost_lkr: nextStatus === "completed" && finalCost ? Number(finalCost) : undefined,
             };
       const updated = await apiPatch<ServicePortalBooking>(
@@ -357,7 +379,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                         <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
                       </svg>
                     </button>
-                    {(booking.status === "confirmed" || booking.status === "completed") && (
+                    {(booking.status === "confirmed" || (booking.status === "completed" && booking.completion_review_status !== "approved")) && (
                       <button className="icon-action" type="button" onClick={() => openDetailsModal(booking)} title="Edit details" aria-label="Edit details">
                         <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M4 20h4l10.5-10.5a2.121 2.121 0 1 0-3-3L5 17v3Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
@@ -407,7 +429,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
       {selectedBooking && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Service booking details">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Service booking details">
             <div className="modal__header">
               <div>
                 <h3>Booking Details</h3>
@@ -417,7 +439,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                 ✕
               </button>
             </div>
-            <div className="details-grid">
+            <div className="details-grid details-grid--scroll">
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabel(selectedBooking)}</strong></div>
               <div className="detail-item"><span>Requested Date</span><strong>{selectedBooking.requested_date}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{selectedBooking.status || "pending"}</strong></div>
@@ -425,6 +447,10 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
               <div className="detail-item"><span>Final Cost (LKR)</span><strong>{typeof selectedBooking.final_cost_lkr === "number" ? `Rs.${selectedBooking.final_cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Tire Condition</span><strong>{selectedBooking.proposed_tire_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Brake Condition</span><strong>{selectedBooking.proposed_brake_condition || "--"}</strong></div>
+              <div className="detail-item"><span>Battery Status</span><strong>{selectedBooking.proposed_battery_status || "--"}</strong></div>
+              <div className="detail-item"><span>Review Status</span><strong>{selectedBooking.completion_review_status || "--"}</strong></div>
             </div>
           </div>
         </div>
@@ -432,7 +458,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
       {editingBooking && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Update booking">
+          <div className="modal modal--wide" role="dialog" aria-modal="true" aria-label="Update booking">
             <div className="modal__header">
               <div>
                 <h3>
@@ -454,8 +480,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                 ✕
               </button>
             </div>
-            <div className="form">
-              <label>
+            <div className="form form--two-col form--scroll">
+              <label className="form__field--full">
                 Service Notes
                 <textarea
                   placeholder={
@@ -476,15 +502,43 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                 />
               </label>
               {(editMode === "details" && editingBooking.status === "completed") || nextStatus === "completed" ? (
-                <label>
-                  Final Cost (LKR)
-                  <input
-                    type="number"
-                    placeholder="Enter final cost"
-                    value={finalCost}
-                    onChange={(e) => setFinalCost(e.target.value)}
-                  />
-                </label>
+                <>
+                  <label>
+                    Final Cost (LKR)
+                    <input
+                      type="number"
+                      placeholder="Enter final cost"
+                      value={finalCost}
+                      onChange={(e) => setFinalCost(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Tire Condition
+                    <select value={proposedTireCondition} onChange={(e) => setProposedTireCondition(e.target.value)}>
+                      <option value="">Select tire condition</option>
+                      <option value="New">New</option>
+                      <option value="Good">Good</option>
+                      <option value="Worn Out">Worn Out</option>
+                    </select>
+                  </label>
+                  <label>
+                    Brake Condition
+                    <select value={proposedBrakeCondition} onChange={(e) => setProposedBrakeCondition(e.target.value)}>
+                      <option value="">Select brake condition</option>
+                      <option value="New">New</option>
+                      <option value="Good">Good</option>
+                      <option value="Worn Out">Worn Out</option>
+                    </select>
+                  </label>
+                  <label>
+                    Battery Status
+                    <select value={proposedBatteryStatus} onChange={(e) => setProposedBatteryStatus(e.target.value)}>
+                      <option value="">Select battery status</option>
+                      <option value="Good">Good</option>
+                      <option value="Weak">Weak</option>
+                    </select>
+                  </label>
+                </>
               ) : null}
               <div className="modal__actions">
                 <button className="btn btn--secondary" type="button" onClick={closeActionModal}>

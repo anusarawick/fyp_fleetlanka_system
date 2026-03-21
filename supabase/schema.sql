@@ -222,6 +222,13 @@ create table if not exists public.service_bookings (
   status text default 'pending',
   notes text,
   service_notes text,
+  proposed_tire_condition text,
+  proposed_brake_condition text,
+  proposed_battery_status text,
+  completion_review_status text,
+  completion_review_notes text,
+  completion_reviewed_at timestamptz,
+  completion_reviewed_by uuid references public.profiles(id) on delete set null,
   completed_at timestamptz,
   final_cost_lkr numeric,
   created_at timestamptz not null default now()

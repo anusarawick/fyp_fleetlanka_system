@@ -61,6 +61,7 @@ body {
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
+  min-width: 0;
 }
 
 /* ===== AUTH / LOGIN ===== */
@@ -511,6 +512,8 @@ body {
   padding: 28px 36px 48px;
   background: var(--bg);
   min-height: 100vh;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* ===== TOPBAR ===== */
@@ -801,6 +804,11 @@ body {
   display: grid;
   gap: 20px;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  min-width: 0;
+}
+
+.grid > * {
+  min-width: 0;
 }
 
 /* ===== CARDS ===== */
@@ -811,6 +819,7 @@ body {
   box-shadow: var(--shadow);
   border: 1px solid var(--border);
   transition: var(--transition);
+  min-width: 0;
 }
 
 .card:hover {
@@ -937,6 +946,11 @@ body {
   max-height: min(68vh, 720px);
   overflow-y: auto;
   padding-right: 6px;
+  padding-bottom: 12px;
+}
+
+.details-grid--single {
+  grid-template-columns: 1fr;
 }
 
 .detail-item {
@@ -1073,6 +1087,7 @@ body {
 
 .management-table {
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .drivers-table {
@@ -1304,7 +1319,7 @@ body {
 
 .management-table__head,
 .management-table__row {
-  grid-template-columns: minmax(110px, 1fr) minmax(150px, 1.3fr) minmax(88px, 0.75fr) minmax(70px, 0.55fr) minmax(110px, 0.9fr) minmax(150px, 1.15fr) minmax(100px, 0.8fr) minmax(88px, 0.7fr);
+  grid-template-columns: minmax(78px, 0.68fr) minmax(118px, 0.92fr) minmax(50px, 0.34fr) minmax(62px, 0.48fr) minmax(96px, 0.78fr) minmax(150px, 1.14fr) minmax(110px, 0.9fr) minmax(84px, max-content);
 }
 
 .management-table__row > span,
@@ -1324,6 +1339,7 @@ body {
   display: flex;
   align-items: center;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .management-table__cell--risk {
@@ -1331,6 +1347,15 @@ body {
   align-items: center;
   min-width: 0;
 }
+
+.management-table__cell--risk .risk-pill {
+  max-width: 100%;
+}
+
+.management-table__cell--risk .risk-pill strong {
+  white-space: nowrap;
+}
+
 
 .management-table__actions {
   justify-content: flex-start;
@@ -1350,7 +1375,8 @@ body {
 }
 
 .modal {
-  width: min(520px, 92vw);
+  width: min(520px, calc(100vw - 48px));
+  max-width: 100%;
   background: var(--panel);
   border-radius: 22px;
   padding: 22px;
@@ -1359,7 +1385,7 @@ body {
 }
 
 .modal--wide {
-  width: min(860px, 94vw);
+  width: min(860px, calc(100vw - 48px));
 }
 
 .modal--details {
@@ -1533,6 +1559,7 @@ body {
 /* ===== SECTIONS ===== */
 .section {
   margin-top: 28px;
+  min-width: 0;
 }
 
 .section h2 {
@@ -1559,6 +1586,10 @@ body {
   font-size: 14px;
   font-weight: 500;
   color: var(--ink);
+}
+
+.form__field--full {
+  grid-column: 1 / -1;
 }
 
 input,
@@ -2294,8 +2325,16 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .modal-backdrop {
+    padding: 16px;
+  }
+
   .modal--wide {
-    width: min(92vw, 92vw);
+    width: min(860px, calc(100vw - 32px));
+  }
+
+  .modal {
+    width: min(520px, calc(100vw - 32px));
   }
 
   .form--two-col {

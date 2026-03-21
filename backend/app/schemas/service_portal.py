@@ -38,6 +38,13 @@ class ServicePortalBookingOut(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     service_notes: Optional[str] = None
+    proposed_tire_condition: Optional[str] = None
+    proposed_brake_condition: Optional[str] = None
+    proposed_battery_status: Optional[str] = None
+    completion_review_status: Optional[str] = None
+    completion_review_notes: Optional[str] = None
+    completion_reviewed_at: Optional[str] = None
+    completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
 
@@ -45,4 +52,7 @@ class ServicePortalBookingOut(BaseModel):
 class ServicePortalBookingUpdate(BaseModel):
     status: Optional[str] = None
     service_notes: Optional[str] = None
+    proposed_tire_condition: Optional[str] = None
+    proposed_brake_condition: Optional[str] = None
+    proposed_battery_status: Optional[str] = None
     final_cost_lkr: Optional[float] = None

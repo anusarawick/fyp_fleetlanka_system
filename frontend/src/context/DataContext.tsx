@@ -223,6 +223,7 @@ type DataContextType = {
     handleEditBooking: (booking: ServiceBooking) => void;
     handleCancelBookingEdit: () => void;
     handleDeleteBooking: (bookingId: string) => Promise<void>;
+    handleApproveBookingCompletion: (bookingId: string) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
@@ -1301,6 +1302,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    async function handleApproveBookingCompletion(bookingId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const approved = await apiPost<ServiceBooking>(`/service-bookings/${bookingId}/approve-completion`, {}, token);
+            setServiceBookings((prev) => prev.map((booking) => (booking.id === approved.id ? approved : booking)));
+            const [vehiclesData, maintenanceData] = await Promise.all([
+                apiGet<Vehicle[]>("/vehicles", token),
+                apiGet<Maintenance[]>("/maintenance", token),
+            ]);
+            setVehicles(vehiclesData);
+            setMaintenance(maintenanceData);
+        } catch (err: any) {
+            setError(err.message || "Approval failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const parseFeatureLines = (raw: string) => {
         return raw
             .split("\n")
@@ -1584,6 +1605,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleEditBooking,
                 handleCancelBookingEdit,
                 handleDeleteBooking,
+                handleApproveBookingCompletion,
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,
