@@ -56,6 +56,8 @@ export type FuelLog = {
 export type Maintenance = {
   id: string;
   vehicle_id: string;
+  service_center_id?: string;
+  service_booking_id?: string;
   service_date: string;
   service_type?: string;
   cost_lkr?: number;

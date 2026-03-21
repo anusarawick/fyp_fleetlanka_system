@@ -1106,7 +1106,7 @@ body {
 
 .maintenance-table__head,
 .maintenance-table__row {
-  grid-template-columns: minmax(110px, 0.9fr) minmax(100px, 0.8fr) minmax(150px, 1.25fr) minmax(110px, 0.8fr) minmax(88px, 0.55fr);
+  grid-template-columns: minmax(108px, 0.82fr) minmax(96px, 0.7fr) minmax(148px, 1.1fr) minmax(136px, 0.95fr) minmax(110px, 0.78fr) minmax(92px, 0.6fr);
 }
 
 .maintenance-table__row > span,
@@ -1709,6 +1709,16 @@ textarea {
 .button-row {
   display: flex;
   gap: 12px;
+}
+
+.maintenance-actions__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.maintenance-actions__btn {
+  width: 100%;
 }
 
 /* ===== ALERTS ===== */

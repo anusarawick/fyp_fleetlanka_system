@@ -8,6 +8,8 @@ type Vehicle = {
 type MaintenanceRecord = {
   id: string;
   vehicle_id?: string;
+  service_center_id?: string;
+  service_booking_id?: string;
   service_date: string;
   service_type?: string;
   cost_lkr?: number;
@@ -142,6 +144,8 @@ export default function Maintenance(props: MaintenanceProps) {
       record.service_type,
       record.predicted_due_date,
       record.notes,
+      record.service_booking_id ? "service booking" : "manual",
+      record.service_center_id ? centerLabelMap[record.service_center_id] : "",
       record.vehicle_id ? vehicleLabelMap[record.vehicle_id] : "",
       typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "",
       typeof record.next_service_due_km === "number" ? String(record.next_service_due_km) : "",
@@ -202,6 +206,12 @@ export default function Maintenance(props: MaintenanceProps) {
     (currentBookingPage - 1) * bookingRowsPerPage,
     currentBookingPage * bookingRowsPerPage
   );
+  const upcomingBookings = props.bookings
+    .filter((booking) => {
+      const status = booking.status || "pending";
+      return status === "pending" || status === "confirmed";
+    })
+    .slice(0, 4);
 
   useEffect(() => {
     setMaintenancePage(1);
@@ -286,9 +296,9 @@ export default function Maintenance(props: MaintenanceProps) {
           <p className="muted">
             Log service work, register centers, and create bookings from focused pop-up forms.
           </p>
-          <div className="button-row">
+          <div className="button-row maintenance-actions__row">
             <button
-              className="btn"
+              className="btn maintenance-actions__btn"
               type="button"
               onClick={() => {
                 props.onCancelMaintenanceEdit();
@@ -298,7 +308,7 @@ export default function Maintenance(props: MaintenanceProps) {
               + Log Maintenance
             </button>
             <button
-              className="btn btn--secondary"
+              className="btn maintenance-actions__btn"
               type="button"
               onClick={() => {
                 props.onCancelCenterEdit();
@@ -308,7 +318,7 @@ export default function Maintenance(props: MaintenanceProps) {
               + Add Center
             </button>
             <button
-              className="btn btn--secondary"
+              className="btn maintenance-actions__btn"
               type="button"
               onClick={() => {
                 props.onCancelBookingEdit();
@@ -324,18 +334,18 @@ export default function Maintenance(props: MaintenanceProps) {
           <div className="card__header">
             <h3>Upcoming Bookings</h3>
           </div>
-          {props.bookings.length === 0 ? (
-            <p className="empty">No service bookings yet.</p>
+          {upcomingBookings.length === 0 ? (
+            <p className="empty">No upcoming service bookings.</p>
           ) : (
             <ul className="list">
-              {props.bookings.slice(0, 4).map((booking) => (
+              {upcomingBookings.map((booking) => (
                 <li key={booking.id}>
                   <div className="list__title">
                     {vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"} • {booking.requested_date}
                   </div>
                   <div className="list__meta">
                     {centerLabelMap[booking.center_id || ""] || "Service center"}{" "}
-                    <span className={`pill pill--${booking.status === "confirmed" ? "success" : "warning"}`}>
+                    <span className={`pill pill--${booking.status === "confirmed" ? "info" : "warning"}`}>
                       {booking.status || "Pending"}
                     </span>
                   </div>
@@ -402,11 +412,12 @@ export default function Maintenance(props: MaintenanceProps) {
             {filteredMaintenance.length === 0 ? (
               <p className="empty">No maintenance records match the search.</p>
             ) : (
-              <div className="table maintenance-table" style={{ ["--table-columns" as any]: 5 }}>
+              <div className="table maintenance-table" style={{ ["--table-columns" as any]: 6 }}>
                 <div className="table__head maintenance-table__head">
                   <span>Date</span>
                   <span>Vehicle</span>
                   <span>Service</span>
+                  <span>Source</span>
                   <span>Cost</span>
                   <span>Actions</span>
                 </div>
@@ -417,6 +428,11 @@ export default function Maintenance(props: MaintenanceProps) {
                       {vehicleLabelMap[record.vehicle_id || ""] || "--"}
                     </span>
                     <span className="maintenance-table__cell" data-label="Service">{record.service_type || "Service"}</span>
+                    <span className="maintenance-table__cell" data-label="Source">
+                      <span className={`pill ${record.service_booking_id ? "pill--info" : "pill--warning"}`}>
+                        {record.service_booking_id ? "Service Booking" : "Manual"}
+                      </span>
+                    </span>
                     <span className="maintenance-table__cell" data-label="Cost">
                       {typeof record.cost_lkr === "number" ? `Rs.${record.cost_lkr.toLocaleString()}` : "--"}
                     </span>
@@ -1082,10 +1098,13 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Date</span><strong>{selectedRecord.service_date}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedRecord.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Service</span><strong>{selectedRecord.service_type || "--"}</strong></div>
+              <div className="detail-item"><span>Source</span><strong>{selectedRecord.service_booking_id ? "Service Booking" : "Manual"}</strong></div>
               <div className="detail-item"><span>Cost</span><strong>{typeof selectedRecord.cost_lkr === "number" ? `Rs.${selectedRecord.cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Service Center</span><strong>{selectedRecord.service_center_id ? centerLabelMap[selectedRecord.service_center_id] || "--" : "--"}</strong></div>
               <div className="detail-item"><span>Odometer</span><strong>{selectedRecord.odometer_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Next Due (km)</span><strong>{selectedRecord.next_service_due_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Predicted Due Date</span><strong>{selectedRecord.predicted_due_date || "--"}</strong></div>
+              <div className="detail-item"><span>Linked Booking</span><strong>{selectedRecord.service_booking_id || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedRecord.notes || "--"}</strong></div>
             </div>
           </div>

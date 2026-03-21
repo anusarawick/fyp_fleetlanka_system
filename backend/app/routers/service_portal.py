@@ -26,6 +26,50 @@ def _booking_with_vehicle(row: dict, vehicle_map: dict[str, dict]) -> dict:
     }
 
 
+def _sync_maintenance_from_booking(admin_client, booking: dict, center: dict, *, remove: bool = False) -> None:
+    booking_id = booking["id"]
+    if remove:
+        admin_client.table("maintenance").delete().eq("service_booking_id", booking_id).execute()
+        return
+
+    vehicle_resp = (
+        admin_client.table("vehicles")
+        .select("odometer_km")
+        .eq("id", booking["vehicle_id"])
+        .single()
+        .execute()
+    )
+    vehicle = vehicle_resp.data or {}
+    service_date = str(booking.get("completed_at") or booking.get("requested_date") or "")[:10]
+    manager_notes = (booking.get("notes") or "").strip()
+    service_notes = (booking.get("service_notes") or "").strip()
+    center_name = (center.get("name") or "").strip()
+    note_parts = [part for part in [f"Service Center: {center_name}" if center_name else "", manager_notes, service_notes] if part]
+    maintenance_data = {
+        "org_id": booking["org_id"],
+        "vehicle_id": booking["vehicle_id"],
+        "service_center_id": booking.get("center_id"),
+        "service_booking_id": booking_id,
+        "service_date": service_date,
+        "service_type": "Booked Service",
+        "cost_lkr": booking.get("final_cost_lkr"),
+        "odometer_km": vehicle.get("odometer_km"),
+        "notes": " | ".join(note_parts) if note_parts else None,
+    }
+
+    existing = (
+        admin_client.table("maintenance")
+        .select("id")
+        .eq("service_booking_id", booking_id)
+        .execute()
+    )
+    existing_rows = existing.data or []
+    if existing_rows:
+        admin_client.table("maintenance").update(maintenance_data).eq("id", existing_rows[0]["id"]).execute()
+    else:
+        admin_client.table("maintenance").insert(maintenance_data).execute()
+
+
 @router.get("/me", response_model=ServicePortalMeOut)
 def get_service_portal_me(
     profile: dict = Depends(require_service_profile),
@@ -133,6 +177,22 @@ def update_service_portal_booking(
         raise HTTPException(status_code=400, detail="Update failed")
 
     row = response.data[0]
+    try:
+        if current_status != "completed" and next_status == "completed":
+            _sync_maintenance_from_booking(admin_client, row, center)
+        elif current_status == "completed" and next_status != "completed":
+            _sync_maintenance_from_booking(admin_client, row, center, remove=True)
+        elif next_status == "completed":
+            _sync_maintenance_from_booking(admin_client, row, center)
+    except Exception as exc:
+        message = str(exc)
+        if "service_booking_id" in message or "service_center_id" in message:
+            raise HTTPException(
+                status_code=500,
+                detail="Maintenance sync failed. Run migration 20260321_service_booking_maintenance_sync.sql and restart backend.",
+            ) from exc
+        raise HTTPException(status_code=500, detail=f"Maintenance sync failed: {message}") from exc
+
     vehicle_resp = (
         admin_client.table("vehicles")
         .select("id, plate_no, make, model")

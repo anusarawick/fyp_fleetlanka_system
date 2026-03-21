@@ -159,6 +159,8 @@ create table if not exists public.maintenance (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  service_center_id uuid references public.service_centers(id) on delete set null,
+  service_booking_id uuid unique references public.service_bookings(id) on delete set null,
   service_date date not null,
   service_type text,
   cost_lkr numeric,
