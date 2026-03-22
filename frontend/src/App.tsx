@@ -1,14 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { DataProvider, useData } from "./context/DataContext";
-import {
-  exportFuel,
-  exportMaintenance,
-  exportVehicles,
-  exportDrivers,
-  exportTrips,
-  exportDocuments,
-} from "./utils/export";
 import AppLayout from "./layout/AppLayout";
 import Topbar from "./components/Topbar";
 import Dashboard from "./pages/Dashboard";
@@ -646,12 +638,14 @@ function ManagerRoutes() {
           <>
             <Topbar title="Reports" subtitle="Exports and summaries" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Reports
-              onExportVehicles={() => exportVehicles(data.vehicles)}
-              onExportDrivers={() => exportDrivers(data.drivers)}
-              onExportTrips={() => exportTrips(data.trips)}
-              onExportFuel={() => exportFuel(data.fuelLogs)}
-              onExportMaintenance={() => exportMaintenance(data.maintenance)}
-              onExportDocuments={() => exportDocuments(data.documents)}
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              trips={data.trips}
+              fuelLogs={data.fuelLogs}
+              maintenance={data.maintenance}
+              documents={data.documents}
+              serviceBookings={data.serviceBookings}
+              serviceCenters={data.serviceCenters}
             />
           </>
         }
