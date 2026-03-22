@@ -661,7 +661,12 @@ function ManagerRoutes() {
         element={
           <>
             <Topbar title="Compliance" subtitle="Renewals and upcoming actions" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
-            <Compliance documents={data.documents} maintenance={data.maintenance} />
+            <Compliance
+              documents={data.documents}
+              maintenance={data.maintenance}
+              vehicles={data.vehicles}
+              serviceBookings={data.serviceBookings}
+            />
           </>
         }
       />
