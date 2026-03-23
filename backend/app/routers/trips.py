@@ -1,15 +1,16 @@
-from typing import List, Optional
-from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone, timedelta
 import math
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import (
     get_bearer_token,
+    require_manager_profile,
     require_manager_or_driver_profile,
 )
 from app.schemas.gps_points import GPSPointCreate
-from app.schemas.trips import TripCreate, TripOut, TripUpdate
+from app.schemas.trips import LiveTripOut, TripCreate, TripOut, TripUpdate
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/trips", tags=["trips"])
@@ -122,15 +123,128 @@ def _require_token(token: Optional[str]) -> str:
     return token
 
 
+def _is_driver(profile: Dict[str, Any]) -> bool:
+    return profile.get("role") == "driver"
+
+
+def _get_trip_for_profile(supabase, profile: dict, trip_id: str) -> dict:
+    query = supabase.table("trips").select("*").eq("id", trip_id).eq("org_id", profile["org_id"])
+    if _is_driver(profile):
+        query = query.eq("driver_id", profile["id"])
+    response = query.limit(1).execute()
+    rows = response.data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    return rows[0]
+
+
 @router.get("", response_model=List[TripOut])
 def list_trips(
     profile: dict = Depends(require_manager_or_driver_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> List[TripOut]:
     token = _require_token(token)
-    supabase = get_supabase_client(token)
-    response = supabase.table("trips").select("*").order("start_time", desc=True).execute()
+    supabase = get_supabase_client(use_service_role=True)
+    query = (
+        supabase.table("trips")
+        .select("*")
+        .eq("org_id", profile["org_id"])
+        .order("start_time", desc=True)
+    )
+    if _is_driver(profile):
+        query = query.eq("driver_id", profile["id"])
+    response = query.execute()
     return response.data or []
+
+
+@router.get("/live", response_model=List[LiveTripOut])
+def list_live_trips(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[LiveTripOut]:
+    token = _require_token(token)
+    supabase = get_supabase_client(use_service_role=True)
+
+    trips_response = (
+        supabase.table("trips")
+        .select("id,vehicle_id,driver_id,start_time")
+        .eq("org_id", profile["org_id"])
+        .is_("end_time", "null")
+        .order("start_time", desc=True)
+        .execute()
+    )
+    active_trips = trips_response.data or []
+    if not active_trips:
+        return []
+
+    vehicle_ids = sorted({trip["vehicle_id"] for trip in active_trips if trip.get("vehicle_id")})
+    driver_ids = sorted({trip["driver_id"] for trip in active_trips if trip.get("driver_id")})
+
+    vehicles_by_id: Dict[str, dict] = {}
+    if vehicle_ids:
+        vehicles_response = (
+            supabase.table("vehicles")
+            .select("id,plate_no,make,model")
+            .in_("id", vehicle_ids)
+            .execute()
+        )
+        vehicles_by_id = {row["id"]: row for row in (vehicles_response.data or [])}
+
+    drivers_by_id: Dict[str, dict] = {}
+    if driver_ids:
+        drivers_response = (
+            supabase.table("profiles")
+            .select("id,full_name")
+            .in_("id", driver_ids)
+            .execute()
+        )
+        drivers_by_id = {row["id"]: row for row in (drivers_response.data or [])}
+
+    now = datetime.now(timezone.utc)
+    stale_threshold = now - timedelta(minutes=2)
+    live_rows: List[LiveTripOut] = []
+
+    for trip in active_trips:
+        point_response = (
+            supabase.table("gps_points")
+            .select("lat,lon,recorded_at,speed_kmh")
+            .eq("trip_id", trip["id"])
+            .order("recorded_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        points = point_response.data or []
+        if not points:
+            continue
+        latest_point = points[0]
+        recorded_at = str(latest_point["recorded_at"])
+        recorded_dt = _parse_iso_datetime(recorded_at)
+        stale = recorded_dt is None or recorded_dt < stale_threshold
+
+        vehicle = vehicles_by_id.get(trip["vehicle_id"], {})
+        vehicle_make = vehicle.get("make") or ""
+        vehicle_model = vehicle.get("model") or ""
+        vehicle_label = " ".join(part for part in [vehicle_make, vehicle_model] if part).strip()
+
+        driver = drivers_by_id.get(trip.get("driver_id") or "", {})
+        live_rows.append(
+            LiveTripOut(
+                trip_id=trip["id"],
+                vehicle_id=trip["vehicle_id"],
+                vehicle_plate_no=vehicle.get("plate_no"),
+                vehicle_label=vehicle_label or vehicle.get("plate_no"),
+                driver_id=trip.get("driver_id"),
+                driver_name=driver.get("full_name"),
+                lat=float(latest_point["lat"]),
+                lon=float(latest_point["lon"]),
+                recorded_at=recorded_at,
+                speed_kmh=_to_float(latest_point.get("speed_kmh")),
+                start_time=str(trip["start_time"]),
+                stale=stale,
+            )
+        )
+
+    return live_rows
 
 
 @router.post("", response_model=TripOut)
@@ -141,9 +255,11 @@ def create_trip(
 ) -> TripOut:
     token = _require_token(token)
     org_id = profile["org_id"]
-    supabase = get_supabase_client(token)
+    supabase = get_supabase_client(use_service_role=True)
     data = payload.model_dump()
     data["org_id"] = org_id
+    if _is_driver(profile):
+        data["driver_id"] = profile["id"]
     response = supabase.table("trips").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
@@ -158,10 +274,11 @@ def update_trip(
     token: Optional[str] = Depends(get_bearer_token),
 ) -> TripOut:
     token = _require_token(token)
-    supabase = get_supabase_client(token)
+    supabase = get_supabase_client(use_service_role=True)
+    _get_trip_for_profile(supabase, profile, trip_id)
     data = payload.model_dump(exclude_none=True)
     response = (
-        supabase.table("trips").update(data).eq("id", trip_id).execute()
+        supabase.table("trips").update(data).eq("id", trip_id).eq("org_id", profile["org_id"]).execute()
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
@@ -199,7 +316,8 @@ def add_gps_point(
     token = _require_token(token)
     if payload.trip_id != trip_id:
         raise HTTPException(status_code=400, detail="trip_id mismatch")
-    supabase = get_supabase_client(token)
+    supabase = get_supabase_client(use_service_role=True)
+    _get_trip_for_profile(supabase, profile, trip_id)
     response = supabase.table("gps_points").insert(payload.model_dump()).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
@@ -213,8 +331,15 @@ def delete_trip(
     token: Optional[str] = Depends(get_bearer_token),
 ) -> dict:
     token = _require_token(token)
-    supabase = get_supabase_client(token)
-    response = supabase.table("trips").delete().eq("id", trip_id).execute()
+    supabase = get_supabase_client(use_service_role=True)
+    _get_trip_for_profile(supabase, profile, trip_id)
+    response = (
+        supabase.table("trips")
+        .delete()
+        .eq("id", trip_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
     if response.data is None:
         raise HTTPException(status_code=400, detail="Delete failed")
     return {"status": "ok"}

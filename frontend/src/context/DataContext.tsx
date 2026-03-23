@@ -22,6 +22,7 @@ import {
     DriverScore,
     Alert,
     MaintenancePrediction,
+    LiveTrip,
 } from "../types";
 
 type DataContextType = {
@@ -29,6 +30,7 @@ type DataContextType = {
     vehicles: Vehicle[];
     drivers: Driver[];
     trips: Trip[];
+    liveTrips: LiveTrip[];
     fuelLogs: FuelLog[];
     maintenance: Maintenance[];
     documents: Document[];
@@ -107,6 +109,8 @@ type DataContextType = {
     selectedVehicle: string;
     setSelectedVehicle: (v: string) => void;
     activeTripId: string | null;
+    tripTrackingStatus: "inactive" | "tracking" | "stale" | "error";
+    tripTrackingLastUpdated: string | null;
 
     // Fuel form state
     fuelVehicle: string;
@@ -242,6 +246,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [trips, setTrips] = useState<Trip[]>([]);
+    const [liveTrips, setLiveTrips] = useState<LiveTrip[]>([]);
     const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
     const [maintenance, setMaintenance] = useState<Maintenance[]>([]);
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -281,6 +286,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Trip state
     const [selectedVehicle, setSelectedVehicle] = useState("");
     const [activeTripId, setActiveTripId] = useState<string | null>(null);
+    const [tripTrackingStatus, setTripTrackingStatus] = useState<"inactive" | "tracking" | "stale" | "error">("inactive");
+    const [tripTrackingLastUpdated, setTripTrackingLastUpdated] = useState<string | null>(null);
     const watchIdRef = useRef<number | null>(null);
     const lastSavedScoreSignatureRef = useRef<string>("");
 
@@ -533,6 +540,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
             });
     }, [token, role, completedTrips, driverScore, driverScoreBreakdown]);
 
+    useEffect(() => {
+        if (role !== "driver" || !activeTripId || !tripTrackingLastUpdated) return;
+        const updateStatus = () => {
+            const ageMs = Date.now() - new Date(tripTrackingLastUpdated).getTime();
+            setTripTrackingStatus(ageMs > 2 * 60 * 1000 ? "stale" : "tracking");
+        };
+        updateStatus();
+        const intervalId = window.setInterval(updateStatus, 15000);
+        return () => window.clearInterval(intervalId);
+    }, [role, activeTripId, tripTrackingLastUpdated]);
+
     // Data loading
     useEffect(() => {
         if (!token || !role) return;
@@ -545,6 +563,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     ]);
                     setVehicles(v);
                     setTrips(t);
+                    const activeTrip = t.find((trip) => !trip.end_time) || null;
+                    setActiveTripId(activeTrip?.id || null);
+                    setTripTrackingStatus(activeTrip ? "stale" : "inactive");
+                    setTripTrackingLastUpdated(null);
                     setDrivers([]);
                     setFuelLogs([]);
                     setMaintenance([]);
@@ -553,6 +575,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceBookings([]);
                     setDriverScores([]);
                     setMaintenancePredictions([]);
+                    setLiveTrips([]);
                     setMlVehicleId("");
                     return;
                 }
@@ -567,6 +590,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceBookings([]);
                     setDriverScores([]);
                     setMaintenancePredictions([]);
+                    setLiveTrips([]);
                     setMlVehicleId("");
                     return;
                 }
@@ -593,6 +617,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setServiceBookings(sb);
                 setDriverScores(ds);
                 setMaintenancePredictions(mp);
+                setLiveTrips([]);
             } catch (e: any) {
                 setError(e.message);
             }
@@ -600,10 +625,93 @@ export function DataProvider({ children }: { children: ReactNode }) {
         load();
     }, [token, role]);
 
+    useEffect(() => {
+        return () => {
+            if (watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!token || role !== "manager") return;
+        let cancelled = false;
+        let intervalId: number | null = null;
+
+        const loadLiveTrips = async () => {
+            try {
+                const rows = await apiGet<LiveTrip[]>("/trips/live", token);
+                if (!cancelled) {
+                    setLiveTrips(rows);
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    setLiveTrips([]);
+                    setError(err.message || "Failed to load live trips");
+                }
+            }
+        };
+
+        loadLiveTrips();
+        intervalId = window.setInterval(loadLiveTrips, 15000);
+
+        return () => {
+            cancelled = true;
+            if (intervalId !== null) window.clearInterval(intervalId);
+        };
+    }, [token, role, setError]);
+
+    useEffect(() => {
+        if (role !== "driver" || !token || !activeTripId || watchIdRef.current !== null) return;
+        if (!geoSupported) {
+            setTripTrackingStatus("error");
+            return;
+        }
+
+        watchIdRef.current = navigator.geolocation.watchPosition(
+            async (pos) => {
+                const pointTime = new Date(pos.timestamp).toISOString();
+                const point = {
+                    trip_id: activeTripId,
+                    recorded_at: pointTime,
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    speed_kmh: pos.coords.speed ? Number((pos.coords.speed * 3.6).toFixed(2)) : null,
+                };
+                try {
+                    await apiPost(`/trips/${activeTripId}/points`, point, token);
+                    setTripTrackingLastUpdated(pointTime);
+                    setTripTrackingStatus("tracking");
+                } catch (e: any) {
+                    setTripTrackingStatus("error");
+                    setError(e.message || "Failed to save GPS point");
+                }
+            },
+            (err) => {
+                setTripTrackingStatus("error");
+                setError(err.message);
+            },
+            { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+        );
+
+        return () => {
+            if (watchIdRef.current !== null && role === "driver" && !activeTripId) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
+            }
+        };
+    }, [role, token, activeTripId, geoSupported, setError]);
+
     function resetData() {
+        if (watchIdRef.current !== null) {
+            navigator.geolocation.clearWatch(watchIdRef.current);
+            watchIdRef.current = null;
+        }
         setVehicles([]);
         setDrivers([]);
         setTrips([]);
+        setLiveTrips([]);
         setFuelLogs([]);
         setMaintenance([]);
         setDocuments([]);
@@ -640,6 +748,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setBookingDate("");
         setBookingNotes("");
         setEditingBookingId(null);
+        setActiveTripId(null);
+        setTripTrackingStatus("inactive");
+        setTripTrackingLastUpdated(null);
         setDocOwnerType("vehicle");
         setDocVehicle("");
         setDocDriver("");
@@ -878,25 +989,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const trip = await apiPost<Trip>("/trips", payload, token);
             setActiveTripId(trip.id);
             setTrips((prev) => [trip, ...prev]);
-
-            watchIdRef.current = navigator.geolocation.watchPosition(
-                async (pos) => {
-                    const point = {
-                        trip_id: trip.id,
-                        recorded_at: new Date(pos.timestamp).toISOString(),
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        speed_kmh: pos.coords.speed ? Number((pos.coords.speed * 3.6).toFixed(2)) : null,
-                    };
-                    try {
-                        await apiPost(`/trips/${trip.id}/points`, point, token);
-                    } catch (e: any) {
-                        setError(e.message || "Failed to save GPS point");
-                    }
-                },
-                (err) => setError(err.message),
-                { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-            );
+            setTripTrackingStatus("tracking");
+            setTripTrackingLastUpdated(null);
         } catch (err: any) {
             setError(err.message || "Start trip failed");
         } finally {
@@ -914,6 +1008,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const updated = await apiPatch<Trip>(`/trips/${activeTripId}`, payload, token);
             setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
             setActiveTripId(null);
+            setTripTrackingStatus("inactive");
+            setTripTrackingLastUpdated(null);
             if (watchIdRef.current !== null) {
                 navigator.geolocation.clearWatch(watchIdRef.current);
                 watchIdRef.current = null;
@@ -1438,6 +1534,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 vehicles,
                 drivers,
                 trips,
+                liveTrips,
                 fuelLogs,
                 maintenance,
                 documents,
@@ -1503,6 +1600,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 selectedVehicle,
                 setSelectedVehicle,
                 activeTripId,
+                tripTrackingStatus,
+                tripTrackingLastUpdated,
                 fuelVehicle,
                 setFuelVehicle,
                 fuelDate,

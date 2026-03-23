@@ -1689,6 +1689,105 @@ body {
   overflow: hidden;
 }
 
+.dashboard-map__subtitle {
+  margin-top: 4px;
+}
+
+.dashboard-map__filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.filter-chip {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-chip--active {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.3);
+  color: var(--primary);
+}
+
+.dashboard-map__list {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.dashboard-map__list-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.live-trip-list {
+  display: grid;
+  gap: 12px;
+}
+
+.live-trip-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.live-trip-item__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.live-trip-item__meta {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.live-trip-item__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.live-map-marker {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.28);
+}
+
+.live-map-marker--live {
+  background: var(--success);
+}
+
+.live-map-marker--stale {
+  background: var(--warning);
+}
+
+.live-map-popup {
+  min-width: 180px;
+  display: grid;
+  gap: 4px;
+}
+
 /* ===== DONUT CHART ===== */
 .donut {
   width: 140px;
@@ -3455,6 +3554,18 @@ textarea {
   gap: 12px;
 }
 
+.pwa-trip-card__route--stacked {
+  display: grid;
+  gap: 6px;
+  align-items: start;
+}
+
+.pwa-trip-card__subroute {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 .pwa-trip-card__arrow {
   font-size: 18px;
   opacity: 0.7;
@@ -3505,6 +3616,10 @@ textarea {
 .pwa-trip-card__stats-value {
   font-size: 16px;
   font-weight: 700;
+}
+
+.pwa-trip-card__tracking {
+  margin-bottom: 18px;
 }
 
 .pwa-trip-card__actions {

@@ -25,6 +25,8 @@ type DriverProps = {
   selectedVehicle: string;
   setSelectedVehicle: (v: string) => void;
   activeTripId: string | null;
+  tripTrackingStatus: "inactive" | "tracking" | "stale" | "error";
+  tripTrackingLastUpdated: string | null;
   driverScore: number;
   driverScoreLabel: "Excellent" | "Good" | "Average" | "Needs work";
   driverScoreBreakdown: {
@@ -44,6 +46,7 @@ type TabType = "home" | "trips" | "fuel" | "reports" | "profile";
 export default function DriverTrips(props: DriverProps) {
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const activeTrip = props.trips.find(t => t.id === props.activeTripId);
+  const activeVehicle = props.vehicles.find((vehicle) => vehicle.id === activeTrip?.vehicle_id);
   const completedTrips = props.trips.filter(t => t.end_time);
   const upcomingTrips = props.trips.filter(t => !t.end_time && t.id !== props.activeTripId);
   const scorePillClass =
@@ -81,33 +84,46 @@ export default function DriverTrips(props: DriverProps) {
               <span className="pwa-trip-card__label">Current Trip</span>
               <span className="pwa-pill pwa-pill--active">In Progress</span>
             </div>
-            <div className="pwa-trip-card__route">
-              <span>Colombo</span>
-              <span className="pwa-trip-card__arrow">→</span>
-              <span>Kandy</span>
-            </div>
-            <div className="pwa-trip-card__progress">
-              <div className="pwa-trip-card__progress-row">
-                <span>Progress</span>
-                <span>42.5 km / 115 km</span>
-              </div>
-              <div className="pwa-progress-bar">
-                <div className="pwa-progress-bar__fill" style={{ width: "37%" }}></div>
-              </div>
+            <div className="pwa-trip-card__route pwa-trip-card__route--stacked">
+              <span>{activeVehicle?.plate_no || "Assigned Vehicle"}</span>
+              <span className="pwa-trip-card__subroute">
+                Started {new Date(activeTrip.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
             </div>
             <div className="pwa-trip-card__stats">
               <div>
-                <span className="pwa-trip-card__stats-label">ETA</span>
-                <span className="pwa-trip-card__stats-value">2:45 PM</span>
+                <span className="pwa-trip-card__stats-label">Tracking</span>
+                <span className="pwa-trip-card__stats-value">{props.tripTrackingStatus}</span>
               </div>
               <div>
-                <span className="pwa-trip-card__stats-label">Remaining</span>
-                <span className="pwa-trip-card__stats-value">1h 20m</span>
+                <span className="pwa-trip-card__stats-label">Last update</span>
+                <span className="pwa-trip-card__stats-value">
+                  {props.tripTrackingLastUpdated
+                    ? new Date(props.tripTrackingLastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : "Waiting"}
+                </span>
               </div>
             </div>
+            <div className="pwa-trip-card__tracking">
+              <span className={`pwa-pill ${
+                props.tripTrackingStatus === "tracking"
+                  ? "pwa-pill--success"
+                  : props.tripTrackingStatus === "stale"
+                    ? "pwa-pill--scheduled"
+                    : "pwa-pill--active"
+              }`}>
+                {props.tripTrackingStatus === "tracking"
+                  ? "Live location active"
+                  : props.tripTrackingStatus === "stale"
+                    ? "Location stale"
+                    : props.tripTrackingStatus === "error"
+                      ? "Tracking issue"
+                      : "Tracking inactive"}
+              </span>
+            </div>
             <div className="pwa-trip-card__actions">
-              <button className="pwa-btn pwa-btn--outline">
-                <span>📍</span> View Route Map
+              <button className="pwa-btn pwa-btn--outline" disabled>
+                <span>📍</span> Driver tracking on
               </button>
               <button
                 className="pwa-btn pwa-btn--dark"

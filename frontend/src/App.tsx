@@ -320,6 +320,8 @@ function DriverRoutes() {
     selectedVehicle,
     setSelectedVehicle,
     activeTripId,
+    tripTrackingStatus,
+    tripTrackingLastUpdated,
     startTrip,
     stopTrip,
     geoSupported,
@@ -334,6 +336,8 @@ function DriverRoutes() {
       selectedVehicle={selectedVehicle}
       setSelectedVehicle={setSelectedVehicle}
       activeTripId={activeTripId}
+      tripTrackingStatus={tripTrackingStatus}
+      tripTrackingLastUpdated={tripTrackingLastUpdated}
       driverScore={driverScore}
       driverScoreLabel={driverScoreLabel}
       driverScoreBreakdown={driverScoreBreakdown}
@@ -374,6 +378,7 @@ function ManagerRoutes() {
               maintenanceCount={data.maintenance.length}
               fuelCostTotal={data.currency.format(data.fuelCostTotal)}
               maintenance={data.maintenance}
+              liveTrips={data.liveTrips}
               lastMaintenancePrediction={data.maintResult}
               lastFuelPrediction={data.fuelResult}
               alerts={data.buildAlerts()}

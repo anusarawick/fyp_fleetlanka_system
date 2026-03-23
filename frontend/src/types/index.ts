@@ -34,13 +34,34 @@ export type Driver = {
 
 export type Trip = {
   id: string;
+  org_id?: string;
   vehicle_id: string;
+  driver_id?: string;
   start_time: string;
   end_time?: string;
+  start_lat?: number;
+  start_lon?: number;
+  end_lat?: number;
+  end_lon?: number;
   distance_km?: number;
   duration_min?: number;
   avg_speed_kmh?: number;
   idle_min?: number;
+};
+
+export type LiveTrip = {
+  trip_id: string;
+  vehicle_id: string;
+  vehicle_plate_no?: string;
+  vehicle_label?: string;
+  driver_id?: string;
+  driver_name?: string;
+  lat: number;
+  lon: number;
+  recorded_at: string;
+  speed_kmh?: number;
+  start_time: string;
+  stale: boolean;
 };
 
 export type FuelLog = {
