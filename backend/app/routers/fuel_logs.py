@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import DRIVER_ROLES, get_bearer_token, get_current_profile
 from app.schemas.fuel_logs import FuelLogCreate, FuelLogOut, FuelLogUpdate
 from app.services.supabase_client import get_supabase_client
 
@@ -16,12 +16,21 @@ def _require_token(token: Optional[str]) -> str:
 
 
 @router.get("", response_model=List[FuelLogOut])
-def list_fuel_logs(token: Optional[str] = Depends(get_bearer_token)) -> List[FuelLogOut]:
+def list_fuel_logs(
+    profile: dict = Depends(get_current_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> List[FuelLogOut]:
     token = _require_token(token)
-    supabase = get_supabase_client(token)
-    response = (
-        supabase.table("fuel_logs").select("*").order("fuel_date", desc=True).execute()
+    supabase = get_supabase_client(use_service_role=True)
+    query = (
+        supabase.table("fuel_logs")
+        .select("*")
+        .eq("org_id", profile["org_id"])
+        .order("fuel_date", desc=True)
     )
+    if profile.get("role") in DRIVER_ROLES:
+        query = query.eq("driver_id", profile["id"])
+    response = query.execute()
     return response.data or []
 
 
@@ -33,9 +42,11 @@ def create_fuel_log(
 ) -> FuelLogOut:
     token = _require_token(token)
     org_id = profile["org_id"]
-    supabase = get_supabase_client(token)
+    supabase = get_supabase_client(use_service_role=True)
     data = payload.model_dump()
     data["org_id"] = org_id
+    if profile.get("role") in DRIVER_ROLES:
+        data["driver_id"] = profile["id"]
     response = supabase.table("fuel_logs").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")

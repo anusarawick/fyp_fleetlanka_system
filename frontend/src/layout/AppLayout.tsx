@@ -13,9 +13,9 @@ export default function AppLayout({
   role,
 }: AppLayoutProps) {
   return (
-    <div className="app">
+    <div className={`app ${role === "driver" ? "app--driver" : ""}`}>
       {showSidebar ? <Sidebar role={role} /> : null}
-      <main className="main">{children}</main>
+      <main className={`main ${role === "driver" ? "main--driver" : ""}`}>{children}</main>
     </div>
   );
 }

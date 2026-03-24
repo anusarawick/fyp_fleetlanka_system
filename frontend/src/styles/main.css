@@ -64,6 +64,10 @@ body {
   min-width: 0;
 }
 
+.app--driver {
+  display: block;
+}
+
 /* ===== AUTH / LOGIN ===== */
 .auth {
   min-height: 100vh;
@@ -514,6 +518,11 @@ body {
   min-height: 100vh;
   min-width: 0;
   overflow-x: hidden;
+}
+
+.main--driver {
+  padding: 0;
+  background: transparent;
 }
 
 /* ===== TOPBAR ===== */
@@ -2599,6 +2608,10 @@ textarea {
     padding: 20px;
   }
 
+  .main--driver {
+    padding: 0;
+  }
+
   .stats {
     grid-template-columns: 1fr;
   }
@@ -3426,8 +3439,14 @@ textarea {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
+  background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.75);
 }
 
 /* PWA Header */
@@ -3435,9 +3454,13 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .pwa-header__user {
@@ -3447,9 +3470,9 @@ textarea {
 }
 
 .pwa-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
   color: white;
   font-weight: 700;
@@ -3464,14 +3487,14 @@ textarea {
 }
 
 .pwa-header__name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #1f2937;
 }
 
 .pwa-header__id {
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
 }
 
 .pwa-header__actions {
@@ -3481,56 +3504,48 @@ textarea {
 }
 
 .pwa-status-badge {
-  background: #dcfce7;
-  color: #16a34a;
-  padding: 6px 14px;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  padding: 6px 12px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
 }
 
 .pwa-notif-btn {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border: none;
-  background: #f3f4f6;
-  border-radius: 50%;
-  font-size: 18px;
+  background: #eef2f7;
+  border-radius: 12px;
+  font-size: 17px;
   cursor: pointer;
   display: grid;
   place-items: center;
-  position: relative;
 }
 
 .pwa-notif-btn::after {
-  content: "";
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 50%;
-  border: 2px solid white;
+  display: none;
 }
 
 /* PWA Main Content */
 .pwa-main {
   flex: 1;
-  padding: 20px;
+  padding: 16px;
   padding-bottom: 100px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow-y: auto;
 }
 
 /* Current Trip Card */
 .pwa-trip-card {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  border-radius: 20px;
-  padding: 20px;
+  border-radius: 22px;
+  padding: 18px;
   color: white;
+  box-shadow: 0 18px 40px rgba(29, 78, 216, 0.2);
 }
 
 .pwa-trip-card__header {
@@ -3546,7 +3561,7 @@ textarea {
 }
 
 .pwa-trip-card__route {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   margin-bottom: 20px;
   display: flex;
@@ -3598,14 +3613,19 @@ textarea {
 }
 
 .pwa-trip-card__stats {
-  display: flex;
-  gap: 32px;
-  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .pwa-trip-card__stats>div {
   display: flex;
   flex-direction: column;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 12px;
 }
 
 .pwa-trip-card__stats-label {
@@ -3619,12 +3639,13 @@ textarea {
 }
 
 .pwa-trip-card__tracking {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .pwa-trip-card__actions {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 /* PWA Pills */
@@ -3656,8 +3677,8 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 20px;
-  border-radius: 12px;
+  padding: 13px 16px;
+  border-radius: 14px;
   font-size: 14px;
   font-weight: 600;
   font-family: inherit;
@@ -3696,8 +3717,8 @@ textarea {
 .pwa-start-card {
   background: white;
   border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
 }
 
 .pwa-start-card__header {
@@ -3745,8 +3766,8 @@ textarea {
   gap: 20px;
   background: white;
   border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 18px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
 }
 
 .pwa-score-circle {
@@ -3814,7 +3835,7 @@ textarea {
 /* Quick Actions Grid */
 .pwa-actions-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -3823,18 +3844,22 @@ textarea {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 20px;
+  padding: 16px 12px;
   background: white;
-  border: none;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 16px;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .pwa-action-btn:active {
   transform: scale(0.97);
+}
+
+.pwa-action-btn:hover {
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
 .pwa-action-btn__icon {
@@ -3871,9 +3896,13 @@ textarea {
 /* Sections */
 .pwa-section {
   background: white;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.pwa-section--detail {
+  align-self: start;
 }
 
 .pwa-section__header {
@@ -3895,20 +3924,28 @@ textarea {
   font-size: 16px;
   font-weight: 700;
   color: #1f2937;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
+}
+
+.pwa-section__subtitle {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
 }
 
 .pwa-summary-grid {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .pwa-summary-item {
-  flex: 1;
   text-align: center;
   padding: 12px;
   background: #f9fafb;
   border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
 }
 
 .pwa-summary-item__value {
@@ -3946,8 +3983,21 @@ textarea {
 
 .pwa-trip-item {
   padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  background: #fcfdff;
+}
+
+.pwa-trip-item--button {
+  width: 100%;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pwa-trip-item--selected {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .pwa-trip-item__header {
@@ -3973,6 +4023,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .pwa-trip-item__duration {
@@ -3987,8 +4038,9 @@ textarea {
   left: 0;
   right: 0;
   display: flex;
-  background: white;
-  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
   padding: 8px 0;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
@@ -4017,4 +4069,223 @@ textarea {
 
 .pwa-nav__icon {
   font-size: 22px;
+}
+
+.pwa-driver-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.15fr 0.85fr;
+}
+
+.pwa-detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pwa-detail-item {
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.pwa-detail-item__label {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pwa-form {
+  display: grid;
+  gap: 14px;
+}
+
+.pwa-form__field {
+  display: grid;
+  gap: 8px;
+}
+
+.pwa-form__field span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.pwa-form__field input {
+  width: 100%;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+  background: white;
+  color: #1f2937;
+}
+
+.pwa-form__field input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
+}
+
+@media (max-width: 768px) {
+  .pwa-driver-grid,
+  .pwa-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pwa-header {
+    padding: 12px 14px;
+  }
+
+  .pwa-main {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .pwa-trip-card__actions,
+  .pwa-actions-grid,
+  .pwa-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pwa-score-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pwa-trip-card__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .pwa-status-badge {
+    display: none;
+  }
+
+  .pwa-header__id {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pwa-app {
+    max-width: none;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 430px) {
+  .pwa-header {
+    padding: 10px 12px;
+  }
+
+  .pwa-header__user {
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .pwa-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+    border-radius: 12px;
+  }
+
+  .pwa-header__name {
+    font-size: 14px;
+  }
+
+  .pwa-main {
+    padding: 12px;
+    gap: 12px;
+    padding-bottom: 88px;
+  }
+
+  .pwa-trip-card,
+  .pwa-start-card,
+  .pwa-score-card,
+  .pwa-section {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .pwa-trip-card__route {
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .pwa-trip-card__subroute,
+  .pwa-section__subtitle,
+  .pwa-trip-item__time,
+  .pwa-trip-item__duration,
+  .pwa-detail-item__label {
+    font-size: 12px;
+  }
+
+  .pwa-trip-card__stats > div,
+  .pwa-summary-item,
+  .pwa-detail-item {
+    padding: 10px;
+  }
+
+  .pwa-btn {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+
+  .pwa-score-card {
+    gap: 14px;
+  }
+
+  .pwa-score-circle {
+    width: 72px;
+    height: 72px;
+  }
+
+  .pwa-score-circle__number {
+    font-size: 18px;
+  }
+
+  .pwa-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pwa-action-btn {
+    padding: 14px 10px;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .pwa-action-btn__icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    border-radius: 12px;
+  }
+
+  .pwa-action-btn span:last-child {
+    font-size: 12px;
+  }
+
+  .pwa-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pwa-nav {
+    padding-top: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+
+  .pwa-nav__item {
+    padding: 6px 4px;
+    font-size: 10px;
+  }
+
+  .pwa-nav__icon {
+    font-size: 18px;
+  }
 }
