@@ -60,3 +60,7 @@ class ServiceBookingUpdate(BaseModel):
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+
+
+class ServiceBookingReviewDecision(BaseModel):
+    note: str

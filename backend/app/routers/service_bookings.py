@@ -7,6 +7,7 @@ from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.service_bookings import (
     ServiceBookingCreate,
     ServiceBookingOut,
+    ServiceBookingReviewDecision,
     ServiceBookingUpdate,
 )
 from app.services.supabase_client import get_supabase_client
@@ -298,4 +299,51 @@ def approve_completed_booking(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Approval update failed")
+    return response.data[0]
+
+
+@router.post("/{booking_id}/reject-completion", response_model=ServiceBookingOut)
+def reject_completed_booking(
+    booking_id: str,
+    payload: ServiceBookingReviewDecision,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> ServiceBookingOut:
+    token = _require_token(token)
+    supabase = get_supabase_client(token)
+    booking_resp = (
+        supabase.table("service_bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    booking = booking_resp.data
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if (booking.get("status") or "pending") != "completed":
+        raise HTTPException(status_code=400, detail="Only completed bookings can be rejected")
+    if booking.get("completion_review_status") == "approved":
+        raise HTTPException(status_code=400, detail="Approved bookings cannot be rejected")
+
+    note = (payload.note or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="A rejection reason is required")
+
+    review_updates = {
+        "completion_review_status": "rejected",
+        "completion_review_notes": note,
+        "completion_reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "completion_reviewed_by": profile["id"],
+    }
+    response = (
+        supabase.table("service_bookings")
+        .update(review_updates)
+        .eq("id", booking_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=400, detail="Rejection update failed")
     return response.data[0]

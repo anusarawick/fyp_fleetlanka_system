@@ -103,6 +103,7 @@ type MaintenanceProps = {
   onCancelBookingEdit: () => void;
   onDeleteBooking: (bookingId: string) => Promise<void>;
   onApproveBookingCompletion: (bookingId: string) => Promise<void>;
+  onRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
 };
 
 export default function Maintenance(props: MaintenanceProps) {
@@ -125,6 +126,8 @@ export default function Maintenance(props: MaintenanceProps) {
   const [selectedBooking, setSelectedBooking] = useState<ServiceBooking | null>(null);
   const [deleteBookingTarget, setDeleteBookingTarget] = useState<ServiceBooking | null>(null);
   const [approveBookingTarget, setApproveBookingTarget] = useState<ServiceBooking | null>(null);
+  const [rejectBookingTarget, setRejectBookingTarget] = useState<ServiceBooking | null>(null);
+  const [rejectBookingNote, setRejectBookingNote] = useState("");
 
   const totalCost = props.maintenance.reduce((sum, m) => sum + (m.cost_lkr || 0), 0);
 
@@ -303,6 +306,16 @@ export default function Maintenance(props: MaintenanceProps) {
     setApproveBookingTarget(null);
     setSelectedBooking((current) =>
       current && current.id === approveBookingTarget.id ? null : current
+    );
+  }
+
+  async function confirmBookingRejection() {
+    if (!rejectBookingTarget || !rejectBookingNote.trim()) return;
+    await props.onRejectBookingCompletion(rejectBookingTarget.id, rejectBookingNote.trim());
+    setRejectBookingTarget(null);
+    setRejectBookingNote("");
+    setSelectedBooking((current) =>
+      current && current.id === rejectBookingTarget.id ? null : current
     );
   }
 
@@ -715,7 +728,22 @@ export default function Maintenance(props: MaintenanceProps) {
                       </button>
                       {isPendingCompletionReview(booking) && (
                         <button
-                          className="btn btn--compact"
+                          className="btn btn--danger btn--compact booking-review-btn"
+                          type="button"
+                          onClick={() => {
+                            setRejectBookingTarget(booking);
+                            setRejectBookingNote(booking.completion_review_notes || "");
+                          }}
+                          disabled={props.loading}
+                          aria-label={`Reject completion ${booking.id}`}
+                          title="Reject completion updates"
+                        >
+                          Reject
+                        </button>
+                      )}
+                      {isPendingCompletionReview(booking) && (
+                        <button
+                          className="btn btn--compact booking-review-btn"
                           type="button"
                           onClick={() => setApproveBookingTarget(booking)}
                           disabled={props.loading}
@@ -1235,6 +1263,17 @@ export default function Maintenance(props: MaintenanceProps) {
             </div>
             {isPendingCompletionReview(selectedBooking) && (
               <div className="modal__actions">
+                <button
+                  className="btn btn--danger"
+                  type="button"
+                  disabled={props.loading}
+                  onClick={() => {
+                    setRejectBookingTarget(selectedBooking);
+                    setRejectBookingNote(selectedBooking.completion_review_notes || "");
+                  }}
+                >
+                  Reject Updates
+                </button>
                 <button className="btn" type="button" disabled={props.loading} onClick={() => setApproveBookingTarget(selectedBooking)}>
                   {props.loading ? "Approving..." : "Approve Vehicle Updates"}
                 </button>
@@ -1263,6 +1302,41 @@ export default function Maintenance(props: MaintenanceProps) {
               </button>
               <button className="btn" type="button" onClick={confirmBookingApproval} disabled={props.loading}>
                 {props.loading ? "Approving..." : "Approve"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectBookingTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Reject booking approval">
+            <div className="modal__header">
+              <h3>Reject Vehicle Updates?</h3>
+              <button className="modal__close" type="button" onClick={() => {
+                setRejectBookingTarget(null);
+                setRejectBookingNote("");
+              }} aria-label="Close rejection dialog">
+                ✕
+              </button>
+            </div>
+            <label>
+              Rejection Reason
+              <textarea
+                placeholder="Explain what needs to be corrected before approval..."
+                value={rejectBookingNote}
+                onChange={(e) => setRejectBookingNote(e.target.value)}
+              />
+            </label>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => {
+                setRejectBookingTarget(null);
+                setRejectBookingNote("");
+              }}>
+                Cancel
+              </button>
+              <button className="btn btn--danger" type="button" onClick={confirmBookingRejection} disabled={props.loading || !rejectBookingNote.trim()}>
+                {props.loading ? "Rejecting..." : "Reject"}
               </button>
             </div>
           </div>

@@ -228,6 +228,7 @@ type DataContextType = {
     handleCancelBookingEdit: () => void;
     handleDeleteBooking: (bookingId: string) => Promise<void>;
     handleApproveBookingCompletion: (bookingId: string) => Promise<void>;
+    handleRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
@@ -1418,6 +1419,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    async function handleRejectBookingCompletion(bookingId: string, note: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const rejected = await apiPost<ServiceBooking>(
+                `/service-bookings/${bookingId}/reject-completion`,
+                { note },
+                token
+            );
+            setServiceBookings((prev) => prev.map((booking) => (booking.id === rejected.id ? rejected : booking)));
+        } catch (err: any) {
+            setError(err.message || "Rejection failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const parseFeatureLines = (raw: string) => {
         return raw
             .split("\n")
@@ -1713,6 +1732,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleCancelBookingEdit,
                 handleDeleteBooking,
                 handleApproveBookingCompletion,
+                handleRejectBookingCompletion,
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,
