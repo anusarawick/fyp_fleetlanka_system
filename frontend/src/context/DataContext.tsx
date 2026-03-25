@@ -762,6 +762,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     // Handlers
+    async function refreshVehicleMaintenancePrediction(vehicleId: string, updateMaintResult = false) {
+        if (!token) return;
+        const result = await apiPost<{
+            vehicle_id: string;
+            prediction: number;
+            probability: number;
+            threshold_used: number;
+            risk_level: "low" | "medium" | "high";
+        }>(`/ml/maintenance/by-vehicle/${vehicleId}`, {}, token);
+
+        const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
+        setMaintenancePredictions((prev) => {
+            const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
+            return [...latest, ...rest];
+        });
+
+        if (updateMaintResult) {
+            setMaintResult(
+                JSON.stringify({
+                    vehicle_id: result.vehicle_id,
+                    prediction: result.prediction,
+                    probability: Number(result.probability.toFixed(4)),
+                    risk_level: result.risk_level,
+                })
+            );
+        }
+    }
+
     async function handleSaveVehicle(e: FormEvent) {
         e.preventDefault();
         if (!token || !orgId) return;
@@ -792,13 +820,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 brake_condition: brakeCondition || undefined,
                 battery_status: batteryStatus || undefined,
             };
+            let savedVehicleId: string;
             if (editingVehicleId) {
                 const updated = await apiPatch<Vehicle>(`/vehicles/${editingVehicleId}`, payload, token);
                 setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+                savedVehicleId = updated.id;
             } else {
                 const created = await apiPost<Vehicle>("/vehicles", payload, token);
                 setVehicles((prev) => [created, ...prev]);
+                savedVehicleId = created.id;
             }
+            await refreshVehicleMaintenancePrediction(savedVehicleId);
             setPlateNo("");
             setMake("");
             setModel("");
@@ -1482,27 +1514,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         setError(null);
         try {
-            const result = await apiPost<{
-                vehicle_id: string;
-                prediction: number;
-                probability: number;
-                threshold_used: number;
-                risk_level: "low" | "medium" | "high";
-            }>(`/ml/maintenance/by-vehicle/${vehicleId}`, {}, token);
-
-            const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
-            setMaintenancePredictions((prev) => {
-                const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
-                return [...latest, ...rest];
-            });
-            setMaintResult(
-                JSON.stringify({
-                    vehicle_id: result.vehicle_id,
-                    prediction: result.prediction,
-                    probability: Number(result.probability.toFixed(4)),
-                    risk_level: result.risk_level,
-                })
-            );
+            await refreshVehicleMaintenancePrediction(vehicleId, true);
         } catch (err: any) {
             setError(err.message || "Vehicle prediction failed");
         } finally {
