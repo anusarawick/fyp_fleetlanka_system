@@ -37,6 +37,7 @@ class ServicePortalBookingOut(BaseModel):
     requested_date: str
     status: Optional[str] = None
     notes: Optional[str] = None
+    work_type: Optional[str] = None
     service_notes: Optional[str] = None
     proposed_tire_condition: Optional[str] = None
     proposed_brake_condition: Optional[str] = None
@@ -51,6 +52,7 @@ class ServicePortalBookingOut(BaseModel):
 
 class ServicePortalBookingUpdate(BaseModel):
     status: Optional[str] = None
+    work_type: Optional[str] = None
     service_notes: Optional[str] = None
     proposed_tire_condition: Optional[str] = None
     proposed_brake_condition: Optional[str] = None

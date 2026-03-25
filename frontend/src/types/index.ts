@@ -115,6 +115,7 @@ export type ServiceBooking = {
   requested_date: string;
   status?: string;
   notes?: string;
+  work_type?: string;
   service_notes?: string;
   proposed_tire_condition?: string;
   proposed_brake_condition?: string;

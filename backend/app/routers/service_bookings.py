@@ -48,7 +48,7 @@ def _sync_maintenance_from_booking(supabase, booking: dict, center: dict) -> Non
         "service_center_id": booking.get("center_id"),
         "service_booking_id": booking["id"],
         "service_date": service_date,
-        "service_type": "Booked Service",
+        "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
         "cost_lkr": booking.get("final_cost_lkr"),
         "odometer_km": vehicle.get("odometer_km"),
         "notes": " | ".join(note_parts) if note_parts else None,

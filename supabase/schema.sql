@@ -221,6 +221,7 @@ create table if not exists public.service_bookings (
   requested_date date not null,
   status text default 'pending',
   notes text,
+  work_type text,
   service_notes text,
   proposed_tire_condition text,
   proposed_brake_condition text,

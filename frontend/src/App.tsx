@@ -375,12 +375,14 @@ function ManagerRoutes() {
             <Dashboard
               vehicleCount={data.vehicles.length}
               activeTrips={data.activeTrips}
-              maintenanceCount={data.maintenance.length}
               fuelCostTotal={data.currency.format(data.fuelCostTotal)}
               maintenance={data.maintenance}
+              vehicles={data.vehicles}
+              driverScores={data.driverScores}
+              serviceBookings={data.serviceBookings}
+              topPerformers={data.topPerformers}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               liveTrips={data.liveTrips}
-              lastMaintenancePrediction={data.maintResult}
-              lastFuelPrediction={data.fuelResult}
               alerts={data.buildAlerts()}
               upcomingDocs={data.upcomingDocs}
             />

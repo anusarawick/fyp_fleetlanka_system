@@ -51,7 +51,7 @@ def _sync_maintenance_from_booking(admin_client, booking: dict, center: dict, *,
         "service_center_id": booking.get("center_id"),
         "service_booking_id": booking_id,
         "service_date": service_date,
-        "service_type": "Booked Service",
+        "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
         "cost_lkr": booking.get("final_cost_lkr"),
         "odometer_km": vehicle.get("odometer_km"),
         "notes": " | ".join(note_parts) if note_parts else None,
@@ -167,6 +167,8 @@ def update_service_portal_booking(
         raise HTTPException(status_code=400, detail="A service note is required when moving a confirmed booking back to pending")
     if current_status == "completed" and next_status == "confirmed" and not (payload.service_notes or "").strip():
         raise HTTPException(status_code=400, detail="A service note is required when reopening a completed booking")
+    if next_status == "completed" and not (payload.work_type or existing.get("work_type") or "").strip():
+        raise HTTPException(status_code=400, detail="Work type is required when completing a booking")
 
     update_data = payload.model_dump(exclude_none=True)
     if next_status == "completed" and current_status != "completed":

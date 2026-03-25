@@ -361,7 +361,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const date = new Date(d.expiry_date).getTime();
         const now = new Date().getTime();
         const fourteenDays = 14 * 24 * 60 * 60 * 1000;
-        return date <= now + fourteenDays;
+        return date >= now && date <= now + fourteenDays;
     });
 
     const completedTrips = useMemo(() => trips.filter((t) => !!t.end_time), [trips]);
@@ -1493,16 +1493,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     function buildAlerts(): Alert[] {
         const alerts: Alert[] = [];
-        const now = new Date().getTime();
+        const nowDate = new Date();
+        nowDate.setHours(0, 0, 0, 0);
+        const now = nowDate.getTime();
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
 
         maintenance.forEach((m) => {
-            if (!m.service_date) return;
-            const date = new Date(m.service_date).getTime();
-            if (date <= now + sevenDays) {
+            const dueDate = m.predicted_due_date;
+            if (!dueDate) return;
+            const date = new Date(dueDate).getTime();
+            if (date >= now && date <= now + sevenDays) {
                 alerts.push({
                     title: `Maintenance due: ${m.service_type || "Service"}`,
-                    meta: `Scheduled ${m.service_date}`,
+                    meta: `Due ${dueDate}`,
                 });
             }
         });
@@ -1518,12 +1521,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
         });
 
-        if (fuelLogs.length > 0) {
-            alerts.push({
-                title: "New fuel logs available",
-                meta: `Total entries: ${fuelLogs.length}`,
-            });
-        }
+        serviceBookings.forEach((booking) => {
+            if (
+                (booking.status || "pending") === "completed" &&
+                (booking.completion_review_status || "pending") !== "approved"
+            ) {
+                alerts.push({
+                    title: "Service completion pending approval",
+                    meta: `Requested ${booking.requested_date}`,
+                });
+            }
+        });
 
         return alerts;
     }

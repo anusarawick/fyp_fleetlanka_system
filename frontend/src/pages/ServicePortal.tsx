@@ -29,6 +29,7 @@ type ServicePortalBooking = {
   requested_date: string;
   status?: string;
   notes?: string;
+  work_type?: string;
   service_notes?: string;
   proposed_tire_condition?: string;
   proposed_brake_condition?: string;
@@ -48,6 +49,16 @@ const statusBadgeClass: Record<string, string> = {
   cancelled: "danger",
 };
 
+const workTypeOptions = [
+  "Full Service",
+  "Oil Change",
+  "Brake Repair",
+  "Tire Replacement",
+  "Battery Replacement",
+  "Engine Check",
+  "AC Service",
+];
+
 function vehicleLabel(booking: ServicePortalBooking) {
   const displayName = [booking.vehicle_make, booking.vehicle_model].filter(Boolean).join(" ");
   if (displayName && booking.vehicle_plate_no) return `${displayName} • ${booking.vehicle_plate_no}`;
@@ -60,6 +71,17 @@ function vehicleName(booking: ServicePortalBooking) {
 
 function vehiclePlate(booking: ServicePortalBooking) {
   return booking.vehicle_plate_no || "--";
+}
+
+function resolveWorkTypeSelection(value?: string) {
+  const normalized = (value || "").trim();
+  if (!normalized) {
+    return { selected: "", custom: "" };
+  }
+  if (workTypeOptions.includes(normalized)) {
+    return { selected: normalized, custom: "" };
+  }
+  return { selected: "Other", custom: normalized };
 }
 
 export default function ServicePortal({ token, initialTab = "dashboard" }: ServicePortalProps) {
@@ -76,6 +98,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const [editingBooking, setEditingBooking] = useState<ServicePortalBooking | null>(null);
   const [editMode, setEditMode] = useState<"transition" | "details">("transition");
   const [nextStatus, setNextStatus] = useState<"pending" | "confirmed" | "cancelled" | "completed">("confirmed");
+  const [selectedWorkType, setSelectedWorkType] = useState("");
+  const [customWorkType, setCustomWorkType] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [finalCost, setFinalCost] = useState("");
   const [proposedTireCondition, setProposedTireCondition] = useState("");
@@ -118,6 +142,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         booking.requested_date,
         booking.status,
         booking.notes,
+        booking.work_type,
         booking.service_notes,
         vehicleLabel(booking),
         typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "",
@@ -133,11 +158,15 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
+  const effectiveWorkType = selectedWorkType === "Other" ? customWorkType.trim() : selectedWorkType;
 
   function openActionModal(booking: ServicePortalBooking, status: "pending" | "confirmed" | "cancelled" | "completed") {
+    const workTypeState = resolveWorkTypeSelection(booking.work_type);
     setEditingBooking(booking);
     setEditMode("transition");
     setNextStatus(status);
+    setSelectedWorkType(workTypeState.selected);
+    setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
@@ -146,9 +175,12 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   }
 
   function openDetailsModal(booking: ServicePortalBooking) {
+    const workTypeState = resolveWorkTypeSelection(booking.work_type);
     setEditingBooking(booking);
     setEditMode("details");
     setNextStatus((booking.status as "confirmed" | "cancelled" | "completed") || "confirmed");
+    setSelectedWorkType(workTypeState.selected);
+    setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
@@ -159,6 +191,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   function closeActionModal() {
     setEditingBooking(null);
     setEditMode("transition");
+    setSelectedWorkType("");
+    setCustomWorkType("");
     setServiceNotes("");
     setFinalCost("");
     setProposedTireCondition("");
@@ -177,6 +211,14 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
       setError("Final cost is required when marking a booking as completed.");
       return;
     }
+    if (
+      (((editMode === "transition" && nextStatus === "completed") ||
+        (editMode === "details" && currentStatus === "completed")) &&
+        !effectiveWorkType)
+    ) {
+      setError("Work type is required for completed bookings.");
+      return;
+    }
     if (editMode === "transition" && currentStatus === "confirmed" && nextStatus === "pending" && !serviceNotes.trim()) {
       setError("A service note is required when moving a confirmed booking back to pending.");
       return;
@@ -191,6 +233,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
       const payload =
         editMode === "details"
           ? {
+              work_type: effectiveWorkType || undefined,
               service_notes: serviceNotes || undefined,
               final_cost_lkr: currentStatus === "completed" && finalCost ? Number(finalCost) : undefined,
               proposed_tire_condition: currentStatus === "completed" ? proposedTireCondition || undefined : undefined,
@@ -199,6 +242,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
             }
           : {
               status: nextStatus,
+              work_type: nextStatus === "completed" ? effectiveWorkType || undefined : undefined,
               service_notes: serviceNotes || undefined,
               proposed_tire_condition: nextStatus === "completed" ? proposedTireCondition || undefined : undefined,
               proposed_brake_condition: nextStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
@@ -443,6 +487,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabel(selectedBooking)}</strong></div>
               <div className="detail-item"><span>Requested Date</span><strong>{selectedBooking.requested_date}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{selectedBooking.status || "pending"}</strong></div>
+              <div className="detail-item"><span>Work Type</span><strong>{selectedBooking.work_type || "--"}</strong></div>
               <div className="detail-item"><span>Completed At</span><strong>{selectedBooking.completed_at || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
@@ -481,6 +526,41 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               </button>
             </div>
             <div className="form form--two-col form--scroll">
+              {((editMode === "details" && editingBooking.status === "completed") || nextStatus === "completed") && (
+                <label>
+                  Work Type
+                  <select
+                    value={selectedWorkType}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedWorkType(value);
+                      if (value !== "Other") {
+                        setCustomWorkType("");
+                      }
+                    }}
+                  >
+                    <option value="">Select work type</option>
+                    {workTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+              )}
+              {((editMode === "details" && editingBooking.status === "completed") || nextStatus === "completed") &&
+              selectedWorkType === "Other" ? (
+                <label>
+                  Other Work Type
+                  <input
+                    type="text"
+                    placeholder="Enter work type"
+                    value={customWorkType}
+                    onChange={(e) => setCustomWorkType(e.target.value)}
+                  />
+                </label>
+              ) : null}
               <label className="form__field--full">
                 Service Notes
                 <textarea

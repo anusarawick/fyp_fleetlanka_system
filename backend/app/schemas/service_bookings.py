@@ -11,6 +11,7 @@ class ServiceBookingCreate(BaseModel):
     requested_date: str
     status: Optional[str] = "pending"
     notes: Optional[str] = None
+    work_type: Optional[str] = None
     service_notes: Optional[str] = None
     proposed_tire_condition: Optional[str] = None
     proposed_brake_condition: Optional[str] = None
@@ -31,6 +32,7 @@ class ServiceBookingOut(BaseModel):
     requested_date: str
     status: Optional[str] = None
     notes: Optional[str] = None
+    work_type: Optional[str] = None
     service_notes: Optional[str] = None
     proposed_tire_condition: Optional[str] = None
     proposed_brake_condition: Optional[str] = None
@@ -47,6 +49,7 @@ class ServiceBookingUpdate(BaseModel):
     requested_date: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    work_type: Optional[str] = None
     service_notes: Optional[str] = None
     proposed_tire_condition: Optional[str] = None
     proposed_brake_condition: Optional[str] = None

@@ -34,6 +34,7 @@ type ServiceBooking = {
   requested_date: string;
   status?: string;
   notes?: string;
+  work_type?: string;
   service_notes?: string;
   proposed_tire_condition?: string;
   proposed_brake_condition?: string;
@@ -193,13 +194,20 @@ export default function Maintenance(props: MaintenanceProps) {
     currentCenterPage * centerRowsPerPage
   );
 
-  const filteredBookings = props.bookings.filter((booking) => {
+  const workflowBookings = props.bookings.filter((booking) => {
+    const status = booking.status || "pending";
+    const reviewStatus = booking.completion_review_status || "pending";
+    return status === "pending" || status === "confirmed" || (status === "completed" && reviewStatus !== "approved");
+  });
+
+  const filteredBookings = workflowBookings.filter((booking) => {
     const query = bookingSearch.trim().toLowerCase();
     if (!query) return true;
     return [
       booking.requested_date,
       booking.status,
       booking.notes,
+      booking.work_type,
       booking.service_notes,
       booking.completion_review_status,
       booking.proposed_tire_condition,
@@ -236,7 +244,7 @@ export default function Maintenance(props: MaintenanceProps) {
 
   useEffect(() => {
     setBookingPage(1);
-  }, [bookingRowsPerPage, bookingSearch, props.bookings.length]);
+  }, [bookingRowsPerPage, bookingSearch, workflowBookings.length]);
 
   useEffect(() => {
     if (!selectedBooking) return;
@@ -390,170 +398,6 @@ export default function Maintenance(props: MaintenanceProps) {
         </section>
       </div>
 
-      <section className="card" style={{ marginTop: "24px" }}>
-        <div className="card__header">
-          <h3>Maintenance History</h3>
-        </div>
-        {props.maintenance.length === 0 ? (
-          <p className="empty">No maintenance records yet.</p>
-        ) : (
-          <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
-                  <input
-                    type="search"
-                    placeholder="Date, type, vehicle..."
-                    value={maintenanceSearch}
-                    onChange={(e) => setMaintenanceSearch(e.target.value)}
-                  />
-                </label>
-                <label className="table-controls__label">
-                  Rows
-                  <select
-                    value={maintenanceRowsPerPage}
-                    onChange={(e) => setMaintenanceRowsPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentMaintenancePage} of {maintenanceTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setMaintenancePage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentMaintenancePage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))}
-                  disabled={currentMaintenancePage === maintenanceTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-            {filteredMaintenance.length === 0 ? (
-              <p className="empty">No maintenance records match the search.</p>
-            ) : (
-              <div className="table maintenance-table" style={{ ["--table-columns" as any]: 6 }}>
-                <div className="table__head maintenance-table__head">
-                  <span>Date</span>
-                  <span>Vehicle</span>
-                  <span>Service</span>
-                  <span>Source</span>
-                  <span>Cost</span>
-                  <span>Actions</span>
-                </div>
-                {paginatedMaintenance.map((record) => (
-                  <div className="table__row maintenance-table__row" key={record.id}>
-                    <span className="maintenance-table__cell" data-label="Date">{record.service_date}</span>
-                    <span className="maintenance-table__cell" data-label="Vehicle">
-                      {vehicleLabelMap[record.vehicle_id || ""] || "--"}
-                    </span>
-                    <span className="maintenance-table__cell" data-label="Service">{record.service_type || "Service"}</span>
-                    <span className="maintenance-table__cell" data-label="Source">
-                      <span className={`pill ${record.service_booking_id ? "pill--info" : "pill--warning"}`}>
-                        {record.service_booking_id ? "Service Booking" : "Manual"}
-                      </span>
-                    </span>
-                    <span className="maintenance-table__cell" data-label="Cost">
-                      {typeof record.cost_lkr === "number" ? `Rs.${record.cost_lkr.toLocaleString()}` : "--"}
-                    </span>
-                    <span className="table__actions maintenance-table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedRecord(record)}
-                        aria-label={`View maintenance ${record.id}`}
-                        title="View record"
-                      >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="3"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => {
-                          props.onEditMaintenance(record);
-                          setShowMaintenanceModal(true);
-                        }}
-                        aria-label={`Edit maintenance ${record.id}`}
-                        title="Edit record"
-                      >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        className="icon-action icon-action--danger"
-                        type="button"
-                        onClick={() => setDeleteTarget(record)}
-                        disabled={props.loading}
-                        aria-label={`Delete maintenance ${record.id}`}
-                        title="Delete record"
-                      >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-
       <div className="grid" style={{ marginTop: "24px" }}>
         <section className="card">
           <div className="card__header">
@@ -705,12 +549,15 @@ export default function Maintenance(props: MaintenanceProps) {
         </section>
       </div>
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      <section id="booking-workflow" className="card" style={{ marginTop: "24px" }}>
         <div className="card__header">
-          <h3>Service Bookings</h3>
+          <div>
+            <h3>Booking Workflow</h3>
+            <p className="muted">Track active bookings and approvals. Finalized work moves into maintenance history.</p>
+          </div>
         </div>
-        {props.bookings.length === 0 ? (
-          <p className="empty">No service bookings yet.</p>
+        {workflowBookings.length === 0 ? (
+          <p className="empty">No active or in-review service bookings.</p>
         ) : (
           <>
             <div className="table-controls">
@@ -719,7 +566,7 @@ export default function Maintenance(props: MaintenanceProps) {
                   Search
                   <input
                     type="search"
-                    placeholder="Date, vehicle, center..."
+                    placeholder="Date, vehicle, center, status..."
                     value={bookingSearch}
                     onChange={(e) => setBookingSearch(e.target.value)}
                   />
@@ -759,7 +606,7 @@ export default function Maintenance(props: MaintenanceProps) {
               </div>
             </div>
             {filteredBookings.length === 0 ? (
-              <p className="empty">No bookings match the search.</p>
+              <p className="empty">No workflow bookings match the search.</p>
             ) : (
               <div className="table bookings-table" style={{ ["--table-columns" as any]: 5 }}>
                 <div className="table__head bookings-table__head">
@@ -779,8 +626,22 @@ export default function Maintenance(props: MaintenanceProps) {
                       {centerLabelMap[booking.center_id || ""] || "--"}
                     </span>
                     <span className="bookings-table__cell" data-label="Status">
-                      <span className={`pill pill--${booking.status === "completed" ? "success" : booking.status === "cancelled" ? "danger" : booking.status === "confirmed" ? "info" : "warning"}`}>
-                        {booking.status || "pending"}
+                      <span className={`pill pill--${
+                        (booking.status || "pending") === "completed" &&
+                        (booking.completion_review_status || "pending") !== "approved"
+                          ? "warning"
+                          : booking.status === "completed"
+                            ? "success"
+                            : booking.status === "cancelled"
+                              ? "danger"
+                              : booking.status === "confirmed"
+                                ? "info"
+                                : "warning"
+                      }`}>
+                        {(booking.status || "pending") === "completed" &&
+                        (booking.completion_review_status || "pending") !== "approved"
+                          ? "Completed. Pending Approval"
+                          : booking.status || "pending"}
                       </span>
                     </span>
                     <span className="table__actions bookings-table__actions" data-label="Actions">
@@ -803,21 +664,6 @@ export default function Maintenance(props: MaintenanceProps) {
                           <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
                         </svg>
                       </button>
-                      {isPendingCompletionReview(booking) && (
-                        <button
-                          className="icon-action"
-                          type="button"
-                          onClick={() => setApproveBookingTarget(booking)}
-                          disabled={props.loading}
-                          aria-label={`Approve completion ${booking.id}`}
-                          title="Approve completion updates"
-                        >
-                          <svg className="icon-action__svg" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M7.5 12.5 10.5 15.5 16.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                          </svg>
-                        </button>
-                      )}
                       <button
                         className="icon-action"
                         type="button"
@@ -855,6 +701,182 @@ export default function Maintenance(props: MaintenanceProps) {
                         disabled={props.loading || (booking.status || "pending") !== "pending"}
                         aria-label={`Delete booking ${booking.id}`}
                         title="Delete booking"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      {isPendingCompletionReview(booking) && (
+                        <button
+                          className="btn btn--compact"
+                          type="button"
+                          onClick={() => setApproveBookingTarget(booking)}
+                          disabled={props.loading}
+                          aria-label={`Approve completion ${booking.id}`}
+                          title="Approve completion updates"
+                        >
+                          Approve
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "24px" }}>
+        <div className="card__header">
+          <h3>Maintenance History</h3>
+        </div>
+        {props.maintenance.length === 0 ? (
+          <p className="empty">No maintenance records yet.</p>
+        ) : (
+          <>
+            <div className="table-controls">
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Date, type, vehicle..."
+                    value={maintenanceSearch}
+                    onChange={(e) => setMaintenanceSearch(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select
+                    value={maintenanceRowsPerPage}
+                    onChange={(e) => setMaintenanceRowsPerPage(Number(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
+              <div className="table-pagination">
+                <span className="table-pagination__meta">
+                  Page {currentMaintenancePage} of {maintenanceTotalPages}
+                </span>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setMaintenancePage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentMaintenancePage === 1}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))}
+                  disabled={currentMaintenancePage === maintenanceTotalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            {filteredMaintenance.length === 0 ? (
+              <p className="empty">No maintenance records match the search.</p>
+            ) : (
+              <div className="table maintenance-table" style={{ ["--table-columns" as any]: 6 }}>
+                <div className="table__head maintenance-table__head">
+                  <span>Date</span>
+                  <span>Vehicle</span>
+                  <span>Service</span>
+                  <span>Source</span>
+                  <span>Cost</span>
+                  <span>Actions</span>
+                </div>
+                {paginatedMaintenance.map((record) => (
+                  <div className="table__row maintenance-table__row" key={record.id}>
+                    <span className="maintenance-table__cell" data-label="Date">{record.service_date}</span>
+                    <span className="maintenance-table__cell" data-label="Vehicle">
+                      {vehicleLabelMap[record.vehicle_id || ""] || "--"}
+                    </span>
+                    <span className="maintenance-table__cell" data-label="Service">{record.service_type || "Service"}</span>
+                    <span className="maintenance-table__cell" data-label="Source">
+                      <span className={`pill ${record.service_booking_id ? "pill--info" : "pill--warning"}`}>
+                        {record.service_booking_id ? "Service Booking" : "Manual"}
+                      </span>
+                    </span>
+                    <span className="maintenance-table__cell" data-label="Cost">
+                      {typeof record.cost_lkr === "number" ? `Rs.${record.cost_lkr.toLocaleString()}` : "--"}
+                    </span>
+                    <span className="table__actions maintenance-table__actions" data-label="Actions">
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => setSelectedRecord(record)}
+                        aria-label={`View maintenance ${record.id}`}
+                        title="View record"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="3"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => {
+                          props.onEditMaintenance(record);
+                          setShowMaintenanceModal(true);
+                        }}
+                        aria-label={`Edit maintenance ${record.id}`}
+                        title="Edit record"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M13.5 6.75 17.25 10.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-action icon-action--danger"
+                        type="button"
+                        onClick={() => setDeleteTarget(record)}
+                        disabled={props.loading}
+                        aria-label={`Delete maintenance ${record.id}`}
+                        title="Delete record"
                       >
                         <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
                           <path
@@ -1185,7 +1207,7 @@ export default function Maintenance(props: MaintenanceProps) {
 
       {selectedBooking && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Service booking details">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Service booking details">
             <div className="modal__header">
               <div>
                 <h3>Service Booking</h3>
@@ -1195,9 +1217,10 @@ export default function Maintenance(props: MaintenanceProps) {
                 ✕
               </button>
             </div>
-            <div className="details-grid">
+            <div className="details-grid details-grid--scroll">
               <div className="detail-item"><span>Date</span><strong>{selectedBooking.requested_date}</strong></div>
-              <div className="detail-item"><span>Status</span><strong>{selectedBooking.status || "pending"}</strong></div>
+              <div className="detail-item"><span>Status</span><strong>{(selectedBooking.status || "pending") === "completed" && (selectedBooking.completion_review_status || "pending") !== "approved" ? "Completed. Pending Approval" : selectedBooking.status || "pending"}</strong></div>
+              <div className="detail-item"><span>Work Type</span><strong>{selectedBooking.work_type || "--"}</strong></div>
               <div className="detail-item"><span>Review Status</span><strong>{selectedBooking.completion_review_status || "--"}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedBooking.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Center</span><strong>{centerLabelMap[selectedBooking.center_id || ""] || "--"}</strong></div>

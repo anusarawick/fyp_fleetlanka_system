@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
 import MapView from "../components/MapView";
-import { LiveTrip } from "../types";
+import { DriverScore, LiveTrip, Maintenance, MaintenancePrediction, ServiceBooking, Vehicle } from "../types";
+import { Link } from "react-router-dom";
 
 type DashboardProps = {
   vehicleCount: number;
   activeTrips: number;
-  maintenanceCount: number;
   fuelCostTotal: string;
-  maintenance: { id: string; service_type?: string; service_date: string }[];
+  maintenance: Maintenance[];
+  vehicles: Vehicle[];
+  driverScores: DriverScore[];
+  serviceBookings: ServiceBooking[];
+  topPerformers: Array<{ driverId: string; driverName: string; score: number }>;
+  maintenancePredictionMap: Record<string, MaintenancePrediction>;
   liveTrips: LiveTrip[];
-  lastMaintenancePrediction: string | null;
-  lastFuelPrediction: string | null;
   alerts: { title: string; meta: string }[];
   upcomingDocs: { id: string; doc_type: string; expiry_date?: string }[];
 };
@@ -27,15 +30,28 @@ function formatTime(value?: string) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatCompactDateTime(value?: string) {
+  if (!value) return "Unavailable";
+  const date = new Date(value);
+  return date.toLocaleString([], {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function Dashboard({
   vehicleCount,
   activeTrips,
-  maintenanceCount,
   fuelCostTotal,
   maintenance,
+  vehicles,
+  driverScores,
+  serviceBookings,
+  topPerformers,
+  maintenancePredictionMap,
   liveTrips,
-  lastMaintenancePrediction,
-  lastFuelPrediction,
   alerts,
   upcomingDocs,
 }: DashboardProps) {
@@ -49,6 +65,74 @@ export default function Dashboard({
 
   const liveCount = liveTrips.filter((trip) => !trip.stale).length;
   const staleCount = liveTrips.filter((trip) => trip.stale).length;
+  const vehiclesInMaintenance = useMemo(
+    () => vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance").slice(0, 4),
+    [vehicles]
+  );
+  const pendingApprovals = useMemo(
+    () =>
+      serviceBookings
+        .filter(
+          (booking) =>
+            (booking.status || "pending") === "completed" &&
+            (booking.completion_review_status || "pending") !== "approved"
+        )
+        .slice(0, 4),
+    [serviceBookings]
+  );
+  const highRiskVehicles = useMemo(
+    () =>
+      Object.values(maintenancePredictionMap)
+        .filter((prediction) => prediction.risk_level === "high" || prediction.risk_level === "medium")
+        .sort((a, b) => b.probability - a.probability)
+        .slice(0, 4),
+    [maintenancePredictionMap]
+  );
+  const upcomingMaintenance = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return maintenance
+      .map((record) => {
+        const dueDate = record.predicted_due_date;
+        const dueTime = dueDate ? new Date(dueDate).getTime() : Number.NaN;
+        return { record, dueDate, dueTime };
+      })
+      .filter(({ dueDate, dueTime }) => Boolean(dueDate) && Number.isFinite(dueTime) && dueTime >= now.getTime())
+      .sort((a, b) => a.dueTime - b.dueTime)
+      .slice(0, 4);
+  }, [maintenance]);
+  const performanceBuckets = useMemo(() => {
+    const latestByDriver = new Map<string, DriverScore>();
+    for (const row of driverScores) {
+      if (!latestByDriver.has(row.driver_id)) {
+        latestByDriver.set(row.driver_id, row);
+      }
+    }
+    const buckets = { excellent: 0, good: 0, average: 0, needsWork: 0 };
+    Array.from(latestByDriver.values()).forEach((driver) => {
+      if (driver.overall_score >= 85) buckets.excellent += 1;
+      else if (driver.overall_score >= 70) buckets.good += 1;
+      else if (driver.overall_score >= 55) buckets.average += 1;
+      else buckets.needsWork += 1;
+    });
+    return buckets;
+  }, [driverScores]);
+  const totalScoredDrivers =
+    performanceBuckets.excellent +
+    performanceBuckets.good +
+    performanceBuckets.average +
+    performanceBuckets.needsWork;
+  const donutStyle =
+    totalScoredDrivers > 0
+      ? {
+          background: `conic-gradient(
+            var(--success) 0 ${(performanceBuckets.excellent / totalScoredDrivers) * 100}%,
+            #10b981 ${(performanceBuckets.excellent / totalScoredDrivers) * 100}% ${((performanceBuckets.excellent + performanceBuckets.good) / totalScoredDrivers) * 100}%,
+            var(--warning) ${((performanceBuckets.excellent + performanceBuckets.good) / totalScoredDrivers) * 100}% ${((performanceBuckets.excellent + performanceBuckets.good + performanceBuckets.average) / totalScoredDrivers) * 100}%,
+            var(--danger) ${((performanceBuckets.excellent + performanceBuckets.good + performanceBuckets.average) / totalScoredDrivers) * 100}% 100%
+          )`,
+        }
+      : undefined;
 
   return (
     <>
@@ -67,9 +151,9 @@ export default function Dashboard({
         </div>
         <div className="stat-card stat-card--amber">
           <div className="stat-icon">🔧</div>
-          <div className="stat-value">{maintenanceCount}</div>
-          <div className="stat-label">Maintenance Due</div>
-          <div className="stat-sub">Upcoming services</div>
+          <div className="stat-value">{upcomingMaintenance.length}</div>
+          <div className="stat-label">Upcoming Maintenance</div>
+          <div className="stat-sub">Due today or later</div>
         </div>
         <div className="stat-card stat-card--purple">
           <div className="stat-icon">⛽</div>
@@ -158,32 +242,65 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Driver Performance</h2>
+            <h2>Top Driver Scores</h2>
           </div>
-          <div className="donut">
-            <div className="donut__center">Good</div>
-          </div>
-          <div className="legend">
-            <span className="legend__item legend__item--good">Excellent</span>
-            <span className="legend__item legend__item--avg">Average</span>
-            <span className="legend__item legend__item--poor">Needs work</span>
-          </div>
+          {topPerformers.length === 0 ? (
+            <p className="empty">No driver score snapshots available yet.</p>
+          ) : (
+            <>
+              <div className="donut" style={donutStyle}>
+                <div className="donut__center">{totalScoredDrivers}</div>
+              </div>
+              <div className="legend">
+                <span className="legend__item legend__item--good">Excellent {performanceBuckets.excellent}</span>
+                <span className="legend__item legend__item--live">Good {performanceBuckets.good}</span>
+                <span className="legend__item legend__item--avg">Average {performanceBuckets.average}</span>
+                <span className="legend__item legend__item--poor">Needs work {performanceBuckets.needsWork}</span>
+              </div>
+            </>
+          )}
         </div>
+
+        <Link className="card card--link-panel" to="/maintenance#booking-workflow">
+          <div className="card__header">
+            <h2>Pending Service Approvals</h2>
+          </div>
+          {pendingApprovals.length === 0 ? (
+            <p className="empty">No completed service bookings waiting for review.</p>
+          ) : (
+            <ul className="list">
+              {pendingApprovals.map((booking) => {
+                const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
+                return (
+                  <li key={booking.id}>
+                    <div className="list__title">{vehicle?.plate_no || "Vehicle"} awaiting review</div>
+                    <div className="list__meta">Completed {formatCompactDateTime(booking.completed_at || booking.requested_date)}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Link>
 
         <div className="card">
           <div className="card__header">
             <h2>Upcoming Maintenance</h2>
           </div>
-          {maintenance.length === 0 ? (
+          {upcomingMaintenance.length === 0 ? (
             <p className="empty">No upcoming maintenance scheduled</p>
           ) : (
             <ul className="list">
-              {maintenance.slice(0, 3).map((m) => (
-                <li key={m.id}>
-                  <div className="list__title">{m.service_type || "Service"}</div>
-                  <div className="list__meta">{m.service_date}</div>
-                </li>
-              ))}
+              {upcomingMaintenance.map(({ record, dueDate }) => {
+                const vehicle = vehicles.find((item) => item.id === record.vehicle_id);
+                return (
+                  <li key={record.id}>
+                    <div className="list__title">
+                      {vehicle?.plate_no || "Vehicle"} • {record.service_type || "Service"}
+                    </div>
+                    <div className="list__meta">Due {dueDate}</div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -208,19 +325,18 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Recent Alerts</h2>
-            {alerts.length > 0 && (
-              <span className="pill pill--warning">{alerts.length}</span>
-            )}
+            <h2>Vehicles in Maintenance</h2>
           </div>
-          {alerts.length === 0 ? (
-            <p className="empty">No active alerts</p>
+          {vehiclesInMaintenance.length === 0 ? (
+            <p className="empty">No vehicles are currently in maintenance mode.</p>
           ) : (
             <ul className="list">
-              {alerts.slice(0, 3).map((a, idx) => (
-                <li key={idx}>
-                  <div className="list__title">{a.title}</div>
-                  <div className="list__meta">{a.meta}</div>
+              {vehiclesInMaintenance.map((vehicle) => (
+                <li key={vehicle.id}>
+                  <div className="list__title">{vehicle.plate_no}</div>
+                  <div className="list__meta">
+                    {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle in maintenance"}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -232,31 +348,55 @@ export default function Dashboard({
             <h2>Quick Actions</h2>
           </div>
           <div className="quick-actions">
-            <button className="btn">+ Add Vehicle</button>
-            <button className="btn btn--secondary">Generate Report</button>
-            <button className="btn btn--secondary">Schedule Service</button>
+            <Link className="btn" to="/management">Add Vehicle</Link>
+            <Link className="btn btn--secondary" to="/maintenance">Log Maintenance</Link>
+            <Link className="btn btn--secondary" to="/maintenance">Book Service</Link>
+            <Link className="btn btn--secondary" to="/ml">Run ML Check</Link>
           </div>
         </div>
 
         <div className="card">
           <div className="card__header">
-            <h2>ML Insights</h2>
-            <span className="pill">AI</span>
+            <h2>High Maintenance Risk</h2>
           </div>
-          <div className="list">
-            <div>
-              <div className="list__title">Maintenance Prediction</div>
-              <div className="list__meta">
-                {lastMaintenancePrediction || "Run prediction to see results"}
-              </div>
-            </div>
-            <div>
-              <div className="list__title">Fuel Prediction</div>
-              <div className="list__meta">
-                {lastFuelPrediction || "Run prediction to see results"}
-              </div>
-            </div>
+          {highRiskVehicles.length === 0 ? (
+            <p className="empty">No recent maintenance risk results yet.</p>
+          ) : (
+            <ul className="list">
+              {highRiskVehicles.map((prediction) => {
+                const vehicle = vehicles.find((item) => item.id === prediction.vehicle_id);
+                return (
+                  <li key={prediction.id}>
+                    <div className="list__title">{vehicle?.plate_no || "Vehicle"}</div>
+                    <div className="list__meta">
+                      {prediction.risk_level} risk • {(prediction.probability * 100).toFixed(1)}%
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card__header">
+            <h2>Recent Alerts</h2>
+            {alerts.length > 0 && (
+              <span className="pill pill--warning">{alerts.length}</span>
+            )}
           </div>
+          {alerts.length === 0 ? (
+            <p className="empty">No active alerts</p>
+          ) : (
+            <ul className="list">
+              {alerts.slice(0, 4).map((a, idx) => (
+                <li key={idx}>
+                  <div className="list__title">{a.title}</div>
+                  <div className="list__meta">{a.meta}</div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
     </>
