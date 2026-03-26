@@ -78,10 +78,17 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips }: Trips
   const totalDistance = trips.reduce((sum, trip) => sum + (trip.distance_km || 0), 0);
   const completedTrips = trips.filter((trip) => !!trip.end_time);
   const activeTrips = trips.filter((trip) => !trip.end_time);
+  const liveTrackedTrips = liveTrips.filter((trip) => !trip.stale);
+  const staleTrackedTrips = liveTrips.filter((trip) => trip.stale);
   const avgDuration =
     completedTrips.length > 0
       ? completedTrips.reduce((sum, trip) => sum + (trip.duration_min || 0), 0) / completedTrips.length
       : 0;
+  const avgSpeed =
+    completedTrips.length > 0
+      ? completedTrips.reduce((sum, trip) => sum + (trip.avg_speed_kmh || 0), 0) / completedTrips.length
+      : 0;
+  const totalIdleMinutes = completedTrips.reduce((sum, trip) => sum + (trip.idle_min || 0), 0);
 
   const filteredTrips = useMemo(() => {
     return trips
@@ -119,7 +126,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips }: Trips
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
+      <div className="stats trips-stats">
         <div className="stat-card">
           <div className="stat-icon">🧭</div>
           <div className="stat-value">{trips.length}</div>
@@ -140,6 +147,56 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips }: Trips
           <div className="stat-value">{avgDuration > 0 ? formatDuration(Math.round(avgDuration)) : "--"}</div>
           <div className="stat-label">Avg Completed Duration</div>
         </div>
+      </div>
+
+      <div className="grid" style={{ marginBottom: "24px" }}>
+        <section className="card">
+          <div className="card__header">
+            <h3>Trip Overview</h3>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Completed Trips</div>
+              <div className="list__meta">{completedTrips.length} finished journeys recorded</div>
+            </li>
+            <li>
+              <div className="list__title">Average Speed</div>
+              <div className="list__meta">{avgSpeed > 0 ? `${avgSpeed.toFixed(1)} km/h` : "No completed speed data yet"}</div>
+            </li>
+            <li>
+              <div className="list__title">Idle Time Logged</div>
+              <div className="list__meta">{totalIdleMinutes > 0 ? formatDuration(totalIdleMinutes) : "No idle time recorded yet"}</div>
+            </li>
+          </ul>
+        </section>
+
+        <section className="card">
+          <div className="card__header">
+            <h3>Live Tracking Snapshot</h3>
+          </div>
+          {liveTrips.length === 0 ? (
+            <p className="empty">No trips are currently reporting live driver tracking.</p>
+          ) : (
+            <ul className="list">
+              <li>
+                <div className="list__title">Live Signals</div>
+                <div className="list__meta">{liveTrackedTrips.length} trips currently updating location</div>
+              </li>
+              <li>
+                <div className="list__title">Stale Signals</div>
+                <div className="list__meta">{staleTrackedTrips.length} active trips need a fresh GPS update</div>
+              </li>
+              {liveTrips.slice(0, 2).map((trip) => (
+                <li key={trip.trip_id}>
+                  <div className="list__title">{trip.vehicle_plate_no || vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</div>
+                  <div className="list__meta">
+                    {trip.driver_name || "Driver"} • Updated {formatCompactDateTime(trip.recorded_at)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
 
       <section className="card">
@@ -325,7 +382,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips }: Trips
               <div className="detail-item">
                 <span>Start Coordinates</span>
                 <strong>
-                  {selectedTrip.start_lat !== undefined && selectedTrip.start_lon !== undefined
+                  {selectedTrip.start_lat != null && selectedTrip.start_lon != null
                     ? `${selectedTrip.start_lat.toFixed(5)}, ${selectedTrip.start_lon.toFixed(5)}`
                     : "--"}
                 </strong>
@@ -333,7 +390,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips }: Trips
               <div className="detail-item">
                 <span>End Coordinates</span>
                 <strong>
-                  {selectedTrip.end_lat !== undefined && selectedTrip.end_lon !== undefined
+                  {selectedTrip.end_lat != null && selectedTrip.end_lon != null
                     ? `${selectedTrip.end_lat.toFixed(5)}, ${selectedTrip.end_lon.toFixed(5)}`
                     : "--"}
                 </strong>

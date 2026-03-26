@@ -1332,6 +1332,11 @@ body {
   gap: 10px;
 }
 
+.trips-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 24px;
+}
+
 .trips-table {
   overflow-x: auto;
 }
