@@ -2451,6 +2451,43 @@ textarea {
   font-size: 14px;
 }
 
+.prediction-audit {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.prediction-audit__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.prediction-audit__changes {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--panel-soft);
+  border: 1px solid rgba(116, 141, 174, 0.16);
+}
+
+.prediction-audit__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.prediction-audit__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

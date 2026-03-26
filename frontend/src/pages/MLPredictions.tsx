@@ -1,27 +1,95 @@
-import { FormEvent } from "react";
+import { useMemo } from "react";
 import { MaintenancePrediction, Vehicle } from "../types";
 
 type MLPredictionsProps = {
   vehicles: Vehicle[];
   mlVehicleId: string;
   setMlVehicleId: (v: string) => void;
+  maintenancePredictions: MaintenancePrediction[];
   maintenancePredictionMap: Record<string, MaintenancePrediction>;
-  maintFeatures: string;
-  setMaintFeatures: (v: string) => void;
-  fuelFeatures: string;
-  setFuelFeatures: (v: string) => void;
-  maintResult: string | null;
-  fuelResult: string | null;
   loading: boolean;
-  onPredictMaintenance: (e: FormEvent) => void;
-  onPredictFuel: (e: FormEvent) => void;
   onRunVehicleMaintenanceCheck: (vehicleId: string) => void;
 };
+
+function formatDateTime(value?: string) {
+  if (!value) return "--";
+  return new Date(value).toLocaleString("en-LK", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRiskLabel(value?: string) {
+  if (!value) return "--";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatFeatureValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "--";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  return String(value);
+}
+
+function formatFeatureLabel(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\bkmh\b/gi, "km/h")
+    .replace(/\bkm\b/gi, "km")
+    .replace(/\bcc\b/gi, "cc")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 export default function MLPredictions(props: MLPredictionsProps) {
   const selectedVehiclePrediction = props.mlVehicleId
     ? props.maintenancePredictionMap[props.mlVehicleId]
     : null;
+  const selectedVehicleHistory = useMemo(() => {
+    if (!props.mlVehicleId) return [];
+    return props.maintenancePredictions
+      .filter((prediction) => prediction.vehicle_id === props.mlVehicleId)
+      .sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime());
+  }, [props.maintenancePredictions, props.mlVehicleId]);
+  const latestPrediction = selectedVehicleHistory[0] || null;
+  const previousPrediction = selectedVehicleHistory[1] || null;
+  const predictionChanges = useMemo(() => {
+    if (!latestPrediction || !previousPrediction) return [];
+
+    const changes: string[] = [];
+    if (latestPrediction.risk_level !== previousPrediction.risk_level) {
+      changes.push(
+        `Risk changed from ${formatRiskLabel(previousPrediction.risk_level)} to ${formatRiskLabel(latestPrediction.risk_level)}`
+      );
+    }
+
+    const probabilityDelta = Math.round((latestPrediction.probability - previousPrediction.probability) * 100);
+    if (probabilityDelta !== 0) {
+      changes.push(
+        `Probability ${probabilityDelta > 0 ? "increased" : "decreased"} by ${Math.abs(probabilityDelta)} points`
+      );
+    }
+
+    const latestFeatures = latestPrediction.input_features || {};
+    const previousFeatures = previousPrediction.input_features || {};
+    const featureKeys = Array.from(
+      new Set([...Object.keys(latestFeatures), ...Object.keys(previousFeatures)])
+    );
+
+    for (const key of featureKeys) {
+      const before = previousFeatures[key];
+      const after = latestFeatures[key];
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        changes.push(
+          `${formatFeatureLabel(key)} changed: ${formatFeatureValue(before)} -> ${formatFeatureValue(after)}`
+        );
+      }
+    }
+
+    return changes;
+  }, [latestPrediction, previousPrediction]);
 
   return (
     <section className="section">
@@ -57,62 +125,42 @@ export default function MLPredictions(props: MLPredictionsProps) {
             </button>
           </div>
           {selectedVehiclePrediction ? (
-            <div className="result">
-              Latest result: {selectedVehiclePrediction.risk_level.toUpperCase()} {" "}
-              ({(selectedVehiclePrediction.probability * 100).toFixed(0)}%)
-            </div>
-          ) : null}
-        </section>
-
-        <section className="card">
-          <h3>Predict Maintenance</h3>
-          <p className="muted">
-            Enter features as comma-separated values per row. Example:
-            <br />
-            <code>10000,200,45,1500,85</code>
-          </p>
-          <form className="form" onSubmit={props.onPredictMaintenance}>
-            <label>
-              Features (rows separated by new lines)
-              <textarea
-                rows={4}
-                value={props.maintFeatures}
-                onChange={(e) => props.setMaintFeatures(e.target.value)}
-                required
-              />
-            </label>
-            <button className="btn" type="submit" disabled={props.loading}>
-              {props.loading ? "Predicting..." : "Predict Maintenance"}
-            </button>
-          </form>
-          {props.maintResult ? (
-            <div className="result">Prediction: {props.maintResult}</div>
-          ) : null}
-        </section>
-
-        <section className="card">
-          <h3>Predict Fuel</h3>
-          <p className="muted">
-            Enter features as comma-separated values per row. Example:
-            <br />
-            <code>120,40,500,10</code>
-          </p>
-          <form className="form" onSubmit={props.onPredictFuel}>
-            <label>
-              Features (rows separated by new lines)
-              <textarea
-                rows={4}
-                value={props.fuelFeatures}
-                onChange={(e) => props.setFuelFeatures(e.target.value)}
-                required
-              />
-            </label>
-            <button className="btn" type="submit" disabled={props.loading}>
-              {props.loading ? "Predicting..." : "Predict Fuel"}
-            </button>
-          </form>
-          {props.fuelResult ? (
-            <div className="result">Prediction: {props.fuelResult}</div>
+            <>
+              <div className="result">
+                Latest result: {selectedVehiclePrediction.risk_level.toUpperCase()}{" "}
+                ({(selectedVehiclePrediction.probability * 100).toFixed(0)}%)
+              </div>
+              {latestPrediction ? (
+                <div className="prediction-audit">
+                  <div className="prediction-audit__meta">
+                    <div className="detail-item">
+                      <span>Last Predicted</span>
+                      <strong>{formatDateTime(latestPrediction.predicted_at)}</strong>
+                    </div>
+                    <div className="detail-item">
+                      <span>Previous Risk</span>
+                      <strong>{previousPrediction ? formatRiskLabel(previousPrediction.risk_level) : "No previous run"}</strong>
+                    </div>
+                  </div>
+                  <div className="prediction-audit__changes">
+                    <span className="prediction-audit__label">What Changed</span>
+                    {predictionChanges.length > 0 ? (
+                      <ul className="prediction-audit__list">
+                        {predictionChanges.map((change) => (
+                          <li key={change}>{change}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="muted">
+                        {previousPrediction
+                          ? "No tracked feature changes since the previous prediction."
+                          : "Run this vehicle at least twice to compare prediction changes over time."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </section>
       </div>

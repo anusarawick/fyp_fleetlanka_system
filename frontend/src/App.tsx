@@ -625,16 +625,9 @@ function ManagerRoutes() {
               vehicles={data.vehicles}
               mlVehicleId={data.mlVehicleId}
               setMlVehicleId={data.setMlVehicleId}
+              maintenancePredictions={data.maintenancePredictions}
               maintenancePredictionMap={data.maintenancePredictionMap}
-              maintFeatures={data.maintFeatures}
-              setMaintFeatures={data.setMaintFeatures}
-              fuelFeatures={data.fuelFeatures}
-              setFuelFeatures={data.setFuelFeatures}
-              maintResult={data.maintResult}
-              fuelResult={data.fuelResult}
               loading={loading}
-              onPredictMaintenance={data.handlePredictMaintenance}
-              onPredictFuel={data.handlePredictFuel}
               onRunVehicleMaintenanceCheck={data.runVehicleMaintenanceCheck}
             />
           </>
