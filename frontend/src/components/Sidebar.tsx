@@ -44,6 +44,13 @@ export default function Sidebar({ role }: SidebarProps) {
               Dashboard
             </NavLink>
             <NavLink
+              to="/trips"
+              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+            >
+              <span className="nav-item__icon">🗺️</span>
+              Trips
+            </NavLink>
+            <NavLink
               to="/management"
               className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
             >

@@ -16,6 +16,7 @@ import Maintenance from "./pages/Maintenance";
 import ProfileSettings from "./pages/ProfileSettings";
 import Drivers from "./pages/Drivers";
 import ServicePortal from "./pages/ServicePortal";
+import TripsPage from "./pages/Trips";
 import { useState } from "react";
 
 // ===== ROLE SELECTION PAGE =====
@@ -385,6 +386,20 @@ function ManagerRoutes() {
               liveTrips={data.liveTrips}
               alerts={data.buildAlerts()}
               upcomingDocs={data.upcomingDocs}
+            />
+          </>
+        }
+      />
+      <Route
+        path="/trips"
+        element={
+          <>
+            <Topbar title="Trips" subtitle="Trip history and live session details" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <TripsPage
+              trips={data.trips}
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              liveTrips={data.liveTrips}
             />
           </>
         }
