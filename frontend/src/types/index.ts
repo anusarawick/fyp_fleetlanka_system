@@ -37,7 +37,20 @@ export type Trip = {
   org_id?: string;
   vehicle_id: string;
   driver_id?: string;
-  start_time: string;
+  status?: string;
+  trip_title?: string;
+  scheduled_start?: string;
+  origin_label?: string;
+  destination_label?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  destination_lat?: number;
+  destination_lon?: number;
+  contact_name?: string;
+  contact_phone?: string;
+  priority?: "low" | "normal" | "high" | "urgent";
+  notes?: string;
+  start_time?: string;
   end_time?: string;
   start_lat?: number;
   start_lon?: number;
@@ -62,6 +75,18 @@ export type LiveTrip = {
   speed_kmh?: number;
   start_time: string;
   stale: boolean;
+};
+
+export type SavedPlace = {
+  id: string;
+  org_id: string;
+  name: string;
+  label: string;
+  lat: number;
+  lon: number;
+  contact_name?: string;
+  contact_phone?: string;
+  notes?: string;
 };
 
 export type FuelLog = {

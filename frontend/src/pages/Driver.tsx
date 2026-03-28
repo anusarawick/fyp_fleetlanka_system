@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import TripRoutePreview from "../components/TripRoutePreview";
 
 type Vehicle = {
   id: string;
@@ -10,7 +11,20 @@ type Vehicle = {
 type Trip = {
   id: string;
   vehicle_id?: string;
-  start_time: string;
+  status?: string;
+  trip_title?: string;
+  scheduled_start?: string;
+  origin_label?: string;
+  destination_label?: string;
+  origin_lat?: number;
+  origin_lon?: number;
+  destination_lat?: number;
+  destination_lon?: number;
+  contact_name?: string;
+  contact_phone?: string;
+  priority?: string;
+  notes?: string;
+  start_time?: string;
   end_time?: string;
   distance_km?: number;
   duration_min?: number;
@@ -40,8 +54,6 @@ type DriverProps = {
   vehicles: Vehicle[];
   trips: Trip[];
   loading: boolean;
-  selectedVehicle: string;
-  setSelectedVehicle: (v: string) => void;
   activeTripId: string | null;
   tripTrackingStatus: "inactive" | "tracking" | "stale" | "error";
   tripTrackingLastUpdated: string | null;
@@ -53,7 +65,7 @@ type DriverProps = {
     distance: number;
     consistency: number;
   };
-  startTrip: () => void;
+  startTrip: (tripId?: string) => void;
   stopTrip: () => void;
   geoSupported?: boolean;
   onSignOut: () => void;
@@ -73,6 +85,18 @@ function formatDuration(minutes?: number) {
   if (!hours) return `${mins} min`;
   if (!mins) return `${hours}h`;
   return `${hours}h ${mins}m`;
+}
+
+function deriveTripStatus(trip: Trip) {
+  if (trip.status) return trip.status;
+  if (trip.end_time) return "completed";
+  if (trip.start_time) return "in_progress";
+  return "assigned";
+}
+
+function formatPriority(value?: string) {
+  if (!value) return "Normal";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export default function DriverTrips(props: DriverProps) {
@@ -102,13 +126,23 @@ export default function DriverTrips(props: DriverProps) {
   const [newPassword, setNewPassword] = useState("");
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [showActiveTripDetails, setShowActiveTripDetails] = useState(false);
 
   const activeTrip = props.trips.find((t) => t.id === props.activeTripId);
   const activeVehicle = props.vehicles.find((vehicle) => vehicle.id === activeTrip?.vehicle_id);
+  const assignedTrips = useMemo(
+    () =>
+      props.trips
+        .filter((trip) => deriveTripStatus(trip) === "assigned")
+        .sort((a, b) => new Date(a.scheduled_start || 0).getTime() - new Date(b.scheduled_start || 0).getTime()),
+    [props.trips]
+  );
+  const nextAssignedTrip = assignedTrips[0] || null;
+  const nextAssignedVehicle = props.vehicles.find((vehicle) => vehicle.id === nextAssignedTrip?.vehicle_id);
   const completedTrips = useMemo(
     () =>
       props.trips
-        .filter((t) => t.end_time)
+        .filter((t) => deriveTripStatus(t) === "completed")
         .sort((a, b) => new Date(b.end_time || b.start_time).getTime() - new Date(a.end_time || a.start_time).getTime()),
     [props.trips]
   );
@@ -146,7 +180,7 @@ export default function DriverTrips(props: DriverProps) {
     if (!token) return;
     try {
       if (!fuelDate || !fuelLiters) throw new Error("Fuel date and liters are required");
-      const vehicleId = props.activeTripId && activeVehicle ? activeVehicle.id : props.selectedVehicle;
+      const vehicleId = props.activeTripId && activeVehicle ? activeVehicle.id : nextAssignedVehicle?.id;
       if (!vehicleId) throw new Error("Select a vehicle before logging fuel");
       const created = await apiPost<FuelLog>(
         "/fuel-logs",
@@ -197,7 +231,7 @@ export default function DriverTrips(props: DriverProps) {
 
   const homeRecentTrips = completedTrips.slice(0, 3);
 
-  const currentVehicleForFuel = activeVehicle || props.vehicles.find((vehicle) => vehicle.id === props.selectedVehicle);
+  const currentVehicleForFuel = activeVehicle || nextAssignedVehicle;
 
   return (
     <div className="pwa-app">
@@ -266,15 +300,22 @@ export default function DriverTrips(props: DriverProps) {
                   </span>
                 </div>
                 <div className="pwa-trip-card__actions">
+                  <button
+                    className="pwa-btn pwa-btn--outline"
+                    type="button"
+                    onClick={() => setShowActiveTripDetails(true)}
+                  >
+                    <span>📋</span> View Trip Details
+                  </button>
                   <button className="pwa-btn pwa-btn--outline" disabled>
                     <span>📍</span> {props.geoSupported ? "Driver tracking on" : "GPS not supported"}
                   </button>
-                <button
-                  className="pwa-btn pwa-btn--dark"
-                  type="button"
-                  onClick={props.stopTrip}
-                  disabled={props.loading}
-                >
+                  <button
+                    className="pwa-btn pwa-btn--dark"
+                    type="button"
+                    onClick={props.stopTrip}
+                    disabled={props.loading}
+                  >
                     {props.loading ? "Ending..." : "End Trip"}
                   </button>
                 </div>
@@ -283,26 +324,80 @@ export default function DriverTrips(props: DriverProps) {
               <div className="pwa-start-card">
                 <div className="pwa-start-card__header">
                   <span>🚗</span>
-                  <span>Start a New Trip</span>
+                  <span>Assigned Trip</span>
                 </div>
-                <div className="pwa-start-card__form">
-                  <label className="pwa-label">Select Vehicle</label>
-                  <select
-                    className="pwa-select"
-                    value={props.selectedVehicle}
-                    onChange={(e) => props.setSelectedVehicle(e.target.value)}
-                  >
-                    <option value="">Choose vehicle...</option>
-                    {props.vehicles.map((v) => (
-                      <option key={v.id} value={v.id}>{v.plate_no}</option>
-                    ))}
-                  </select>
-                </div>
+                {nextAssignedTrip ? (
+                  <>
+                    <div className="pwa-start-card__form">
+                      <label className="pwa-label">Trip Title</label>
+                      <input className="pwa-select" value={nextAssignedTrip.trip_title || "Assigned trip"} readOnly />
+                    </div>
+                    <div className="pwa-start-card__form">
+                      <label className="pwa-label">Vehicle</label>
+                      <input className="pwa-select" value={nextAssignedVehicle?.plate_no || ""} readOnly />
+                    </div>
+                    <div className="pwa-start-card__form">
+                      <label className="pwa-label">Scheduled Start</label>
+                      <input
+                        className="pwa-select"
+                        value={nextAssignedTrip.scheduled_start ? formatDateTime(nextAssignedTrip.scheduled_start) : "Not scheduled"}
+                        readOnly
+                      />
+                    </div>
+                    <div className="pwa-assignment-grid">
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">From</span>
+                        <strong>{nextAssignedTrip.origin_label || "--"}</strong>
+                      </div>
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">To</span>
+                        <strong>{nextAssignedTrip.destination_label || "--"}</strong>
+                      </div>
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">Priority</span>
+                        <strong>{formatPriority(nextAssignedTrip.priority)}</strong>
+                      </div>
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">Contact</span>
+                        <strong>{nextAssignedTrip.contact_name || nextAssignedTrip.contact_phone || "--"}</strong>
+                      </div>
+                    </div>
+                    {(nextAssignedTrip.origin_lat != null && nextAssignedTrip.origin_lon != null) ||
+                    (nextAssignedTrip.destination_lat != null && nextAssignedTrip.destination_lon != null) ? (
+                      <div className="pwa-start-card__form">
+                        <label className="pwa-label">Route Preview</label>
+                        <TripRoutePreview
+                          origin={
+                            nextAssignedTrip.origin_lat != null && nextAssignedTrip.origin_lon != null
+                              ? [nextAssignedTrip.origin_lat, nextAssignedTrip.origin_lon]
+                              : null
+                          }
+                          destination={
+                            nextAssignedTrip.destination_lat != null && nextAssignedTrip.destination_lon != null
+                              ? [nextAssignedTrip.destination_lat, nextAssignedTrip.destination_lon]
+                              : null
+                          }
+                        />
+                      </div>
+                    ) : null}
+                    {nextAssignedTrip.notes ? (
+                      <div className="pwa-start-card__form">
+                        <label className="pwa-label">Notes</label>
+                        <textarea className="pwa-select" value={nextAssignedTrip.notes} readOnly rows={3} />
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="pwa-empty">
+                    <span>🗓️</span>
+                    <span>No trip assigned. Contact your manager.</span>
+                  </div>
+                )}
                 <button
                   className="pwa-btn pwa-btn--primary pwa-btn--full"
                   type="button"
-                  onClick={props.startTrip}
-                  disabled={props.loading || !props.selectedVehicle}
+                  onClick={() => props.startTrip(nextAssignedTrip?.id)}
+                  disabled={props.loading || !nextAssignedTrip}
                 >
                   {props.loading ? "Starting..." : "Start Trip"}
                 </button>
@@ -433,6 +528,40 @@ export default function DriverTrips(props: DriverProps) {
 
         {activeTab === "trips" && (
           <>
+            {assignedTrips.length > 0 && (
+              <div className="pwa-section">
+                <div className="pwa-section__title">Assigned Trips</div>
+                <p className="pwa-section__subtitle">Trips assigned by your manager and ready to start.</p>
+                <div className="pwa-trip-list">
+                  {assignedTrips.map((trip) => {
+                    const vehicle = props.vehicles.find((v) => v.id === trip.vehicle_id);
+                    return (
+                      <div key={trip.id} className="pwa-trip-item">
+                        <div className="pwa-trip-item__header">
+                          <span className="pwa-trip-item__route">{trip.trip_title || vehicle?.plate_no || "Assigned Trip"}</span>
+                          <span className="pwa-pill pwa-pill--scheduled">Assigned</span>
+                        </div>
+                        <div className="pwa-trip-item__time">
+                          {vehicle?.plate_no || "Vehicle"} • {trip.scheduled_start ? formatDateTime(trip.scheduled_start) : "No scheduled time"}
+                        </div>
+                        <div className="pwa-trip-item__footer">
+                          <span className="pwa-trip-item__duration">
+                            {[trip.origin_label, trip.destination_label].filter(Boolean).join(" -> ") || trip.notes || "Ready to start"}
+                          </span>
+                        </div>
+                        {(trip.contact_name || trip.priority) && (
+                          <div className="pwa-trip-item__meta">
+                            <span>{trip.contact_name || "No contact"}</span>
+                            <span>{formatPriority(trip.priority)}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="pwa-section">
               <div className="pwa-section__title">Trip History</div>
               <p className="pwa-section__subtitle">Open any trip to see the full driving summary.</p>
@@ -635,6 +764,95 @@ export default function DriverTrips(props: DriverProps) {
           </>
         )}
       </main>
+
+      {showActiveTripDetails && activeTrip && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Current trip details">
+            <div className="modal__header">
+              <div>
+                <h3>Current Trip Details</h3>
+                <p className="modal__subtle">{activeVehicle?.plate_no || "Assigned vehicle"} • In Progress</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setShowActiveTripDetails(false)} aria-label="Close trip details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item">
+                <span>Trip Title</span>
+                <strong>{activeTrip.trip_title || "Assigned trip"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Vehicle</span>
+                <strong>{activeVehicle?.plate_no || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Started</span>
+                <strong>{formatDateTime(activeTrip.start_time)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Scheduled Start</span>
+                <strong>{activeTrip.scheduled_start ? formatDateTime(activeTrip.scheduled_start) : "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Origin</span>
+                <strong>{activeTrip.origin_label || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Destination</span>
+                <strong>{activeTrip.destination_label || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Priority</span>
+                <strong>{formatPriority(activeTrip.priority)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Person</span>
+                <strong>{activeTrip.contact_name || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Phone</span>
+                <strong>{activeTrip.contact_phone || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Tracking</span>
+                <strong>{props.tripTrackingStatus}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Last Update</span>
+                <strong>{props.tripTrackingLastUpdated ? formatDateTime(props.tripTrackingLastUpdated) : "--"}</strong>
+              </div>
+              <div className="detail-item detail-item--full">
+                <span>Notes</span>
+                <strong>{activeTrip.notes || "--"}</strong>
+              </div>
+              {(activeTrip.origin_lat != null && activeTrip.origin_lon != null) ||
+              (activeTrip.destination_lat != null && activeTrip.destination_lon != null) ? (
+                <div className="detail-item detail-item--full">
+                  <span>Route Preview</span>
+                  <TripRoutePreview
+                    origin={
+                      activeTrip.origin_lat != null && activeTrip.origin_lon != null
+                        ? [activeTrip.origin_lat, activeTrip.origin_lon]
+                        : null
+                    }
+                    destination={
+                      activeTrip.destination_lat != null && activeTrip.destination_lon != null
+                        ? [activeTrip.destination_lat, activeTrip.destination_lon]
+                        : null
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setShowActiveTripDetails(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="pwa-nav">
         <button

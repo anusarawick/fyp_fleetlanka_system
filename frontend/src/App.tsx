@@ -318,8 +318,6 @@ function DriverRoutes() {
     driverScore,
     driverScoreLabel,
     driverScoreBreakdown,
-    selectedVehicle,
-    setSelectedVehicle,
     activeTripId,
     tripTrackingStatus,
     tripTrackingLastUpdated,
@@ -334,8 +332,6 @@ function DriverRoutes() {
       vehicles={vehicles}
       trips={trips}
       loading={loading}
-      selectedVehicle={selectedVehicle}
-      setSelectedVehicle={setSelectedVehicle}
       activeTripId={activeTripId}
       tripTrackingStatus={tripTrackingStatus}
       tripTrackingLastUpdated={tripTrackingLastUpdated}
@@ -400,6 +396,10 @@ function ManagerRoutes() {
               vehicles={data.vehicles}
               drivers={data.drivers}
               liveTrips={data.liveTrips}
+              loading={loading}
+              onCreateTripAssignment={data.handleCreateTripAssignment}
+              onUpdateTripAssignment={data.handleUpdateTripAssignment}
+              onDeleteTrip={data.handleDeleteTripRecord}
             />
           </>
         }

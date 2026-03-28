@@ -111,13 +111,39 @@ create table if not exists public.vehicles (
   unique (org_id, plate_no)
 );
 
+create table if not exists public.saved_places (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  name text not null,
+  label text not null,
+  lat numeric not null,
+  lon numeric not null,
+  contact_name text,
+  contact_phone text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
 -- Trips (summary)
 create table if not exists public.trips (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid not null references public.vehicles(id) on delete cascade,
   driver_id uuid references public.profiles(id),
-  start_time timestamptz not null,
+  status text not null default 'assigned' check (status in ('assigned', 'in_progress', 'completed', 'cancelled')),
+  trip_title text,
+  scheduled_start timestamptz,
+  origin_label text,
+  destination_label text,
+  origin_lat numeric,
+  origin_lon numeric,
+  destination_lat numeric,
+  destination_lon numeric,
+  contact_name text,
+  contact_phone text,
+  priority text check (priority in ('low', 'normal', 'high', 'urgent')),
+  notes text,
+  start_time timestamptz,
   end_time timestamptz,
   start_lat numeric,
   start_lon numeric,
@@ -280,6 +306,7 @@ alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
 alter table public.driver_scores enable row level security;
 alter table public.maintenance_predictions enable row level security;
+alter table public.saved_places enable row level security;
 
 -- Organizations policies
 create policy "org_select" on public.organizations
@@ -333,6 +360,10 @@ create policy "driver_scores_org" on public.driver_scores
   with check (org_id = public.current_org_id());
 
 create policy "maintenance_predictions_org" on public.maintenance_predictions
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "saved_places_org" on public.saved_places
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 

@@ -127,6 +127,17 @@ def _is_driver(profile: Dict[str, Any]) -> bool:
     return profile.get("role") == "driver"
 
 
+def _derive_trip_status(trip: dict) -> str:
+    status = trip.get("status")
+    if isinstance(status, str) and status.strip():
+        return status
+    if trip.get("end_time"):
+        return "completed"
+    if trip.get("start_time"):
+        return "in_progress"
+    return "assigned"
+
+
 def _get_trip_for_profile(supabase, profile: dict, trip_id: str) -> dict:
     query = supabase.table("trips").select("*").eq("id", trip_id).eq("org_id", profile["org_id"])
     if _is_driver(profile):
@@ -149,7 +160,7 @@ def list_trips(
         supabase.table("trips")
         .select("*")
         .eq("org_id", profile["org_id"])
-        .order("start_time", desc=True)
+        .order("created_at", desc=True)
     )
     if _is_driver(profile):
         query = query.eq("driver_id", profile["id"])
@@ -167,8 +178,9 @@ def list_live_trips(
 
     trips_response = (
         supabase.table("trips")
-        .select("id,vehicle_id,driver_id,start_time")
+        .select("id,vehicle_id,driver_id,start_time,status")
         .eq("org_id", profile["org_id"])
+        .eq("status", "in_progress")
         .is_("end_time", "null")
         .order("start_time", desc=True)
         .execute()
@@ -259,7 +271,14 @@ def create_trip(
     data = payload.model_dump()
     data["org_id"] = org_id
     if _is_driver(profile):
-        data["driver_id"] = profile["id"]
+        raise HTTPException(status_code=403, detail="Drivers must start manager-assigned trips")
+    if not data.get("driver_id"):
+        raise HTTPException(status_code=400, detail="Driver assignment is required")
+    if data.get("status") not in (None, "assigned", "cancelled"):
+        raise HTTPException(status_code=400, detail="Managers can only create assigned or cancelled trips")
+    data["status"] = data.get("status") or "assigned"
+    if data["status"] == "assigned":
+        data["start_time"] = None
     response = supabase.table("trips").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
@@ -275,8 +294,53 @@ def update_trip(
 ) -> TripOut:
     token = _require_token(token)
     supabase = get_supabase_client(use_service_role=True)
-    _get_trip_for_profile(supabase, profile, trip_id)
+    existing_trip = _get_trip_for_profile(supabase, profile, trip_id)
     data = payload.model_dump(exclude_none=True)
+    current_status = _derive_trip_status(existing_trip)
+    next_status = data.get("status", current_status)
+
+    if _is_driver(profile):
+        if any(
+            field in data
+            for field in (
+                "vehicle_id",
+                "driver_id",
+                "trip_title",
+                "scheduled_start",
+                "origin_label",
+                "destination_label",
+                "origin_lat",
+                "origin_lon",
+                "destination_lat",
+                "destination_lon",
+                "contact_name",
+                "contact_phone",
+                "priority",
+                "notes",
+            )
+        ):
+            raise HTTPException(status_code=403, detail="Drivers cannot change trip assignment details")
+        if current_status == "assigned":
+            if next_status != "in_progress":
+                raise HTTPException(status_code=403, detail="Assigned trips can only be started by the assigned driver")
+            if not data.get("start_time"):
+                raise HTTPException(status_code=400, detail="Start time is required when starting an assigned trip")
+        elif current_status == "in_progress":
+            if next_status != "completed":
+                raise HTTPException(status_code=403, detail="In-progress trips can only be completed by the driver")
+            if not data.get("end_time"):
+                raise HTTPException(status_code=400, detail="End time is required when completing a trip")
+        else:
+            raise HTTPException(status_code=403, detail="Completed or cancelled trips cannot be edited by the driver")
+    else:
+        if current_status not in {"assigned", "cancelled"}:
+            raise HTTPException(status_code=403, detail="Managers can only edit assigned or cancelled trips")
+        if next_status not in {"assigned", "cancelled"}:
+            raise HTTPException(status_code=403, detail="Managers can only keep trips assigned or cancelled before they start")
+        if next_status == "assigned":
+            data["start_time"] = None
+            data["end_time"] = None
+
     response = (
         supabase.table("trips").update(data).eq("id", trip_id).eq("org_id", profile["org_id"]).execute()
     )
@@ -284,7 +348,7 @@ def update_trip(
         raise HTTPException(status_code=400, detail="Update failed")
     updated_trip = response.data[0]
 
-    should_finalize = "end_time" in data
+    should_finalize = ("end_time" in data) or next_status == "completed"
     metrics_fields = {"distance_km", "duration_min", "avg_speed_kmh", "idle_min"}
     location_fields = {"start_lat", "start_lon", "end_lat", "end_lon"}
     if should_finalize:
@@ -318,6 +382,9 @@ def add_gps_point(
         raise HTTPException(status_code=400, detail="trip_id mismatch")
     supabase = get_supabase_client(use_service_role=True)
     _get_trip_for_profile(supabase, profile, trip_id)
+    trip = _get_trip_for_profile(supabase, profile, trip_id)
+    if _derive_trip_status(trip) != "in_progress":
+        raise HTTPException(status_code=400, detail="GPS points can only be added to in-progress trips")
     response = supabase.table("gps_points").insert(payload.model_dump()).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
@@ -332,7 +399,11 @@ def delete_trip(
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(use_service_role=True)
-    _get_trip_for_profile(supabase, profile, trip_id)
+    trip = _get_trip_for_profile(supabase, profile, trip_id)
+    if _is_driver(profile):
+        raise HTTPException(status_code=403, detail="Drivers cannot delete trips")
+    if _derive_trip_status(trip) not in {"assigned", "cancelled"}:
+        raise HTTPException(status_code=403, detail="Only assigned or cancelled trips can be deleted")
     response = (
         supabase.table("trips")
         .delete()

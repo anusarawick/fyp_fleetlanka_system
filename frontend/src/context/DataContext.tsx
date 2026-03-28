@@ -205,8 +205,46 @@ type DataContextType = {
     handleEditDriver: (driver: Driver) => void;
     handleCancelDriverEdit: () => void;
     handleDeleteDriver: (driverId: string) => Promise<void>;
-    startTrip: () => Promise<void>;
+    startTrip: (tripId?: string) => Promise<void>;
     stopTrip: () => Promise<void>;
+    handleCreateTripAssignment: (payload: {
+        vehicle_id: string;
+        driver_id: string;
+        trip_title?: string;
+        scheduled_start?: string;
+        origin_label?: string;
+        destination_label?: string;
+        origin_lat?: number;
+        origin_lon?: number;
+        destination_lat?: number;
+        destination_lon?: number;
+        contact_name?: string;
+        contact_phone?: string;
+        priority?: string;
+        notes?: string;
+        status?: string;
+    }) => Promise<void>;
+    handleUpdateTripAssignment: (
+        tripId: string,
+        payload: {
+            vehicle_id?: string;
+            driver_id?: string;
+            trip_title?: string;
+            scheduled_start?: string;
+            origin_label?: string;
+            destination_label?: string;
+            origin_lat?: number;
+            origin_lon?: number;
+            destination_lat?: number;
+            destination_lon?: number;
+            contact_name?: string;
+            contact_phone?: string;
+            priority?: string;
+            notes?: string;
+            status?: string;
+        }
+    ) => Promise<void>;
+    handleDeleteTripRecord: (tripId: string) => Promise<void>;
     handleAddFuel: (e: FormEvent) => Promise<void>;
     handleEditFuel: (fuelLog: FuelLog) => void;
     handleCancelFuelEdit: () => void;
@@ -255,6 +293,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [serviceBookings, setServiceBookings] = useState<ServiceBooking[]>([]);
     const [driverScores, setDriverScores] = useState<DriverScore[]>([]);
     const [maintenancePredictions, setMaintenancePredictions] = useState<MaintenancePrediction[]>([]);
+
+    const deriveTripStatus = (trip: Trip) => {
+        if (trip.status) return trip.status;
+        if (trip.end_time) return "completed";
+        if (trip.start_time) return "in_progress";
+        return "assigned";
+    };
 
     // Vehicle form
     const [plateNo, setPlateNo] = useState("");
@@ -354,7 +399,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }),
         []
     );
-    const activeTrips = trips.filter((t) => !t.end_time).length;
+    const activeTrips = trips.filter((t) => deriveTripStatus(t) === "in_progress").length;
     const fuelCostTotal = fuelLogs.reduce((sum, f) => sum + (f.cost_lkr || 0), 0);
 
     const upcomingDocs = documents.filter((d) => {
@@ -564,7 +609,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     ]);
                     setVehicles(v);
                     setTrips(t);
-                    const activeTrip = t.find((trip) => !trip.end_time) || null;
+                    const activeTrip = t.find((trip) => deriveTripStatus(trip) === "in_progress") || null;
                     setActiveTripId(activeTrip?.id || null);
                     setTripTrackingStatus(activeTrip ? "stale" : "inactive");
                     setTripTrackingLastUpdated(null);
@@ -1009,19 +1054,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    async function startTrip() {
-        if (!token || !selectedVehicle) return;
+    async function startTrip(tripId?: string) {
+        if (!token) return;
         setError(null);
         setLoading(true);
         try {
             if (role !== "driver") throw new Error("Only drivers can start trips");
             if (!geoSupported)
                 throw new Error("Geolocation is not supported on this device");
+            if (!tripId) throw new Error("No assigned trip is available to start");
             const now = new Date();
-            const payload = { vehicle_id: selectedVehicle, start_time: now.toISOString() };
-            const trip = await apiPost<Trip>("/trips", payload, token);
+            const payload = { status: "in_progress", start_time: now.toISOString() };
+            const trip = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
             setActiveTripId(trip.id);
-            setTrips((prev) => [trip, ...prev]);
+            setTrips((prev) => prev.map((t) => (t.id === trip.id ? trip : t)));
             setTripTrackingStatus("tracking");
             setTripTrackingLastUpdated(null);
         } catch (err: any) {
@@ -1037,7 +1083,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             const now = new Date();
-            const payload = { end_time: now.toISOString() };
+            const payload = { status: "completed", end_time: now.toISOString() };
             const updated = await apiPatch<Trip>(`/trips/${activeTripId}`, payload, token);
             setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
             setActiveTripId(null);
@@ -1049,6 +1095,83 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
         } catch (err: any) {
             setError(err.message || "Stop trip failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleCreateTripAssignment(payload: {
+        vehicle_id: string;
+        driver_id: string;
+        trip_title?: string;
+        scheduled_start?: string;
+        origin_label?: string;
+        destination_label?: string;
+        origin_lat?: number;
+        origin_lon?: number;
+        destination_lat?: number;
+        destination_lon?: number;
+        contact_name?: string;
+        contact_phone?: string;
+        priority?: string;
+        notes?: string;
+        status?: string;
+    }) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const created = await apiPost<Trip>("/trips", payload, token);
+            setTrips((prev) => [created, ...prev]);
+        } catch (err: any) {
+            setError(err.message || "Trip assignment failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleUpdateTripAssignment(
+        tripId: string,
+        payload: {
+            vehicle_id?: string;
+            driver_id?: string;
+            trip_title?: string;
+            scheduled_start?: string;
+            origin_label?: string;
+            destination_label?: string;
+            origin_lat?: number;
+            origin_lon?: number;
+            destination_lat?: number;
+            destination_lon?: number;
+            contact_name?: string;
+            contact_phone?: string;
+            priority?: string;
+            notes?: string;
+            status?: string;
+        }
+    ) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const updated = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
+            setTrips((prev) => prev.map((trip) => (trip.id === updated.id ? updated : trip)));
+        } catch (err: any) {
+            setError(err.message || "Trip update failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleDeleteTripRecord(tripId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            await apiDelete(`/trips/${tripId}`, token);
+            setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
+        } catch (err: any) {
+            setError(err.message || "Trip delete failed");
         } finally {
             setLoading(false);
         }
@@ -1723,6 +1846,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleDeleteDriver,
                 startTrip,
                 stopTrip,
+                handleCreateTripAssignment,
+                handleUpdateTripAssignment,
+                handleDeleteTripRecord,
                 handleAddFuel,
                 handleEditFuel,
                 handleCancelFuelEdit,
