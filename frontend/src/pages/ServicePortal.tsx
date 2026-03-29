@@ -503,7 +503,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
       {editingBooking && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal modal--wide" role="dialog" aria-modal="true" aria-label="Update booking">
+          <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Update booking">
             <div className="modal__header">
               <div>
                 <h3>
@@ -620,26 +620,26 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                   </label>
                 </>
               ) : null}
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeActionModal}>
-                  Cancel
-                </button>
-                <button className={`btn${nextStatus === "cancelled" ? " btn--danger" : ""}`} type="button" onClick={submitBookingUpdate} disabled={saving}>
-                  {saving
-                    ? "Saving..."
-                    : editMode === "details"
-                      ? "Save Details"
-                      : nextStatus === "pending"
-                        ? "Mark Pending"
-                        : nextStatus === "confirmed"
-                        ? editingBooking.status === "completed"
-                          ? "Reopen Booking"
-                          : "Confirm Booking"
-                        : nextStatus === "cancelled"
-                          ? "Cancel Booking"
-                          : "Mark Completed"}
-                </button>
-              </div>
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeActionModal}>
+                Cancel
+              </button>
+              <button className={`btn${nextStatus === "cancelled" ? " btn--danger" : ""}`} type="button" onClick={submitBookingUpdate} disabled={saving}>
+                {saving
+                  ? "Saving..."
+                  : editMode === "details"
+                    ? "Save Details"
+                    : nextStatus === "pending"
+                      ? "Mark Pending"
+                      : nextStatus === "confirmed"
+                      ? editingBooking.status === "completed"
+                        ? "Reopen Booking"
+                        : "Confirm Booking"
+                      : nextStatus === "cancelled"
+                        ? "Cancel Booking"
+                        : "Mark Completed"}
+              </button>
             </div>
           </div>
         </div>

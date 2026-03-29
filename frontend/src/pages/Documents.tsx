@@ -389,7 +389,7 @@ export default function Documents(props: DocumentsProps) {
 
       {showDocumentModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Document form">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Document form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingDocumentId ? "Edit Document" : "Add Document"}</h3>
@@ -403,7 +403,7 @@ export default function Documents(props: DocumentsProps) {
                 ✕
               </button>
             </div>
-            <form className="form" onSubmit={props.onAddDocument}>
+            <form id="document-form" className="form form--scroll" onSubmit={props.onAddDocument}>
               <label>
                 Document Owner
                 <select
@@ -506,15 +506,15 @@ export default function Documents(props: DocumentsProps) {
                   onChange={(e) => props.setDocExpiry(e.target.value)}
                 />
               </label>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeDocumentModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingDocumentId ? "Save Changes" : "Add Document"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeDocumentModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="document-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingDocumentId ? "Save Changes" : "Add Document"}
+              </button>
+            </div>
           </div>
         </div>
       )}

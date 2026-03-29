@@ -402,7 +402,7 @@ export default function Management(props: ManagementProps) {
 
       {showVehicleModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal modal--wide" role="dialog" aria-modal="true" aria-label="Vehicle form">
+          <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Vehicle form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingVehicleId ? "Edit Vehicle" : "Add Vehicle"}</h3>
@@ -414,7 +414,7 @@ export default function Management(props: ManagementProps) {
                 ✕
               </button>
             </div>
-            <form className="form form--two-col form--scroll" onSubmit={handleVehicleSubmit}>
+            <form id="vehicle-form" className="form form--two-col form--scroll" onSubmit={handleVehicleSubmit}>
               <label>
                 Plate Number
                 <input
@@ -591,15 +591,15 @@ export default function Management(props: ManagementProps) {
                   </span>
                 </label>
               </div>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeVehicleModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingVehicleId ? "Save Changes" : "Add Vehicle"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeVehicleModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="vehicle-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingVehicleId ? "Save Changes" : "Add Vehicle"}
+              </button>
+            </div>
           </div>
         </div>
       )}

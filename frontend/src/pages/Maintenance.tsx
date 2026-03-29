@@ -928,7 +928,7 @@ export default function Maintenance(props: MaintenanceProps) {
 
       {showMaintenanceModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal modal--wide" role="dialog" aria-modal="true" aria-label="Maintenance form">
+          <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Maintenance form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingMaintenanceId ? "Edit Maintenance" : "Log Maintenance"}</h3>
@@ -942,7 +942,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 ✕
               </button>
             </div>
-            <form className="form form--two-col form--scroll" onSubmit={props.onAddMaintenance}>
+            <form id="maintenance-form" className="form form--two-col form--scroll" onSubmit={props.onAddMaintenance}>
               <label>
                 Vehicle
                 <select
@@ -1018,22 +1018,22 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setMaintNotes(e.target.value)}
                 />
               </label>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeMaintenanceModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingMaintenanceId ? "Save Changes" : "Add Record"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeMaintenanceModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="maintenance-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingMaintenanceId ? "Save Changes" : "Add Record"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {showCenterModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Service center form">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Service center form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingCenterId ? "Edit Service Center" : "Add Service Center"}</h3>
@@ -1047,7 +1047,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 ✕
               </button>
             </div>
-            <form className="form" onSubmit={props.onAddCenter}>
+            <form id="center-form" className="form form--scroll" onSubmit={props.onAddCenter}>
               <label>
                 Center Name
                 <input
@@ -1091,22 +1091,22 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setCenterPortalPassword(e.target.value)}
                 />
               </label>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeCenterModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingCenterId ? "Save Changes" : "Add Center"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeCenterModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="center-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingCenterId ? "Save Changes" : "Add Center"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {showBookingModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Service booking form">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Service booking form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingBookingId ? "Edit Service Booking" : "Book Service"}</h3>
@@ -1120,7 +1120,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 ✕
               </button>
             </div>
-            <form className="form" onSubmit={props.onAddBooking}>
+            <form id="service-booking-form" className="form form--scroll" onSubmit={props.onAddBooking}>
               <label>
                 Vehicle
                 <select
@@ -1168,15 +1168,15 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setBookingNotes(e.target.value)}
                 />
               </label>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeBookingModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingBookingId ? "Save Changes" : "Book Service"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeBookingModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="service-booking-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingBookingId ? "Save Changes" : "Book Service"}
+              </button>
+            </div>
           </div>
         </div>
       )}

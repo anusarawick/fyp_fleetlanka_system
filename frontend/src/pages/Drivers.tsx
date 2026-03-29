@@ -289,7 +289,7 @@ export default function Drivers(props: DriversProps) {
 
       {showDriverModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Driver form">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Driver form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingDriverId ? "Edit Driver" : "Add Driver"}</h3>
@@ -301,7 +301,7 @@ export default function Drivers(props: DriversProps) {
                 ✕
               </button>
             </div>
-            <form className="form" onSubmit={handleDriverSubmit}>
+            <form id="driver-form" className="form form--scroll" onSubmit={handleDriverSubmit}>
               <label>
                 Full Name
                 <input
@@ -385,15 +385,15 @@ export default function Drivers(props: DriversProps) {
                   />
                 </label>
               )}
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeDriverModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingDriverId ? "Save Changes" : "Add Driver"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeDriverModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="driver-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingDriverId ? "Save Changes" : "Add Driver"}
+              </button>
+            </div>
           </div>
         </div>
       )}

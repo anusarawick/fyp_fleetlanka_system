@@ -318,7 +318,7 @@ export default function Fuel(props: FuelProps) {
 
       {showFuelModal && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Fuel log form">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Fuel log form">
             <div className="modal__header">
               <div>
                 <h3>{props.editingFuelId ? "Edit Fuel Log" : "Log Fuel Purchase"}</h3>
@@ -332,7 +332,7 @@ export default function Fuel(props: FuelProps) {
                 ✕
               </button>
             </div>
-            <form className="form form--two-col" onSubmit={props.onAddFuel}>
+            <form id="fuel-form" className="form form--two-col form--scroll" onSubmit={props.onAddFuel}>
               <label>
                 Vehicle
                 <select
@@ -393,15 +393,15 @@ export default function Fuel(props: FuelProps) {
                   onChange={(e) => props.setFuelVendor(e.target.value)}
                 />
               </label>
-              <div className="modal__actions">
-                <button className="btn btn--secondary" type="button" onClick={closeFuelModal}>
-                  Cancel
-                </button>
-                <button className="btn" type="submit" disabled={props.loading}>
-                  {props.loading ? "Saving..." : props.editingFuelId ? "Save Changes" : "Add Fuel Log"}
-                </button>
-              </div>
             </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeFuelModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="fuel-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingFuelId ? "Save Changes" : "Add Fuel Log"}
+              </button>
+            </div>
           </div>
         </div>
       )}
