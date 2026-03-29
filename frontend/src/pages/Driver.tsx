@@ -127,6 +127,7 @@ export default function DriverTrips(props: DriverProps) {
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [showActiveTripDetails, setShowActiveTripDetails] = useState(false);
+  const [showAssignedTripDetails, setShowAssignedTripDetails] = useState(false);
 
   const activeTrip = props.trips.find((t) => t.id === props.activeTripId);
   const activeVehicle = props.vehicles.find((vehicle) => vehicle.id === activeTrip?.vehicle_id);
@@ -146,7 +147,7 @@ export default function DriverTrips(props: DriverProps) {
         .sort((a, b) => new Date(b.end_time || b.start_time).getTime() - new Date(a.end_time || a.start_time).getTime()),
     [props.trips]
   );
-  const selectedTrip = completedTrips.find((trip) => trip.id === selectedTripId) || completedTrips[0] || null;
+  const selectedTrip = completedTrips.find((trip) => trip.id === selectedTripId) || null;
   const scorePillClass =
     props.driverScore >= 85
       ? "pwa-pill--success"
@@ -323,28 +324,37 @@ export default function DriverTrips(props: DriverProps) {
             ) : (
               <div className="pwa-start-card">
                 <div className="pwa-start-card__header">
-                  <span>🚗</span>
-                  <span>Assigned Trip</span>
+                  <div className="pwa-start-card__title">
+                    <span>🚗</span>
+                    <span>Assigned Trip</span>
+                  </div>
+                  {nextAssignedTrip ? (
+                    <button
+                      className="pwa-start-card__icon-btn"
+                      type="button"
+                      onClick={() => setShowAssignedTripDetails(true)}
+                      aria-label="View assigned trip details"
+                      title="View details"
+                    >
+                      ⓘ
+                    </button>
+                  ) : null}
                 </div>
                 {nextAssignedTrip ? (
                   <>
-                    <div className="pwa-start-card__form">
-                      <label className="pwa-label">Trip Title</label>
-                      <input className="pwa-select" value={nextAssignedTrip.trip_title || "Assigned trip"} readOnly />
-                    </div>
-                    <div className="pwa-start-card__form">
-                      <label className="pwa-label">Vehicle</label>
-                      <input className="pwa-select" value={nextAssignedVehicle?.plate_no || ""} readOnly />
-                    </div>
-                    <div className="pwa-start-card__form">
-                      <label className="pwa-label">Scheduled Start</label>
-                      <input
-                        className="pwa-select"
-                        value={nextAssignedTrip.scheduled_start ? formatDateTime(nextAssignedTrip.scheduled_start) : "Not scheduled"}
-                        readOnly
-                      />
-                    </div>
                     <div className="pwa-assignment-grid">
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">Trip Title</span>
+                        <strong>{nextAssignedTrip.trip_title || "Assigned trip"}</strong>
+                      </div>
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">Vehicle</span>
+                        <strong>{nextAssignedVehicle?.plate_no || "--"}</strong>
+                      </div>
+                      <div className="pwa-assignment-item">
+                        <span className="pwa-assignment-item__label">Scheduled Start</span>
+                        <strong>{nextAssignedTrip.scheduled_start ? formatDateTime(nextAssignedTrip.scheduled_start) : "Not scheduled"}</strong>
+                      </div>
                       <div className="pwa-assignment-item">
                         <span className="pwa-assignment-item__label">From</span>
                         <strong>{nextAssignedTrip.origin_label || "--"}</strong>
@@ -352,14 +362,6 @@ export default function DriverTrips(props: DriverProps) {
                       <div className="pwa-assignment-item">
                         <span className="pwa-assignment-item__label">To</span>
                         <strong>{nextAssignedTrip.destination_label || "--"}</strong>
-                      </div>
-                      <div className="pwa-assignment-item">
-                        <span className="pwa-assignment-item__label">Priority</span>
-                        <strong>{formatPriority(nextAssignedTrip.priority)}</strong>
-                      </div>
-                      <div className="pwa-assignment-item">
-                        <span className="pwa-assignment-item__label">Contact</span>
-                        <strong>{nextAssignedTrip.contact_name || nextAssignedTrip.contact_phone || "--"}</strong>
                       </div>
                     </div>
                     {(nextAssignedTrip.origin_lat != null && nextAssignedTrip.origin_lon != null) ||
@@ -378,12 +380,6 @@ export default function DriverTrips(props: DriverProps) {
                               : null
                           }
                         />
-                      </div>
-                    ) : null}
-                    {nextAssignedTrip.notes ? (
-                      <div className="pwa-start-card__form">
-                        <label className="pwa-label">Notes</label>
-                        <textarea className="pwa-select" value={nextAssignedTrip.notes} readOnly rows={3} />
                       </div>
                     ) : null}
                   </>
@@ -571,66 +567,29 @@ export default function DriverTrips(props: DriverProps) {
                   <span>No completed trips available</span>
                 </div>
               ) : (
-                <div className="pwa-driver-grid">
-                  <div className="pwa-trip-list">
-                    {completedTrips.map((trip) => {
-                      const vehicle = props.vehicles.find((v) => v.id === trip.vehicle_id);
-                      return (
-                        <button
-                          type="button"
-                          key={trip.id}
-                          className={`pwa-trip-item pwa-trip-item--button ${selectedTrip?.id === trip.id ? "pwa-trip-item--selected" : ""}`}
-                          onClick={() => setSelectedTripId(trip.id)}
-                        >
-                          <div className="pwa-trip-item__header">
-                            <span className="pwa-trip-item__route">{vehicle?.plate_no || "Vehicle"}</span>
-                            <span className="pwa-pill pwa-pill--success">Completed</span>
-                          </div>
-                          <div className="pwa-trip-item__time">{formatDateTime(trip.end_time || trip.start_time)}</div>
-                          <div className="pwa-trip-item__footer">
-                            <span className="pwa-trip-item__duration">
-                              {trip.distance_km?.toFixed(1) || "0.0"} km • {formatDuration(trip.duration_min)}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedTrip && (
-                    <div className="pwa-section pwa-section--detail">
-                      <div className="pwa-section__title">Trip Details</div>
-                      <div className="pwa-detail-grid">
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Vehicle</span>
-                          <strong>{props.vehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong>
+                <div className="pwa-trip-list">
+                  {completedTrips.map((trip) => {
+                    const vehicle = props.vehicles.find((v) => v.id === trip.vehicle_id);
+                    return (
+                      <button
+                        type="button"
+                        key={trip.id}
+                        className="pwa-trip-item pwa-trip-item--button"
+                        onClick={() => setSelectedTripId(trip.id)}
+                      >
+                        <div className="pwa-trip-item__header">
+                          <span className="pwa-trip-item__route">{vehicle?.plate_no || "Vehicle"}</span>
+                          <span className="pwa-pill pwa-pill--success">Completed</span>
                         </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Started</span>
-                          <strong>{formatDateTime(selectedTrip.start_time)}</strong>
+                        <div className="pwa-trip-item__time">{formatDateTime(trip.end_time || trip.start_time)}</div>
+                        <div className="pwa-trip-item__footer">
+                          <span className="pwa-trip-item__duration">
+                            {trip.distance_km?.toFixed(1) || "0.0"} km • {formatDuration(trip.duration_min)}
+                          </span>
                         </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Ended</span>
-                          <strong>{formatDateTime(selectedTrip.end_time)}</strong>
-                        </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Distance</span>
-                          <strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong>
-                        </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Duration</span>
-                          <strong>{formatDuration(selectedTrip.duration_min)}</strong>
-                        </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Average Speed</span>
-                          <strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong>
-                        </div>
-                        <div className="pwa-detail-item">
-                          <span className="pwa-detail-item__label">Idle Time</span>
-                          <strong>{formatDuration(selectedTrip.idle_min)}</strong>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -853,6 +812,135 @@ export default function DriverTrips(props: DriverProps) {
           </div>
         </div>
       )}
+
+      {showAssignedTripDetails && nextAssignedTrip && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--details" role="dialog" aria-modal="true" aria-label="Assigned trip details">
+            <div className="modal__header">
+              <div>
+                <h3>Assigned Trip Details</h3>
+                <p className="modal__subtle">{nextAssignedVehicle?.plate_no || "Assigned vehicle"} • Ready to start</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setShowAssignedTripDetails(false)} aria-label="Close assigned trip details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item">
+                <span>Priority</span>
+                <strong>{formatPriority(nextAssignedTrip.priority)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Person</span>
+                <strong>{nextAssignedTrip.contact_name || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Phone</span>
+                <strong>{nextAssignedTrip.contact_phone || "--"}</strong>
+              </div>
+              <div className="detail-item detail-item--full">
+                <span>Notes</span>
+                <strong>{nextAssignedTrip.notes || "--"}</strong>
+              </div>
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setShowAssignedTripDetails(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedTrip && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Trip history details">
+            <div className="modal__header">
+              <div>
+                <h3>Trip Details</h3>
+                <p className="modal__subtle">{props.vehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"} • Completed</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setSelectedTripId(null)} aria-label="Close trip history details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item">
+                <span>Trip Title</span>
+                <strong>{selectedTrip.trip_title || "Completed trip"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Vehicle</span>
+                <strong>{props.vehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Scheduled Start</span>
+                <strong>{selectedTrip.scheduled_start ? formatDateTime(selectedTrip.scheduled_start) : "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Started</span>
+                <strong>{formatDateTime(selectedTrip.start_time)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Ended</span>
+                <strong>{formatDateTime(selectedTrip.end_time)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>From</span>
+                <strong>{selectedTrip.origin_label || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>To</span>
+                <strong>{selectedTrip.destination_label || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Distance</span>
+                <strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong>
+              </div>
+              <div className="detail-item">
+                <span>Duration</span>
+                <strong>{formatDuration(selectedTrip.duration_min)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Average Speed</span>
+                <strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong>
+              </div>
+              <div className="detail-item">
+                <span>Idle Time</span>
+                <strong>{formatDuration(selectedTrip.idle_min)}</strong>
+              </div>
+              <div className="detail-item detail-item--full">
+                <span>Notes</span>
+                <strong>{selectedTrip.notes || "--"}</strong>
+              </div>
+              {(selectedTrip.origin_lat != null && selectedTrip.origin_lon != null) ||
+              (selectedTrip.destination_lat != null && selectedTrip.destination_lon != null) ? (
+                <div className="detail-item detail-item--full">
+                  <span>Route Preview</span>
+                  <TripRoutePreview
+                    origin={
+                      selectedTrip.origin_lat != null && selectedTrip.origin_lon != null
+                        ? [selectedTrip.origin_lat, selectedTrip.origin_lon]
+                        : null
+                    }
+                    destination={
+                      selectedTrip.destination_lat != null && selectedTrip.destination_lon != null
+                        ? [selectedTrip.destination_lat, selectedTrip.destination_lon]
+                        : null
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setSelectedTripId(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <nav className="pwa-nav">
         <button
