@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
-import { apiGet, apiPost } from "../services/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { Driver, LiveTrip, SavedPlace, Trip, Vehicle } from "../types";
 
@@ -107,6 +107,10 @@ function formatPlaceDisplay(place?: SavedPlace | null) {
   return name || label || "";
 }
 
+function formatCoordinates(lat: number, lon: number) {
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+}
+
 export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading, onCreateTripAssignment, onUpdateTripAssignment, onDeleteTrip }: TripsProps) {
   const { token, setError } = useAuth();
   const [search, setSearch] = useState("");
@@ -133,10 +137,17 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
   const [tripPriority, setTripPriority] = useState("normal");
   const [tripNotes, setTripNotes] = useState("");
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
+  const [placeSearch, setPlaceSearch] = useState("");
+  const [placeRowsPerPage, setPlaceRowsPerPage] = useState(10);
+  const [placePage, setPlacePage] = useState(1);
   const [originPlaceId, setOriginPlaceId] = useState("");
   const [destinationPlaceId, setDestinationPlaceId] = useState("");
+  const [showPlacesManager, setShowPlacesManager] = useState(false);
   const [showPlaceModal, setShowPlaceModal] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<SavedPlace | null>(null);
   const [placeTarget, setPlaceTarget] = useState<"origin" | "destination">("origin");
+  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+  const [placeDeleteTarget, setPlaceDeleteTarget] = useState<SavedPlace | null>(null);
   const [placeName, setPlaceName] = useState("");
   const [placeLabel, setPlaceLabel] = useState("");
   const [placeLat, setPlaceLat] = useState("");
@@ -263,10 +274,36 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
     currentHistoryPage * historyRowsPerPage
   );
 
+  const filteredPlaces = useMemo(() => {
+    const query = placeSearch.trim().toLowerCase();
+    if (!query) return savedPlaces;
+    return savedPlaces.filter((place) =>
+      [
+        place.name,
+        place.label,
+        place.contact_name || "",
+        place.contact_phone || "",
+        place.notes || "",
+        formatCoordinates(Number(place.lat), Number(place.lon)),
+      ].some((value) => value.toLowerCase().includes(query))
+    );
+  }, [savedPlaces, placeSearch]);
+
+  const placeTotalPages = Math.max(1, Math.ceil(filteredPlaces.length / placeRowsPerPage));
+  const currentPlacePage = Math.min(placePage, placeTotalPages);
+  const paginatedPlaces = filteredPlaces.slice(
+    (currentPlacePage - 1) * placeRowsPerPage,
+    currentPlacePage * placeRowsPerPage
+  );
+
   useEffect(() => {
     setWorkflowPage(1);
     setHistoryPage(1);
   }, [search, vehicleFilter, workflowRowsPerPage, historyRowsPerPage, trips.length]);
+
+  useEffect(() => {
+    setPlacePage(1);
+  }, [placeSearch, placeRowsPerPage, savedPlaces.length]);
 
   function assignOriginFromPlace(placeId: string) {
     setOriginPlaceId(placeId);
@@ -318,6 +355,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
 
   function openPlaceModal(target: "origin" | "destination") {
     setPlaceTarget(target);
+    setEditingPlaceId(null);
     setPlaceName("");
     setPlaceLabel("");
     setPlaceLat("");
@@ -325,6 +363,32 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
     setPlaceContactName("");
     setPlaceContactPhone("");
     setPlaceNotes("");
+    setShowPlaceModal(true);
+  }
+
+  function openStandalonePlaceModal() {
+    setPlaceTarget("origin");
+    setEditingPlaceId(null);
+    setPlaceName("");
+    setPlaceLabel("");
+    setPlaceLat("");
+    setPlaceLon("");
+    setPlaceContactName("");
+    setPlaceContactPhone("");
+    setPlaceNotes("");
+    setShowPlaceModal(true);
+  }
+
+  function openEditPlaceModal(place: SavedPlace) {
+    setEditingPlaceId(place.id);
+    setPlaceTarget("origin");
+    setPlaceName(place.name);
+    setPlaceLabel(place.label);
+    setPlaceLat(String(place.lat));
+    setPlaceLon(String(place.lon));
+    setPlaceContactName(place.contact_name || "");
+    setPlaceContactPhone(place.contact_phone || "");
+    setPlaceNotes(place.notes || "");
     setShowPlaceModal(true);
   }
 
@@ -390,31 +454,82 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
     e.preventDefault();
     if (!token) return;
     try {
-      if (!placeName || !placeLabel || !placeLat || !placeLon) {
-        throw new Error("Name, label, latitude, and longitude are required");
+      if (!placeName.trim() || !placeLabel.trim()) {
+        throw new Error("Name and address are required");
       }
-      const created = await apiPost<SavedPlace>(
-        "/saved-places",
-        {
-          name: placeName,
-          label: placeLabel,
-          lat: Number(placeLat),
-          lon: Number(placeLon),
-          contact_name: placeContactName || undefined,
-          contact_phone: placeContactPhone || undefined,
-          notes: placeNotes || undefined,
-        },
-        token
+      if (Number.isNaN(Number(placeLat)) || Number.isNaN(Number(placeLon))) {
+        throw new Error("Latitude and longitude must be valid numbers");
+      }
+      if (Number(placeLat) < -90 || Number(placeLat) > 90) {
+        throw new Error("Latitude must be between -90 and 90");
+      }
+      if (Number(placeLon) < -180 || Number(placeLon) > 180) {
+        throw new Error("Longitude must be between -180 and 180");
+      }
+      const duplicate = savedPlaces.find(
+        (row) =>
+          row.id !== editingPlaceId &&
+          row.name.trim().toLowerCase() === placeName.trim().toLowerCase()
       );
-      setSavedPlaces((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-      if (placeTarget === "origin") {
-        applyOriginPlace(created);
+      if (duplicate) {
+        throw new Error("A saved place with this name already exists");
+      }
+      const payload = {
+        name: placeName,
+        label: placeLabel,
+        lat: Number(placeLat),
+        lon: Number(placeLon),
+        contact_name: placeContactName || undefined,
+        contact_phone: placeContactPhone || undefined,
+        notes: placeNotes || undefined,
+      };
+      const saved = editingPlaceId
+        ? await apiPatch<SavedPlace>(`/saved-places/${editingPlaceId}`, payload, token)
+        : await apiPost<SavedPlace>("/saved-places", payload, token);
+      setSavedPlaces((prev) => {
+        const next = editingPlaceId ? prev.map((row) => (row.id === saved.id ? saved : row)) : [...prev, saved];
+        return next.sort((a, b) => a.name.localeCompare(b.name));
+      });
+      if (!editingPlaceId) {
+        if (placeTarget === "origin") {
+          applyOriginPlace(saved);
+        } else {
+          applyDestinationPlace(saved);
+        }
       } else {
-        applyDestinationPlace(created);
+        if (String(originPlaceId) === String(saved.id)) {
+          applyOriginPlace(saved);
+        }
+        if (String(destinationPlaceId) === String(saved.id)) {
+          applyDestinationPlace(saved);
+        }
       }
       setShowPlaceModal(false);
     } catch (err: any) {
       setError(err.message || "Failed to save place");
+    }
+  }
+
+  async function confirmPlaceDelete() {
+    if (!token || !placeDeleteTarget) return;
+    try {
+      await apiDelete(`/saved-places/${placeDeleteTarget.id}`, token);
+      setSavedPlaces((prev) => prev.filter((row) => row.id !== placeDeleteTarget.id));
+      if (String(originPlaceId) === String(placeDeleteTarget.id)) {
+        setOriginPlaceId("");
+        setTripOriginLabel("");
+        setTripOriginLat("");
+        setTripOriginLon("");
+      }
+      if (String(destinationPlaceId) === String(placeDeleteTarget.id)) {
+        setDestinationPlaceId("");
+        setTripDestinationLabel("");
+        setTripDestinationLat("");
+        setTripDestinationLon("");
+      }
+      setPlaceDeleteTarget(null);
+    } catch (err: any) {
+      setError(err.message || "Failed to delete place");
     }
   }
 
@@ -492,6 +607,9 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
             </button>
             <button className="btn" type="button" onClick={() => openPlaceModal("origin")}>
               + Add Place
+            </button>
+            <button className="btn btn--compact" type="button" onClick={() => setShowPlacesManager(true)}>
+              Manage Places
             </button>
           </div>
         </section>
@@ -1075,13 +1193,121 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         </div>
       )}
 
+      {showPlacesManager && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Manage saved places">
+            <div className="modal__header">
+              <div>
+                <h3>Manage Places</h3>
+                <p className="modal__subtle">Manage the saved place library used by trip assignments.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setShowPlacesManager(false)} aria-label="Close places manager">
+                ✕
+              </button>
+            </div>
+            <div className="form form--scroll">
+              <div className="table-controls">
+                <div className="table-controls__filters">
+                  <label className="table-controls__label table-controls__label--search">
+                    Search
+                    <input
+                      type="search"
+                      placeholder="Name, address, contact..."
+                      value={placeSearch}
+                      onChange={(e) => setPlaceSearch(e.target.value)}
+                    />
+                  </label>
+                  <label className="table-controls__label">
+                    Rows
+                    <select value={placeRowsPerPage} onChange={(e) => setPlaceRowsPerPage(Number(e.target.value))}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="table-pagination">
+                  <span className="table-pagination__meta">
+                    Page {currentPlacePage} of {placeTotalPages}
+                  </span>
+                  <button
+                    className="btn btn--secondary btn--compact"
+                    type="button"
+                    onClick={() => setPlacePage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPlacePage === 1}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    className="btn btn--secondary btn--compact"
+                    type="button"
+                    onClick={() => setPlacePage((prev) => Math.min(placeTotalPages, prev + 1))}
+                    disabled={currentPlacePage === placeTotalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
+              {savedPlaces.length === 0 ? (
+                <p className="empty">No saved places yet. Add your frequent locations first.</p>
+              ) : (
+                <div className="table places-table" style={{ ["--table-columns" as any]: 5 }}>
+                  <div className="table__head places-table__head">
+                    <span>Place</span>
+                    <span>Address</span>
+                    <span>Contact</span>
+                    <span>Coordinates</span>
+                    <span>Actions</span>
+                  </div>
+                  {paginatedPlaces.map((place) => (
+                    <div className="table__row places-table__row" key={place.id}>
+                      <span data-label="Place">{place.name}</span>
+                      <span data-label="Address">{place.label}</span>
+                      <span data-label="Contact">{place.contact_phone || place.contact_name || "--"}</span>
+                      <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
+                      <span className="table__actions places-table__actions" data-label="Actions">
+                        <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
+                          <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                          </svg>
+                        </button>
+                        <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
+                          <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
+                          <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setShowPlacesManager(false)}>
+                Close
+              </button>
+              <button className="btn" type="button" onClick={openStandalonePlaceModal}>
+                + Add Place
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPlaceModal && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Add saved place">
             <div className="modal__header">
               <div>
-                <h3>Add Saved Place</h3>
-                <p className="modal__subtle">Click the map or enter coordinates manually. The new place will be added to your trip form list.</p>
+                <h3>{editingPlaceId ? "Edit Saved Place" : "Add Saved Place"}</h3>
+                <p className="modal__subtle">Click the map or enter coordinates manually. The saved place library is shared across trip assignments.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setShowPlaceModal(false)} aria-label="Close place form">
                 ✕
@@ -1134,6 +1360,89 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               </button>
               <button className="btn" type="submit" form="saved-place-form">
                 Save Place
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPlace && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Saved place details">
+            <div className="modal__header">
+              <div>
+                <h3>Place Details</h3>
+                <p className="modal__subtle">{selectedPlace.name}</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setSelectedPlace(null)} aria-label="Close place details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item">
+                <span>Place Name</span>
+                <strong>{selectedPlace.name}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Address</span>
+                <strong>{selectedPlace.label}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Latitude</span>
+                <strong>{Number(selectedPlace.lat).toFixed(6)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Longitude</span>
+                <strong>{Number(selectedPlace.lon).toFixed(6)}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Person</span>
+                <strong>{selectedPlace.contact_name || "--"}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Contact Phone</span>
+                <strong>{selectedPlace.contact_phone || "--"}</strong>
+              </div>
+              <div className="detail-item detail-item--full">
+                <span>Notes</span>
+                <strong>{selectedPlace.notes || "--"}</strong>
+              </div>
+              <div className="detail-item detail-item--full">
+                <span>Map Preview</span>
+                <PlacePickerMap
+                  lat={Number(selectedPlace.lat)}
+                  lon={Number(selectedPlace.lon)}
+                  onPick={() => {}}
+                />
+              </div>
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setSelectedPlace(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {placeDeleteTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Delete saved place">
+            <div className="modal__header">
+              <div>
+                <h3>Delete Saved Place</h3>
+                <p className="modal__subtle">This removes the place from future trip assignments only.</p>
+              </div>
+            </div>
+            <p>
+              Delete <strong>{placeDeleteTarget.name}</strong>?
+            </p>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setPlaceDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button className="btn btn--danger" type="button" onClick={confirmPlaceDelete} disabled={loading}>
+                {loading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
