@@ -600,7 +600,6 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           <div className="card__header">
             <h3>Trip Actions</h3>
           </div>
-          <p className="muted">Assign a driver and vehicle before the trip starts so drivers launch the correct job from their app.</p>
           <div className="button-row">
             <button className="btn" type="button" onClick={openCreateModal}>
               + Assign Trip
@@ -629,11 +628,11 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               </li>
             <li>
               <div className="list__title">Average Speed</div>
-              <div className="list__meta">{avgSpeed > 0 ? `${avgSpeed.toFixed(1)} km/h` : "No completed speed data yet"}</div>
+              <div className="list__meta">{avgSpeed > 0 ? `${avgSpeed.toFixed(1)} km/h` : "--"}</div>
             </li>
             <li>
               <div className="list__title">Idle Time Logged</div>
-              <div className="list__meta">{totalIdleMinutes > 0 ? formatDuration(totalIdleMinutes) : "No idle time recorded yet"}</div>
+              <div className="list__meta">{totalIdleMinutes > 0 ? formatDuration(totalIdleMinutes) : "--"}</div>
             </li>
           </ul>
         </section>

@@ -185,7 +185,6 @@ export default function Documents(props: DocumentsProps) {
           <div className="card__header">
             <h3>Document Actions</h3>
           </div>
-          <p className="muted">Track registration, insurance, and renewal dates from a focused add form.</p>
           <div className="button-row">
             <button
               className="btn"

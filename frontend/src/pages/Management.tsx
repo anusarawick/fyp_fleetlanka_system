@@ -192,9 +192,6 @@ export default function Management(props: ManagementProps) {
           <div className="card__header">
             <h3>Fleet Actions</h3>
           </div>
-          <p className="muted">
-            Create vehicles only when needed and edit them inline from the list.
-          </p>
           <button className="btn" type="button" onClick={openCreateModal}>
             + Add Vehicle
           </button>
@@ -207,9 +204,6 @@ export default function Management(props: ManagementProps) {
           <div className="stat-value" style={{ marginBottom: "8px" }}>
             {props.activeTrips}
           </div>
-          <p className="muted">
-            Trips currently running across the fleet.
-          </p>
         </section>
       </div>
 

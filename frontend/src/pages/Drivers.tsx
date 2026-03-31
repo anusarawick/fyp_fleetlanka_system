@@ -122,9 +122,6 @@ export default function Drivers(props: DriversProps) {
           <div className="card__header">
             <h3>Driver Actions</h3>
           </div>
-          <p className="muted">
-            Create and update driver accounts from focused pop-up forms.
-          </p>
           <button className="btn" type="button" onClick={openCreateModal}>
             + Add Driver
           </button>

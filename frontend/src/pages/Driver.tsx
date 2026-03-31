@@ -425,7 +425,6 @@ export default function DriverTrips(props: DriverProps) {
 
             <div className="pwa-section">
               <div className="pwa-section__title">Score Breakdown</div>
-              <p className="pwa-section__subtitle">Real driving metrics from completed trips.</p>
               <div className="pwa-summary-grid">
                 <div className="pwa-summary-item">
                   <span className="pwa-summary-item__value">{props.driverScoreBreakdown.speed}</span>
@@ -483,7 +482,6 @@ export default function DriverTrips(props: DriverProps) {
 
             <div className="pwa-section">
               <div className="pwa-section__title">Recent Trips</div>
-              <p className="pwa-section__subtitle">Your latest completed trips and results.</p>
               {homeRecentTrips.length === 0 ? (
                 <div className="pwa-empty">
                   <span>📭</span>
@@ -527,7 +525,6 @@ export default function DriverTrips(props: DriverProps) {
             {assignedTrips.length > 0 && (
               <div className="pwa-section">
                 <div className="pwa-section__title">Assigned Trips</div>
-                <p className="pwa-section__subtitle">Trips assigned by your manager and ready to start.</p>
                 <div className="pwa-trip-list">
                   {assignedTrips.map((trip) => {
                     const vehicle = props.vehicles.find((v) => v.id === trip.vehicle_id);
@@ -560,7 +557,6 @@ export default function DriverTrips(props: DriverProps) {
 
             <div className="pwa-section">
               <div className="pwa-section__title">Trip History</div>
-              <p className="pwa-section__subtitle">Open any trip to see the full driving summary.</p>
               {completedTrips.length === 0 ? (
                 <div className="pwa-empty">
                   <span>🗺️</span>
@@ -600,7 +596,6 @@ export default function DriverTrips(props: DriverProps) {
           <>
             <div className="pwa-section">
               <div className="pwa-section__title">Fuel Log</div>
-              <p className="pwa-section__subtitle">Record fuel against the active or selected vehicle.</p>
               <form className="pwa-form" onSubmit={handleAddFuel}>
                 <label className="pwa-form__field">
                   <span>Vehicle</span>
@@ -670,7 +665,6 @@ export default function DriverTrips(props: DriverProps) {
           <>
             <div className="pwa-section">
               <div className="pwa-section__title">Profile</div>
-              <p className="pwa-section__subtitle">Your driver account details and current status.</p>
               <div className="pwa-detail-grid">
                 <div className="pwa-detail-item">
                   <span className="pwa-detail-item__label">Email</span>

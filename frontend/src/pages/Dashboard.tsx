@@ -168,9 +168,6 @@ export default function Dashboard({
           <div className="card__header">
             <div>
               <h2>Live Trip Map</h2>
-              <p className="muted dashboard-map__subtitle">
-                Shows only active trips reporting location from the driver app.
-              </p>
             </div>
             <span className="pill">{filteredLiveTrips.length} shown</span>
           </div>

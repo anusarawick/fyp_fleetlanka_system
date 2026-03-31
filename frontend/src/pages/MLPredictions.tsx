@@ -97,9 +97,6 @@ export default function MLPredictions(props: MLPredictionsProps) {
       <div className="grid">
         <section className="card">
           <h3>Vehicle Maintenance Check</h3>
-          <p className="muted">
-            Pick a saved vehicle and run the tuned maintenance model using its stored fleet data.
-          </p>
           <div className="form">
             <label>
               Vehicle
@@ -151,11 +148,7 @@ export default function MLPredictions(props: MLPredictionsProps) {
                         ))}
                       </ul>
                     ) : (
-                      <p className="muted">
-                        {previousPrediction
-                          ? "No tracked feature changes since the previous prediction."
-                          : "Run this vehicle at least twice to compare prediction changes over time."}
-                      </p>
+                      <p className="muted">{previousPrediction ? "No tracked changes." : "Run again to compare changes."}</p>
                     )}
                   </div>
                 </div>

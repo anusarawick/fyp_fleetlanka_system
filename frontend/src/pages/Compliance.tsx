@@ -123,7 +123,7 @@ export default function Compliance(props: ComplianceProps) {
       severity: "danger" as const,
       title: `${doc.doc_type} expired`,
       meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
-      actionLabel: "Open Documents",
+      actionLabel: "Review",
       actionTo: "/documents",
     }));
 
@@ -133,7 +133,7 @@ export default function Compliance(props: ComplianceProps) {
       severity: "warning" as const,
       title: `${doc.doc_type} expiring soon`,
       meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
-      actionLabel: "Open Documents",
+      actionLabel: "Review",
       actionTo: "/documents",
     }));
 
@@ -143,7 +143,7 @@ export default function Compliance(props: ComplianceProps) {
       severity: "info" as const,
       title: `${vehicleLabel(vehicle)} in maintenance`,
       meta: "Vehicle currently unavailable for fleet operations",
-      actionLabel: "Open Fleet",
+      actionLabel: "Review",
       actionTo: "/management",
     }));
 
@@ -153,7 +153,7 @@ export default function Compliance(props: ComplianceProps) {
       severity: "warning" as const,
       title: `${vehicleLabel(vehicleMap[booking.vehicle_id || ""])} awaiting approval`,
       meta: `${booking.requested_date} • Completed booking pending manager verification`,
-      actionLabel: "Open Maintenance",
+      actionLabel: "Review",
       actionTo: "/maintenance",
     }));
 
@@ -297,8 +297,8 @@ export default function Compliance(props: ComplianceProps) {
                       {record.vehicle_id ? ` • ${vehicleLabel(vehicleMap[record.vehicle_id])}` : ""}
                     </div>
                   </div>
-                  <Link className="btn btn--secondary btn--compact" to="/maintenance">
-                    Open
+                  <Link className="btn btn--secondary btn--compact compliance-open-btn" to="/maintenance">
+                    Review
                   </Link>
                 </li>
               ))}
@@ -325,8 +325,8 @@ export default function Compliance(props: ComplianceProps) {
                     </div>
                     <div className="compliance-list__actions">
                       <span className={toneClass(row.tone)}>{row.label}</span>
-                      <Link className="btn btn--secondary btn--compact" to={row.to}>
-                        Open
+                      <Link className="btn btn--secondary btn--compact compliance-open-btn" to={row.to}>
+                        Review
                       </Link>
                     </div>
                   </li>
@@ -437,7 +437,7 @@ export default function Compliance(props: ComplianceProps) {
                   </span>
                 </span>
                 <span className="table__actions compliance-table__actions" data-label="Action">
-                  <Link className="btn btn--secondary btn--compact" to={row.actionTo}>
+                  <Link className="btn btn--secondary btn--compact compliance-open-btn" to={row.actionTo}>
                     {row.actionLabel}
                   </Link>
                 </span>

@@ -129,7 +129,6 @@ export default function Fuel(props: FuelProps) {
           <div className="card__header">
             <h3>Fuel Actions</h3>
           </div>
-          <p className="muted">Log purchases through a focused pop-up form and keep the register uncluttered.</p>
           <div className="button-row">
             <button
               className="btn"

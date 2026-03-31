@@ -348,9 +348,6 @@ export default function Maintenance(props: MaintenanceProps) {
           <div className="card__header">
             <h3>Maintenance Actions</h3>
           </div>
-          <p className="muted">
-            Log service work, register centers, and create bookings from focused pop-up forms.
-          </p>
           <div className="button-row maintenance-actions__row">
             <button
               className="btn maintenance-actions__btn"
@@ -566,7 +563,6 @@ export default function Maintenance(props: MaintenanceProps) {
         <div className="card__header">
           <div>
             <h3>Booking Workflow</h3>
-            <p className="muted">Track active bookings and approvals. Finalized work moves into maintenance history.</p>
           </div>
         </div>
         {workflowBookings.length === 0 ? (
