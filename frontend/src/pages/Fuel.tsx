@@ -15,9 +15,16 @@ type FuelLog = {
   vendor?: string;
 };
 
+type FuelForecast = {
+  vehicle_id: string;
+  plate_no: string;
+  forecast_liters_7d: number;
+};
+
 type FuelProps = {
   vehicles: Vehicle[];
   fuelLogs: FuelLog[];
+  fuelForecasts: FuelForecast[];
   loading: boolean;
   fuelVehicle: string;
   setFuelVehicle: (v: string) => void;
@@ -32,13 +39,56 @@ type FuelProps = {
   fuelVendor: string;
   setFuelVendor: (v: string) => void;
   editingFuelId: string | null;
+  onExportFuel: () => void;
   onAddFuel: (e: FormEvent) => void;
   onEditFuel: (fuelLog: FuelLog) => void;
   onCancelFuelEdit: () => void;
   onDeleteFuel: (fuelId: string) => Promise<void>;
 };
 
+type FuelTab = "overview" | "forecast" | "register";
+
+type FuelIconName = "logs" | "volume" | "cost" | "trend" | "demand";
+
+function FuelIcon({ name }: { name: FuelIconName }) {
+  switch (name) {
+    case "logs":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 3h7l4 4v14H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v4h4M9 13h6M9 17h6M9 9h2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "volume":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "cost":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v18M17 7.5c0-1.93-2.24-3.5-5-3.5s-5 1.57-5 3.5 2.24 3.5 5 3.5 5 1.57 5 3.5-2.24 3.5-5 3.5-5-1.57-5-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "trend":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 18 10 11l4 3 5-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "demand":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 19V9m7 10V5m7 14v-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function Fuel(props: FuelProps) {
+  const [activeTab, setActiveTab] = useState<FuelTab>("overview");
   const [showFuelModal, setShowFuelModal] = useState(false);
   const [selectedFuelLog, setSelectedFuelLog] = useState<FuelLog | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FuelLog | null>(null);
@@ -49,6 +99,10 @@ export default function Fuel(props: FuelProps) {
   const totalLiters = props.fuelLogs.reduce((sum, f) => sum + f.liters, 0);
   const totalCost = props.fuelLogs.reduce((sum, f) => sum + (f.cost_lkr || 0), 0);
   const avgCostPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+  const projectedFuelDemand = props.fuelForecasts.reduce(
+    (sum, row) => sum + row.forecast_liters_7d,
+    0
+  );
 
   const vehicleLabelMap = useMemo(
     () =>
@@ -91,6 +145,38 @@ export default function Fuel(props: FuelProps) {
     }
   }, [props.loading]);
 
+  const fuelByDate = props.fuelLogs.reduce<Record<string, number>>((acc, f) => {
+    acc[f.fuel_date] = (acc[f.fuel_date] || 0) + f.liters;
+    return acc;
+  }, {});
+  const fuelSeries = Object.entries(fuelByDate)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-7);
+  const maxFuel = fuelSeries.reduce((m, [, v]) => Math.max(m, v), 1);
+  const demandWeights =
+    fuelSeries.length > 0
+      ? fuelSeries.map(([, value]) => value)
+      : Array.from({ length: 7 }, () => 1);
+  const demandWeightTotal =
+    demandWeights.reduce((sum, value) => sum + value, 0) || 1;
+  const futureDemandSeries = Array.from({ length: 7 }, (_, index) => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + index + 1);
+    const weight = demandWeights[index % demandWeights.length] / demandWeightTotal;
+    return [
+      futureDate.toISOString().slice(0, 10),
+      projectedFuelDemand * weight,
+    ] as const;
+  });
+  const maxFuelDemand = futureDemandSeries.reduce(
+    (m, [, value]) => Math.max(m, value),
+    1
+  );
+  const vehicleFuelDemand = [...props.fuelForecasts]
+    .sort((a, b) => b.forecast_liters_7d - a.forecast_liters_7d)
+    .slice(0, 8);
+  const topDemandVehicle = vehicleFuelDemand[0] || null;
+
   function closeFuelModal() {
     setShowFuelModal(false);
     if (props.editingFuelId) {
@@ -106,30 +192,62 @@ export default function Fuel(props: FuelProps) {
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: "24px" }}>
-        <div className="stat-card">
-          <div className="stat-icon">📊</div>
+      <section className="analytics-page">
+      <div className="stats stats--three analytics-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><FuelIcon name="logs" /></div>
           <div className="stat-value">{props.fuelLogs.length}</div>
           <div className="stat-label">Fuel Entries</div>
+          <div className="stat-sub">Recorded transactions</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">⛽</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><FuelIcon name="volume" /></div>
           <div className="stat-value">{totalLiters.toFixed(0)}L</div>
           <div className="stat-label">Total Fuel</div>
+          <div className="stat-sub">Logged consumption</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">Rs</div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><FuelIcon name="cost" /></div>
           <div className="stat-value">{avgCostPerLiter > 0 ? avgCostPerLiter.toFixed(0) : "0"}</div>
           <div className="stat-label">Avg Cost / Liter</div>
+          <div className="stat-sub">Spend efficiency</div>
         </div>
       </div>
 
-      <div className="grid">
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Fuel sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "forecast" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("forecast")}
+        >
+          Forecast
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="grid analytics-grid">
+        <section className="card analytics-card--support">
           <div className="card__header">
-            <h3>Fuel Actions</h3>
+            <div>
+              <h3>Fuel Actions</h3>
+              <p className="muted analytics-card__subtitle">Log and manage operational fuel entries from one place.</p>
+            </div>
           </div>
-          <div className="button-row">
+          <div className="quick-actions quick-actions--single">
             <button
               className="btn"
               type="button"
@@ -143,9 +261,152 @@ export default function Fuel(props: FuelProps) {
           </div>
         </section>
 
-        <section className="card">
+        <section className="card analytics-card--support">
           <div className="card__header">
-            <h3>Recent Activity</h3>
+            <div>
+              <h3>Demand Summary</h3>
+              <p className="muted analytics-card__subtitle">Current 7-day fuel outlook across the fleet.</p>
+            </div>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Projected Total</div>
+              <div className="list__meta">{projectedFuelDemand.toFixed(1)} L forecast for the next 7 days</div>
+            </li>
+            <li>
+              <div className="list__title">Highest Demand Vehicle</div>
+              <div className="list__meta">
+                {topDemandVehicle
+                  ? `${topDemandVehicle.plate_no} • ${topDemandVehicle.forecast_liters_7d.toFixed(1)} L`
+                  : "No forecast available yet"}
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section className="card analytics-card--support">
+          <div className="card__header">
+            <div>
+              <h3>Register Snapshot</h3>
+              <p className="muted analytics-card__subtitle">Recent logging activity and register readiness.</p>
+            </div>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Filtered Register</div>
+              <div className="list__meta">{filteredFuelLogs.length} logs currently available in the active register dataset</div>
+            </li>
+            <li>
+              <div className="list__title">Most Recent Entry</div>
+              <div className="list__meta">
+                {props.fuelLogs[0]
+                  ? `${vehicleLabelMap[props.fuelLogs[0].vehicle_id] || "Vehicle"} • ${props.fuelLogs[0].fuel_date}`
+                  : "No fuel logs recorded yet"}
+              </div>
+            </li>
+          </ul>
+        </section>
+      </div>
+      )}
+
+      {activeTab === "forecast" && (
+      <div className="grid analytics-grid">
+        <section className="card analytics-card--wide">
+          <div className="card__header">
+            <div>
+              <h3>Fuel Trend (last 7 days)</h3>
+              <p className="muted analytics-card__subtitle">Daily fuel usage across the fleet over the last 7 days.</p>
+            </div>
+          </div>
+          {fuelSeries.length === 0 ? (
+            <p className="muted empty">No fuel data to plot.</p>
+          ) : (
+            <div className="bar-chart">
+              {fuelSeries.map(([date, value]) => (
+                <div key={date} className="bar">
+                  <div className="bar__track">
+                    <div
+                      className="bar__fill"
+                      style={{ height: `${(value / maxFuel) * 100}%` }}
+                    />
+                  </div>
+                  <div className="bar__meta">
+                    <div className="bar__label">{date.slice(5)}</div>
+                    <div className="bar__value">{value.toFixed(1)}L</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card analytics-card--wide">
+          <div className="card__header">
+            <div>
+              <h3>Projected Fuel Demand (next 7 days)</h3>
+              <p className="muted analytics-card__subtitle">Projected day-by-day fuel demand based on the current weekly forecast.</p>
+            </div>
+          </div>
+          {props.fuelForecasts.length === 0 ? (
+            <p className="muted empty">No fuel forecast available yet.</p>
+          ) : (
+            <div className="bar-chart">
+              {futureDemandSeries.map(([date, value]) => (
+                <div key={date} className="bar">
+                  <div className="bar__track">
+                    <div
+                      className="bar__fill bar__fill--demand"
+                      style={{ height: `${(value / maxFuelDemand) * 100}%` }}
+                    />
+                  </div>
+                  <div className="bar__meta">
+                    <div className="bar__label">{date.slice(5)}</div>
+                    <div className="bar__value">{value.toFixed(1)}L</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card analytics-card--support">
+          <div className="card__header">
+            <div>
+              <h3>Vehicle-wise Fuel Demand</h3>
+              <p className="muted analytics-card__subtitle">Highest predicted vehicle demand over the next 7 days.</p>
+            </div>
+          </div>
+          {vehicleFuelDemand.length === 0 ? (
+            <p className="empty">No vehicle fuel forecast available yet.</p>
+          ) : (
+            <ul className="list">
+              {vehicleFuelDemand.map((forecast) => (
+                <li key={forecast.vehicle_id}>
+                  <div className="list__title">{forecast.plate_no}</div>
+                  <div className="list__meta">
+                    {forecast.forecast_liters_7d.toFixed(1)} L next 7 days
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+      )}
+
+      {activeTab === "register" && (
+      <div className="grid analytics-grid">
+        <section className="card analytics-card--support">
+          <div className="card__header">
+            <div>
+              <h3>Recent Activity</h3>
+              <p className="muted analytics-card__subtitle">Latest recorded fuel logs for quick review.</p>
+            </div>
+            <div className="analytics-card__actions">
+              <button className="btn btn--secondary" onClick={props.onExportFuel}>
+                Export CSV
+              </button>
+            </div>
           </div>
           {props.fuelLogs.length === 0 ? (
             <p className="empty">No fuel logs recorded yet.</p>
@@ -164,11 +425,13 @@ export default function Fuel(props: FuelProps) {
             </ul>
           )}
         </section>
-      </div>
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      <section className="card analytics-register analytics-card--wide">
         <div className="card__header">
-          <h3>Fuel Register</h3>
+          <div>
+            <h3>Fuel Register</h3>
+            <p className="muted analytics-card__subtitle">Search, review, edit, and export the full fuel log history.</p>
+          </div>
         </div>
         {props.fuelLogs.length === 0 ? (
           <p className="empty">No fuel logs recorded yet.</p>
@@ -313,6 +576,9 @@ export default function Fuel(props: FuelProps) {
             )}
           </>
         )}
+      </section>
+      </div>
+      )}
       </section>
 
       {showFuelModal && (

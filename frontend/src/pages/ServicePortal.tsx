@@ -84,6 +84,39 @@ function resolveWorkTypeSelection(value?: string) {
   return { selected: "Other", custom: normalized };
 }
 
+type ServicePortalIconName = "pending" | "confirmed" | "completedToday" | "completedTotal";
+
+function ServicePortalIcon({ name }: { name: ServicePortalIconName }) {
+  switch (name) {
+    case "pending":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 7v5l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "confirmed":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m5 13 4 4L19 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "completedToday":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 3h8l3 3v12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6l3-3Zm2 7h4m-4 4h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "completedTotal":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m5 13 4 4L19 7M5 4h14M5 20h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function ServicePortal({ token, initialTab = "dashboard" }: ServicePortalProps) {
   const [me, setMe] = useState<ServicePortalMe | null>(null);
   const [bookings, setBookings] = useState<ServicePortalBooking[]>([]);
@@ -159,6 +192,48 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     currentPage * rowsPerPage
   );
   const effectiveWorkType = selectedWorkType === "Other" ? customWorkType.trim() : selectedWorkType;
+  const isOverviewTab = initialTab === "dashboard";
+  const pendingBookings = useMemo(
+    () => bookings.filter((booking) => (booking.status || "pending") === "pending"),
+    [bookings]
+  );
+  const confirmedBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === "confirmed"),
+    [bookings]
+  );
+  const completedBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === "completed"),
+    [bookings]
+  );
+  const needsManagerReviewCount = useMemo(
+    () =>
+      bookings.filter(
+        (booking) =>
+          (booking.status || "pending") === "completed" &&
+          (booking.completion_review_status || "pending") !== "approved"
+      ).length,
+    [bookings]
+  );
+  const upcomingQueue = useMemo(
+    () =>
+      [...pendingBookings, ...confirmedBookings]
+        .sort((a, b) => String(a.requested_date).localeCompare(String(b.requested_date)))
+        .slice(0, 5),
+    [pendingBookings, confirmedBookings]
+  );
+  const latestCompleted = useMemo(
+    () =>
+      [...completedBookings]
+        .sort((a, b) => String(b.completed_at || b.requested_date).localeCompare(String(a.completed_at || a.requested_date)))
+        .slice(0, 4),
+    [completedBookings]
+  );
+  const nextActionLabel =
+    (me?.summary.pending_count ?? 0) > 0
+      ? "Review pending bookings"
+      : (me?.summary.confirmed_count ?? 0) > 0
+        ? "Close active jobs"
+        : "Queue is clear";
 
   function openActionModal(booking: ServicePortalBooking, status: "pending" | "confirmed" | "cancelled" | "completed") {
     const workTypeState = resolveWorkTypeSelection(booking.work_type);
@@ -275,200 +350,320 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         </div>
       )}
 
-      <div className="stats service-portal-stats" style={{ marginBottom: "24px" }}>
-        <div className="stat-card stat-card--blue">
-          <div className="stat-icon">🏪</div>
-          <div className="stat-value">{me?.center.name || "--"}</div>
-          <div className="stat-label">Linked Center</div>
-        </div>
-        <div className="stat-card stat-card--amber">
-          <div className="stat-icon">🕒</div>
-          <div className="stat-value">{me?.summary.pending_count ?? 0}</div>
-          <div className="stat-label">Pending Bookings</div>
-        </div>
-        <div className="stat-card stat-card--blue">
-          <div className="stat-icon">✅</div>
-          <div className="stat-value">{me?.summary.confirmed_count ?? 0}</div>
-          <div className="stat-label">Confirmed Jobs</div>
-        </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-icon">📦</div>
-          <div className="stat-value">{me?.summary.completed_today_count ?? 0}</div>
-          <div className="stat-label">Completed Today</div>
-        </div>
-      </div>
-
-      <section className="card service-portal-summary" style={{ marginBottom: "24px" }}>
-        <div className="service-portal-summary__grid">
-          <div className="service-portal-summary__item">
-            <span>Phone</span>
-            <strong>{me?.center.phone || "--"}</strong>
-          </div>
-          <div className="service-portal-summary__item">
-            <span>Portal</span>
-            <strong>{me?.center.profile_id ? "Linked" : "Not Linked"}</strong>
-          </div>
-          <div className="service-portal-summary__item">
-            <span>Assigned Bookings</span>
-            <strong>{bookings.length}</strong>
-          </div>
-          <div className="service-portal-summary__item">
-            <span>Next Action</span>
-            <strong>{me?.summary.pending_count ? "Review pending bookings" : "No pending items"}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="card" style={{ marginTop: "24px" }}>
-        <div className="card__header">
-          <h3>{initialTab === "bookings" ? "Service Bookings" : "Assigned Bookings"}</h3>
-        </div>
-        <p className="muted" style={{ marginTop: "-6px", marginBottom: "18px" }}>
-          Service centers control booking confirmation, cancellation, completion notes, and final pricing from this page only.
-        </p>
-
-        <div className="table-controls">
-          <div className="table-controls__filters">
-            <label className="table-controls__label table-controls__label--search">
-              Search
-              <input
-                type="search"
-                placeholder="Vehicle, date, notes..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <label className="table-controls__label">
-              Status
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
-                <option value="all">All</option>
-                <option value="pending">Pending</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </label>
-            <label className="table-controls__label">
-              Rows
-              <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-          </div>
-          <div className="table-pagination">
-            <span className="table-pagination__meta">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-            >
-              Prev
-            </button>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-
-        {loading ? (
-          <p className="empty">Loading bookings...</p>
-        ) : filteredBookings.length === 0 ? (
-          <p className="empty">No bookings match the current search/filter.</p>
-        ) : (
-          <div className="table service-portal-table" style={{ ["--table-columns" as any]: 6 }}>
-            <div className="table__head service-portal-table__head">
-              <span>Date</span>
-              <span>Vehicle</span>
-              <span>Plate</span>
-              <span>Status</span>
-              <span>Notes</span>
-              <span>Actions</span>
+      <section className="service-portal-page admin-page">
+      {isOverviewTab ? (
+        <>
+          <div className="stats service-portal-stats admin-stats">
+            <div className="stat-card stat-card--amber">
+              <div className="stat-icon"><ServicePortalIcon name="pending" /></div>
+              <div className="stat-value">{me?.summary.pending_count ?? 0}</div>
+              <div className="stat-label">Pending Bookings</div>
+              <div className="stat-sub">Waiting for center action</div>
             </div>
-            {visibleBookings.map((booking) => (
-              <div key={booking.id} className="table__row service-portal-table__row">
-                <span className="service-portal-table__cell" data-label="Date">{booking.requested_date}</span>
-                <span className="service-portal-table__cell" data-label="Vehicle">{vehicleName(booking)}</span>
-                <span className="service-portal-table__cell" data-label="Plate">{vehiclePlate(booking)}</span>
-                <span className="service-portal-table__cell" data-label="Status">
-                  <span className={`pill pill--${statusBadgeClass[booking.status || "pending"] || "warning"}`}>
-                    {booking.status || "pending"}
-                  </span>
-                </span>
-                <span className="service-portal-table__cell" data-label="Notes">
-                  {booking.service_notes || booking.notes ? (
-                    <span className="service-portal-table__notes">
-                      {String(booking.service_notes || booking.notes).length > 48
-                        ? `${String(booking.service_notes || booking.notes).slice(0, 48)}...`
-                        : String(booking.service_notes || booking.notes)}
-                    </span>
-                  ) : (
-                    "--"
-                  )}
-                </span>
-                <span className="table__actions service-portal-table__actions" data-label="Actions">
-                  <span className="service-portal-table__icon-group">
-                    <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label="View booking">
-                      <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                        <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                      </svg>
-                    </button>
-                    {(booking.status === "confirmed" || (booking.status === "completed" && booking.completion_review_status !== "approved")) && (
-                      <button className="icon-action" type="button" onClick={() => openDetailsModal(booking)} title="Edit details" aria-label="Edit details">
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 20h4l10.5-10.5a2.121 2.121 0 1 0-3-3L5 17v3Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="m13.5 6.5 4 4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    )}
-                    {booking.status === "confirmed" && (
-                      <button className="icon-action" type="button" onClick={() => openActionModal(booking, "pending")} title="Mark pending" aria-label="Mark pending">
-                        <svg className="icon-action__svg icon-action__svg--undo" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M8.25 9.25H4.5v-3.75" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M4.8 9.2A8 8 0 1 1 7.1 17.8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    )}
-                  </span>
-                  {(booking.status || "pending") === "pending" && (
-                    <span className="service-portal-table__action-group service-portal-table__action-group--pending">
-                      <button className="btn btn--secondary btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "confirmed")}>
-                        Accept
-                      </button>
-                      <button className="btn btn--danger btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "cancelled")}>
-                        Cancel
-                      </button>
-                    </span>
-                  )}
-                  {booking.status === "confirmed" && (
-                    <span className="service-portal-table__action-group service-portal-table__action-group--single">
-                      <button className="btn btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "completed")}>
-                        Complete
-                      </button>
-                    </span>
-                  )}
-                  {booking.status === "completed" && (
-                    <span className="service-portal-table__action-group service-portal-table__action-group--single">
-                      <button className="btn btn--secondary btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "confirmed")}>
-                        Reopen
-                      </button>
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
+            <div className="stat-card stat-card--blue">
+              <div className="stat-icon"><ServicePortalIcon name="confirmed" /></div>
+              <div className="stat-value">{me?.summary.confirmed_count ?? 0}</div>
+              <div className="stat-label">Confirmed Jobs</div>
+              <div className="stat-sub">Accepted service work</div>
+            </div>
+            <div className="stat-card stat-card--green">
+              <div className="stat-icon"><ServicePortalIcon name="completedToday" /></div>
+              <div className="stat-value">{me?.summary.completed_today_count ?? 0}</div>
+              <div className="stat-label">Completed Today</div>
+              <div className="stat-sub">Closed out this day</div>
+            </div>
+            <div className="stat-card stat-card--purple">
+              <div className="stat-icon"><ServicePortalIcon name="completedTotal" /></div>
+              <div className="stat-value">{me?.summary.total_completed_count ?? 0}</div>
+              <div className="stat-label">Total Completed</div>
+              <div className="stat-sub">Closed service jobs</div>
+            </div>
           </div>
-        )}
+
+          <div className="grid service-portal-overview-grid admin-panel">
+            <section className="card admin-card--summary service-portal-summary">
+              <div className="card__header">
+                <div>
+                  <h3>Center Overview</h3>
+                  <p className="muted admin-card__subtitle">Current center identity, contact coverage, and immediate next action.</p>
+                </div>
+              </div>
+              <div className="service-portal-summary__grid">
+                <div className="service-portal-summary__item">
+                  <span>Center</span>
+                  <strong>{me?.center.name || "--"}</strong>
+                </div>
+                <div className="service-portal-summary__item">
+                  <span>Phone</span>
+                  <strong>{me?.center.phone || "--"}</strong>
+                </div>
+                <div className="service-portal-summary__item">
+                  <span>Portal</span>
+                  <strong>{me?.center.profile_id ? "Linked" : "Not Linked"}</strong>
+                </div>
+                <div className="service-portal-summary__item">
+                  <span>Assigned Bookings</span>
+                  <strong>{bookings.length}</strong>
+                </div>
+                <div className="service-portal-summary__item">
+                  <span>Next Action</span>
+                  <strong>{nextActionLabel}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>Workload Snapshot</h3>
+                  <p className="muted admin-card__subtitle">Current queue posture across pending, confirmed, and completed work.</p>
+                </div>
+              </div>
+              <ul className="list service-portal-list">
+                <li>
+                  <div className="list__title">Pending Reviews</div>
+                  <div className="list__meta">{me?.summary.pending_count ?? 0} bookings still need a center decision.</div>
+                </li>
+                <li>
+                  <div className="list__title">Confirmed Work</div>
+                  <div className="list__meta">{me?.summary.confirmed_count ?? 0} jobs are currently accepted and in progress.</div>
+                </li>
+                <li>
+                  <div className="list__title">Total Completed</div>
+                  <div className="list__meta">{me?.summary.total_completed_count ?? 0} bookings have been completed through this portal.</div>
+                </li>
+                <li>
+                  <div className="list__title">Manager Review Waiting</div>
+                  <div className="list__meta">{needsManagerReviewCount} completed bookings are still waiting for manager verification.</div>
+                </li>
+              </ul>
+            </section>
+          </div>
+
+          <div className="grid service-portal-overview-grid admin-panel">
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>Attention Now</h3>
+                  <p className="muted admin-card__subtitle">The nearest pending or confirmed jobs that need immediate operational attention.</p>
+                </div>
+              </div>
+              {upcomingQueue.length === 0 ? (
+                <p className="empty">No pending or confirmed jobs in the current queue.</p>
+              ) : (
+                <ul className="list service-portal-list">
+                  {upcomingQueue.map((booking) => (
+                    <li key={booking.id}>
+                      <div className="list__title">{vehicleLabel(booking)}</div>
+                      <div className="list__meta">
+                        {booking.requested_date} • {(booking.status || "pending").replace("_", " ")}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>Recently Closed Jobs</h3>
+                  <p className="muted admin-card__subtitle">Recently completed work with manager review state still visible to the center team.</p>
+                </div>
+              </div>
+              {latestCompleted.length === 0 ? (
+                <p className="empty">No completed bookings recorded yet.</p>
+              ) : (
+                <ul className="list service-portal-list">
+                  {latestCompleted.map((booking) => (
+                    <li key={booking.id}>
+                      <div className="list__title">{vehicleLabel(booking)}</div>
+                      <div className="list__meta">
+                        {(booking.completed_at || booking.requested_date)} • review {(booking.completion_review_status || "pending").replace("_", " ")}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="stats stats--three admin-stats">
+            <div className="stat-card stat-card--blue">
+              <div className="stat-value">{filteredBookings.length}</div>
+              <div className="stat-label">Filtered Queue</div>
+              <div className="stat-sub">Bookings in the current working set</div>
+            </div>
+            <div className="stat-card stat-card--amber">
+              <div className="stat-value">{me?.summary.pending_count ?? 0}</div>
+              <div className="stat-label">Pending Decisions</div>
+              <div className="stat-sub">Still need accept or cancel action</div>
+            </div>
+            <div className="stat-card stat-card--purple">
+              <div className="stat-value">{needsManagerReviewCount}</div>
+              <div className="stat-label">Awaiting Review</div>
+              <div className="stat-sub">Completed bookings still pending manager approval</div>
+            </div>
+          </div>
+
+          <section className="card service-portal-table-card">
+            <div className="card__header">
+              <div>
+                <h3>Service Bookings</h3>
+                <p className="muted admin-card__subtitle">Confirm, cancel, complete, and review assigned bookings from the active service queue.</p>
+              </div>
+            </div>
+            <p className="muted service-portal-register-subtitle">
+              Use this register to manage status transitions, service notes, and final pricing for assigned jobs.
+            </p>
+
+            <div className="table-controls">
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Vehicle, date, notes..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Status
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+                    <option value="all">All</option>
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
+              <div className="table-pagination">
+                <span className="table-pagination__meta">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+
+            {loading ? (
+              <p className="empty">Loading bookings...</p>
+            ) : filteredBookings.length === 0 ? (
+              <p className="empty">No bookings match the current search/filter.</p>
+            ) : (
+              <div className="table service-portal-table" style={{ ["--table-columns" as any]: 6 }}>
+                <div className="table__head service-portal-table__head">
+                  <span>Date</span>
+                  <span>Vehicle</span>
+                  <span>Plate</span>
+                  <span>Status</span>
+                  <span>Notes</span>
+                  <span>Actions</span>
+                </div>
+                {visibleBookings.map((booking) => (
+                  <div key={booking.id} className="table__row service-portal-table__row">
+                    <span className="service-portal-table__cell" data-label="Date">{booking.requested_date}</span>
+                    <span className="service-portal-table__cell" data-label="Vehicle">{vehicleName(booking)}</span>
+                    <span className="service-portal-table__cell" data-label="Plate">{vehiclePlate(booking)}</span>
+                    <span className="service-portal-table__cell" data-label="Status">
+                      <span className={`pill pill--${statusBadgeClass[booking.status || "pending"] || "warning"}`}>
+                        {booking.status || "pending"}
+                      </span>
+                    </span>
+                    <span className="service-portal-table__cell" data-label="Notes">
+                      {booking.service_notes || booking.notes ? (
+                        <span className="service-portal-table__notes">
+                          {String(booking.service_notes || booking.notes).length > 48
+                            ? `${String(booking.service_notes || booking.notes).slice(0, 48)}...`
+                            : String(booking.service_notes || booking.notes)}
+                        </span>
+                      ) : (
+                        "--"
+                      )}
+                    </span>
+                    <span className="table__actions service-portal-table__actions" data-label="Actions">
+                      <span className="service-portal-table__icon-group">
+                        <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label="View booking">
+                          <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                          </svg>
+                        </button>
+                        {(booking.status === "confirmed" || (booking.status === "completed" && booking.completion_review_status !== "approved")) && (
+                          <button className="icon-action" type="button" onClick={() => openDetailsModal(booking)} title="Edit details" aria-label="Edit details">
+                            <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M4 20h4l10.5-10.5a2.121 2.121 0 1 0-3-3L5 17v3Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="m13.5 6.5 4 4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        )}
+                        {booking.status === "confirmed" && (
+                          <button className="icon-action" type="button" onClick={() => openActionModal(booking, "pending")} title="Mark pending" aria-label="Mark pending">
+                            <svg className="icon-action__svg icon-action__svg--undo" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M8.25 9.25H4.5v-3.75" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M4.8 9.2A8 8 0 1 1 7.1 17.8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        )}
+                      </span>
+                      {(booking.status || "pending") === "pending" && (
+                        <span className="service-portal-table__action-group service-portal-table__action-group--pending">
+                          <button className="btn btn--secondary btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "confirmed")}>
+                            Accept
+                          </button>
+                          <button className="btn btn--danger btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "cancelled")}>
+                            Cancel
+                          </button>
+                        </span>
+                      )}
+                      {booking.status === "confirmed" && (
+                        <span className="service-portal-table__action-group service-portal-table__action-group--single">
+                          <button className="btn btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "completed")}>
+                            Complete
+                          </button>
+                        </span>
+                      )}
+                      {booking.status === "completed" && (
+                        <span className="service-portal-table__action-group service-portal-table__action-group--single">
+                          <button className="btn btn--secondary btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "confirmed")}>
+                            Reopen
+                          </button>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
       </section>
 
       {selectedBooking && (

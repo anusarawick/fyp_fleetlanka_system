@@ -63,6 +63,7 @@ function vehicleLabel(vehicle?: Vehicle) {
 }
 
 export default function Compliance(props: ComplianceProps) {
+  const [activeTab, setActiveTab] = useState<"overview" | "register">("overview");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | AlertRow["category"]>("all");
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -236,36 +237,52 @@ export default function Compliance(props: ComplianceProps) {
   ];
 
   return (
-    <section className="section compliance-page">
-      <div className="stats compliance-stats" style={{ marginBottom: "24px" }}>
+    <section className="section">
+      <section className="admin-page compliance-page">
+      <div className="stats compliance-stats admin-stats">
         <div className="stat-card stat-card--amber">
-          <div className="stat-icon">⚠️</div>
           <div className="stat-value">{expiredDocuments.length}</div>
           <div className="stat-label">Expired Documents</div>
           <div className="stat-sub">Requires immediate action</div>
         </div>
         <div className="stat-card stat-card--blue">
-          <div className="stat-icon">📄</div>
           <div className="stat-value">{expiringSoonDocuments.length}</div>
           <div className="stat-label">Expiring in 30 Days</div>
           <div className="stat-sub">Renewal watch</div>
         </div>
         <div className="stat-card stat-card--amber">
-          <div className="stat-icon">🛠️</div>
           <div className="stat-value">{vehiclesInMaintenance.length}</div>
           <div className="stat-label">Vehicles in Maintenance</div>
           <div className="stat-sub">Currently unavailable</div>
         </div>
         <div className="stat-card stat-card--green">
-          <div className="stat-icon">✅</div>
           <div className="stat-value">{pendingApprovals.length}</div>
           <div className="stat-label">Pending Approvals</div>
           <div className="stat-sub">Completed services awaiting review</div>
         </div>
       </div>
 
-      <div className="grid compliance-meta-grid" style={{ marginBottom: "24px" }}>
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Compliance sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Alert Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <>
+      <div className="grid compliance-meta-grid admin-panel">
+        <section className="card admin-card--summary">
           <div className="card__header">
             <h3>Document Ownership</h3>
           </div>
@@ -280,7 +297,7 @@ export default function Compliance(props: ComplianceProps) {
             </div>
           </div>
         </section>
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
             <h3>Maintenance Snapshot</h3>
           </div>
@@ -307,9 +324,9 @@ export default function Compliance(props: ComplianceProps) {
         </section>
       </div>
 
-      <div className="grid compliance-alert-grid" style={{ marginBottom: "24px" }}>
+      <div className="grid compliance-alert-grid admin-panel">
         {expiringLists.map((section) => (
-          <section className="card" key={section.title}>
+          <section className="card admin-card--summary" key={section.title}>
             <div className="card__header">
               <h3>{section.title}</h3>
             </div>
@@ -336,15 +353,17 @@ export default function Compliance(props: ComplianceProps) {
           </section>
         ))}
       </div>
+      </>
+      )}
 
-      <section className="card">
+      {activeTab === "register" && (
+      <section className="card admin-table-section admin-panel">
         <div className="card__header">
-          <h3>Compliance Register</h3>
+          <div>
+            <h3>Compliance Register</h3>
+            <p className="muted admin-card__subtitle">Search and review the current document, fleet, and approval alert stream in one operational register.</p>
+          </div>
         </div>
-        <p className="muted" style={{ marginTop: "-6px", marginBottom: "18px" }}>
-          Search and review the current document, fleet, and approval actions in one place.
-        </p>
-
         <div className="table-controls">
           <div className="table-controls__filters">
             <label className="table-controls__label table-controls__label--search">
@@ -445,6 +464,8 @@ export default function Compliance(props: ComplianceProps) {
             ))}
           </div>
         )}
+      </section>
+      )}
       </section>
     </section>
   );

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 type Driver = {
   id: string;
+  org_id?: string;
   email?: string;
   full_name?: string;
   phone?: string;
@@ -29,7 +30,43 @@ type DriversProps = {
   onDeleteDriver: (driverId: string) => void;
 };
 
+type DriversTab = "overview" | "register";
+
+type DriversIconName = "drivers" | "active" | "inactive" | "coverage";
+
+function DriversIcon({ name }: { name: DriversIconName }) {
+  switch (name) {
+    case "drivers":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m17 0v-2a4 4 0 0 0-3-3.87M14 3.13a4 4 0 0 1 0 7.75M9.5 11A4 4 0 1 0 9.5 3a4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "active":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "inactive":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m18 6-12 12M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "coverage":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5.5h16v13H4zM4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function Drivers(props: DriversProps) {
+  const [activeTab, setActiveTab] = useState<DriversTab>("overview");
   const [deleteTarget, setDeleteTarget] = useState<Driver | null>(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [viewTarget, setViewTarget] = useState<Driver | null>(null);
@@ -58,6 +95,9 @@ export default function Drivers(props: DriversProps) {
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
+  const activeDrivers = props.drivers.filter((driver) => (driver.status || "active") === "active");
+  const inactiveDrivers = props.drivers.filter((driver) => (driver.status || "active") !== "active");
+  const completeProfiles = props.drivers.filter((driver) => Boolean(driver.email) && Boolean(driver.phone));
 
   useEffect(() => {
     if (!props.editingDriverId && !props.loading) {
@@ -104,34 +144,104 @@ export default function Drivers(props: DriversProps) {
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: "24px" }}>
-        <div className="stat-card">
-          <div className="stat-icon">👤</div>
+      <section className="admin-page">
+      <section className="stats stats--four admin-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><DriversIcon name="drivers" /></div>
           <div className="stat-value">{props.drivers.length}</div>
           <div className="stat-label">Total Drivers</div>
+          <div className="stat-sub">Registered driver accounts</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">✅</div>
-          <div className="stat-value">{props.drivers.filter((driver) => (driver.status || "active") === "active").length}</div>
-          <div className="stat-label">Active drivers</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><DriversIcon name="active" /></div>
+          <div className="stat-value">{activeDrivers.length}</div>
+          <div className="stat-label">Active Drivers</div>
+          <div className="stat-sub">Currently enabled for work</div>
         </div>
-      </div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><DriversIcon name="inactive" /></div>
+          <div className="stat-value">{inactiveDrivers.length}</div>
+          <div className="stat-label">Inactive Drivers</div>
+          <div className="stat-sub">Temporarily disabled accounts</div>
+        </div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><DriversIcon name="coverage" /></div>
+          <div className="stat-value">{completeProfiles.length}</div>
+          <div className="stat-label">Profile Coverage</div>
+          <div className="stat-sub">Accounts with email and phone details</div>
+        </div>
+      </section>
 
-      <div className="grid">
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Driver sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="grid admin-summary-grid admin-summary-grid--balanced">
+        <section className="card admin-card--action">
           <div className="card__header">
-            <h3>Driver Actions</h3>
+            <div>
+              <h3>Driver Actions</h3>
+              <p className="muted admin-card__subtitle">Create driver accounts and manage mobile-access roster records from one place.</p>
+            </div>
           </div>
-          <button className="btn" type="button" onClick={openCreateModal}>
-            + Add Driver
-          </button>
+          <div className="quick-actions quick-actions--single">
+            <button className="btn" type="button" onClick={openCreateModal}>
+              Add Driver
+            </button>
+          </div>
         </section>
 
+        <section className="card admin-card--summary">
+          <div className="card__header">
+            <div>
+              <h3>Roster Status</h3>
+              <p className="muted admin-card__subtitle">Operational view of the driver pool and current account readiness.</p>
+            </div>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Active Roster</div>
+              <div className="list__meta">{activeDrivers.length} drivers currently available for assignment</div>
+            </li>
+            <li>
+              <div className="list__title">Inactive Accounts</div>
+              <div className="list__meta">{inactiveDrivers.length} drivers currently withheld from access</div>
+            </li>
+            <li>
+              <div className="list__title">Contact Completeness</div>
+              <div className="list__meta">{completeProfiles.length} driver profiles have both email and phone on record</div>
+            </li>
+          </ul>
+        </section>
       </div>
+      )}
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      {activeTab === "register" && (
+      <section className="card admin-table-section">
         <div className="card__header">
-          <h3>📋 Current Drivers</h3>
+          <div>
+            <h3>Driver Register</h3>
+            <p className="muted admin-card__subtitle">Search, filter, review, and manage current driver accounts without leaving the roster view.</p>
+          </div>
+          <div className="button-row">
+            <button className="btn btn--compact" type="button" onClick={openCreateModal}>
+              Add Driver
+            </button>
+          </div>
         </div>
         {props.drivers.length === 0 ? (
           <p className="empty">No drivers added yet. Create your first driver profile.</p>
@@ -283,6 +393,7 @@ export default function Drivers(props: DriversProps) {
           </>
         )}
       </section>
+      )}
 
       {showDriverModal && (
         <div className="modal-backdrop" role="presentation">
@@ -442,6 +553,7 @@ export default function Drivers(props: DriversProps) {
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

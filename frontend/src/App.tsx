@@ -17,6 +17,7 @@ import ProfileSettings from "./pages/ProfileSettings";
 import Drivers from "./pages/Drivers";
 import ServicePortal from "./pages/ServicePortal";
 import TripsPage from "./pages/Trips";
+import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
 
 // ===== ROLE SELECTION PAGE =====
@@ -195,49 +196,55 @@ function DriverLogin({ onBack }: { onBack: () => void }) {
   return (
     <section className="driver-auth">
       <header className="driver-auth__header">
-        <button className="driver-auth__back" onClick={onBack}>←</button>
+        <button className="driver-auth__back" onClick={onBack} aria-label="Back to role selection">←</button>
         <span className="driver-auth__brand">FleetLanka</span>
       </header>
 
       <main className="driver-auth__main">
-        <div className="driver-auth__icon">🚗</div>
-        <h1 className="driver-auth__title">Driver Login</h1>
-        <p className="driver-auth__subtitle">Sign in to start tracking your trips</p>
+        <div className="driver-auth__panel">
+          <div className="driver-auth__hero">
+            <div className="driver-auth__hero-copy">
+              <span className="driver-auth__eyebrow">Driver app</span>
+              <h1 className="driver-auth__title">Driver Login</h1>
+              <p className="driver-auth__subtitle">Sign in to start trips, track live route activity, and submit daily fuel updates.</p>
+            </div>
+          </div>
 
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
+          {error && (
+            <div className="alert alert--error">
+              <span>{error}</span>
+              <button className="alert__close" type="button" onClick={() => setError(null)}>
+                ×
+              </button>
+            </div>
+          )}
+
+          <form className="driver-form" onSubmit={onSubmit}>
+            <div className="driver-form__field">
+              <label>Email</label>
+              <input
+                type="email"
+                placeholder="driver@fleetlanka.lk"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="driver-form__field">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Enter password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <button className="driver-btn driver-btn--primary" type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </button>
-          </div>
-        )}
-
-        <form className="driver-form" onSubmit={onSubmit}>
-          <div className="driver-form__field">
-            <label>Email</label>
-            <input
-              type="email"
-              placeholder="driver@fleetlanka.lk"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="driver-form__field">
-            <label>Password</label>
-            <input
-              type="password"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button className="driver-btn driver-btn--primary" type="submit" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+          </form>
+        </div>
       </main>
     </section>
   );
@@ -492,6 +499,7 @@ function ManagerRoutes() {
             <Fuel
               vehicles={data.vehicles}
               fuelLogs={data.fuelLogs}
+              fuelForecasts={data.fuelForecasts}
               loading={loading}
               fuelVehicle={data.fuelVehicle}
               setFuelVehicle={data.setFuelVehicle}
@@ -506,6 +514,7 @@ function ManagerRoutes() {
               fuelVendor={data.fuelVendor}
               setFuelVendor={data.setFuelVendor}
               editingFuelId={data.editingFuelId}
+              onExportFuel={() => exportFuel(data.fuelLogs)}
               onAddFuel={data.handleAddFuel}
               onEditFuel={data.handleEditFuel}
               onCancelFuelEdit={data.handleCancelFuelEdit}
@@ -619,13 +628,22 @@ function ManagerRoutes() {
           <>
             <Topbar title="Analytics" subtitle="Trends and exports" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Analytics
-              fuelLogs={data.fuelLogs}
               maintenance={data.maintenance}
+              fuelCostTotal={data.fuelCostTotal}
+              projectedFuelDemand={data.fuelForecasts.reduce(
+                (sum, row) => sum + row.forecast_liters_7d,
+                0
+              )}
+              avgFuelPerVehicle={
+                data.vehicles.length > 0
+                  ? data.fuelLogs.reduce((sum, f) => sum + f.liters, 0) /
+                    data.vehicles.length
+                  : 0
+              }
               vehicleCount={data.vehicles.length}
               driverCount={data.drivers.length}
               activeTrips={data.activeTrips}
               topPerformers={data.topPerformers}
-              onExportFuel={() => exportFuel(data.fuelLogs)}
               onExportMaintenance={() => exportMaintenance(data.maintenance)}
             />
           </>

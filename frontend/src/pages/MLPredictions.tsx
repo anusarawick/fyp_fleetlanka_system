@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { MaintenancePrediction, Vehicle } from "../types";
 
 type MLPredictionsProps = {
@@ -44,6 +44,7 @@ function formatFeatureLabel(key: string) {
 }
 
 export default function MLPredictions(props: MLPredictionsProps) {
+  const [activeTab, setActiveTab] = useState<"run" | "audit">("run");
   const selectedVehiclePrediction = props.mlVehicleId
     ? props.maintenancePredictionMap[props.mlVehicleId]
     : null;
@@ -93,54 +94,146 @@ export default function MLPredictions(props: MLPredictionsProps) {
 
   return (
     <section className="section">
-      <h2>ML Predictions</h2>
-      <div className="grid">
-        <section className="card">
-          <h3>Vehicle Maintenance Check</h3>
-          <div className="form">
-            <label>
-              Vehicle
-              <select
-                value={props.mlVehicleId}
-                onChange={(e) => props.setMlVehicleId(e.target.value)}
-              >
-                <option value="">Select vehicle</option>
-                {props.vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.plate_no} {vehicle.make ? `• ${vehicle.make}` : ""} {vehicle.model ? `• ${vehicle.model}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              className="btn"
-              type="button"
-              disabled={props.loading || !props.mlVehicleId}
-              onClick={() => props.onRunVehicleMaintenanceCheck(props.mlVehicleId)}
-            >
-              {props.loading ? "Running..." : "Run Maintenance Check"}
-            </button>
+      <section className="admin-page">
+        <section className="stats stats--three admin-stats">
+          <div className="stat-card stat-card--blue">
+            <div className="stat-value">{props.vehicles.length}</div>
+            <div className="stat-label">Tracked Vehicles</div>
+            <div className="stat-sub">Vehicles available for maintenance model checks</div>
           </div>
-          {selectedVehiclePrediction ? (
-            <>
-              <div className="result">
-                Latest result: {selectedVehiclePrediction.risk_level.toUpperCase()}{" "}
-                ({(selectedVehiclePrediction.probability * 100).toFixed(0)}%)
+          <div className="stat-card stat-card--green">
+            <div className="stat-value">{props.maintenancePredictions.length}</div>
+            <div className="stat-label">Prediction Runs</div>
+            <div className="stat-sub">Stored prediction snapshots across the fleet</div>
+          </div>
+          <div className="stat-card stat-card--purple">
+            <div className="stat-value">{selectedVehicleHistory.length}</div>
+            <div className="stat-label">Selected History</div>
+            <div className="stat-sub">Runs currently available for the chosen vehicle</div>
+          </div>
+        </section>
+
+        <nav className="admin-tabs" aria-label="ML prediction sections">
+          <button
+            type="button"
+            className={`admin-tab ${activeTab === "run" ? "admin-tab--active" : ""}`}
+            onClick={() => setActiveTab("run")}
+          >
+            Run Check
+          </button>
+          <button
+            type="button"
+            className={`admin-tab ${activeTab === "audit" ? "admin-tab--active" : ""}`}
+            onClick={() => setActiveTab("audit")}
+          >
+            Audit Trail
+          </button>
+        </nav>
+
+        {activeTab === "run" && (
+          <div className="grid admin-summary-grid admin-summary-grid--two admin-panel">
+            <section className="card admin-card--action">
+              <div className="card__header">
+                <div>
+                  <h3>Vehicle Maintenance Check</h3>
+                  <p className="muted admin-card__subtitle">Run the current maintenance model against a selected vehicle and review the latest result immediately.</p>
+                </div>
+              </div>
+              <div className="form">
+                <label>
+                  Vehicle
+                  <select
+                    value={props.mlVehicleId}
+                    onChange={(e) => props.setMlVehicleId(e.target.value)}
+                  >
+                    <option value="">Select vehicle</option>
+                    {props.vehicles.map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.plate_no} {vehicle.make ? `• ${vehicle.make}` : ""} {vehicle.model ? `• ${vehicle.model}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={props.loading || !props.mlVehicleId}
+                  onClick={() => props.onRunVehicleMaintenanceCheck(props.mlVehicleId)}
+                >
+                  {props.loading ? "Running..." : "Run Maintenance Check"}
+                </button>
+              </div>
+            </section>
+
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>Latest Result</h3>
+                  <p className="muted admin-card__subtitle">Current prediction snapshot for the selected vehicle.</p>
+                </div>
+              </div>
+              {selectedVehiclePrediction ? (
+                <div className="prediction-summary">
+                  <div className="result">
+                    Latest result: {selectedVehiclePrediction.risk_level.toUpperCase()}{" "}
+                    ({(selectedVehiclePrediction.probability * 100).toFixed(0)}%)
+                  </div>
+                  {latestPrediction ? (
+                    <div className="prediction-audit__meta">
+                      <div className="detail-item">
+                        <span>Last Predicted</span>
+                        <strong>{formatDateTime(latestPrediction.predicted_at)}</strong>
+                      </div>
+                      <div className="detail-item">
+                        <span>Previous Risk</span>
+                        <strong>{previousPrediction ? formatRiskLabel(previousPrediction.risk_level) : "No previous run"}</strong>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="empty">Select a vehicle and run a maintenance check to populate the latest result.</p>
+              )}
+            </section>
+          </div>
+        )}
+
+        {activeTab === "audit" && (
+          <div className="grid admin-summary-grid admin-summary-grid--two admin-panel">
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>Prediction History</h3>
+                  <p className="muted admin-card__subtitle">Recent stored runs for the selected vehicle, newest first.</p>
+                </div>
+              </div>
+              {selectedVehicleHistory.length === 0 ? (
+                <p className="empty">No prediction history exists for the selected vehicle yet.</p>
+              ) : (
+                <ul className="list">
+                  {selectedVehicleHistory.slice(0, 6).map((prediction) => (
+                    <li key={prediction.id}>
+                      <div className="list__title">
+                        {formatRiskLabel(prediction.risk_level)} • {(prediction.probability * 100).toFixed(0)}%
+                      </div>
+                      <div className="list__meta">{formatDateTime(prediction.predicted_at)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="card admin-card--summary">
+              <div className="card__header">
+                <div>
+                  <h3>What Changed</h3>
+                  <p className="muted admin-card__subtitle">Diff view between the latest run and the previous prediction snapshot.</p>
+                </div>
               </div>
               {latestPrediction ? (
                 <div className="prediction-audit">
-                  <div className="prediction-audit__meta">
-                    <div className="detail-item">
-                      <span>Last Predicted</span>
-                      <strong>{formatDateTime(latestPrediction.predicted_at)}</strong>
-                    </div>
-                    <div className="detail-item">
-                      <span>Previous Risk</span>
-                      <strong>{previousPrediction ? formatRiskLabel(previousPrediction.risk_level) : "No previous run"}</strong>
-                    </div>
-                  </div>
                   <div className="prediction-audit__changes">
-                    <span className="prediction-audit__label">What Changed</span>
+                    <span className="prediction-audit__label">Change Summary</span>
                     {predictionChanges.length > 0 ? (
                       <ul className="prediction-audit__list">
                         {predictionChanges.map((change) => (
@@ -148,15 +241,17 @@ export default function MLPredictions(props: MLPredictionsProps) {
                         ))}
                       </ul>
                     ) : (
-                      <p className="muted">{previousPrediction ? "No tracked changes." : "Run again to compare changes."}</p>
+                      <p className="muted">{previousPrediction ? "No tracked changes." : "Run another prediction to compare changes over time."}</p>
                     )}
                   </div>
                 </div>
-              ) : null}
-            </>
-          ) : null}
-        </section>
-      </div>
+              ) : (
+                <p className="empty">Run a check first to build an audit trail.</p>
+              )}
+            </section>
+          </div>
+        )}
+      </section>
     </section>
   );
 }

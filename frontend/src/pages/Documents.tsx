@@ -45,7 +45,10 @@ type DocumentsProps = {
   onDeleteDocument: (documentId: string) => Promise<void>;
 };
 
+type DocumentsTab = "overview" | "register";
+
 export default function Documents(props: DocumentsProps) {
+  const [activeTab, setActiveTab] = useState<DocumentsTab>("overview");
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
@@ -162,28 +165,50 @@ export default function Documents(props: DocumentsProps) {
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: "24px" }}>
-        <div className="stat-card">
-          <div className="stat-icon">📄</div>
+      <section className="admin-page">
+      <section className="stats stats--three admin-stats">
+        <div className="stat-card stat-card--blue">
           <div className="stat-value">{props.documents.length}</div>
           <div className="stat-label">Documents</div>
+          <div className="stat-sub">Tracked vehicle and driver documents</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">⏳</div>
+        <div className="stat-card stat-card--amber">
           <div className="stat-value">{expiringSoonCount}</div>
           <div className="stat-label">Expiring Soon</div>
+          <div className="stat-sub">Documents with expiry dates inside the next 30 days</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🚐</div>
+        <div className="stat-card stat-card--purple">
           <div className="stat-value">{props.vehicles.length}</div>
           <div className="stat-label">Fleet Vehicles</div>
+          <div className="stat-sub">Available vehicle owners for document registration</div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid">
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Document sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="grid admin-summary-grid admin-summary-grid--balanced admin-panel">
+        <section className="card admin-card--action">
           <div className="card__header">
-            <h3>Document Actions</h3>
+            <div>
+              <h3>Document Actions</h3>
+              <p className="muted admin-card__subtitle">Register new compliance documents and keep expiry tracking visible from the same workspace.</p>
+            </div>
           </div>
           <div className="button-row">
             <button
@@ -195,14 +220,17 @@ export default function Documents(props: DocumentsProps) {
                 setShowDocumentModal(true);
               }}
             >
-              + Add Document
+              Add Document
             </button>
           </div>
         </section>
 
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>Renewal Watch</h3>
+            <div>
+              <h3>Renewal Watch</h3>
+              <p className="muted admin-card__subtitle">Next document renewals ordered by expiry date.</p>
+            </div>
           </div>
           {props.documents.length === 0 ? (
             <p className="empty">No documents tracked yet.</p>
@@ -233,11 +261,35 @@ export default function Documents(props: DocumentsProps) {
             </ul>
           )}
         </section>
-      </div>
 
-      <section className="card" style={{ marginTop: "24px" }}>
+        <section className="card admin-card--summary">
+          <div className="card__header">
+            <div>
+              <h3>Ownership Mix</h3>
+              <p className="muted admin-card__subtitle">Current balance between vehicle and driver-owned documents.</p>
+            </div>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Vehicle Documents</div>
+              <div className="list__meta">{props.documents.filter((doc) => !!doc.vehicle_id).length} records linked to fleet assets</div>
+            </li>
+            <li>
+              <div className="list__title">Driver Documents</div>
+              <div className="list__meta">{props.documents.filter((doc) => !!doc.driver_id).length} records linked to people profiles</div>
+            </li>
+          </ul>
+        </section>
+      </div>
+      )}
+
+      {activeTab === "register" && (
+      <section className="card admin-table-section admin-panel">
         <div className="card__header">
-          <h3>Document Register</h3>
+          <div>
+            <h3>Document Register</h3>
+            <p className="muted admin-card__subtitle">Search, review, and maintain tracked documents without changing the underlying registration workflow.</p>
+          </div>
         </div>
         {props.documents.length === 0 ? (
           <p className="empty">No documents yet.</p>
@@ -385,6 +437,7 @@ export default function Documents(props: DocumentsProps) {
           </>
         )}
       </section>
+      )}
 
       {showDocumentModal && (
         <div className="modal-backdrop" role="presentation">
@@ -572,6 +625,7 @@ export default function Documents(props: DocumentsProps) {
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

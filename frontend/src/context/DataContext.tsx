@@ -15,6 +15,7 @@ import {
     Driver,
     Trip,
     FuelLog,
+    FuelForecast,
     Maintenance,
     Document,
     ServiceCenter,
@@ -38,6 +39,7 @@ type DataContextType = {
     serviceBookings: ServiceBooking[];
     driverScores: DriverScore[];
     maintenancePredictions: MaintenancePrediction[];
+    fuelForecasts: FuelForecast[];
 
     // Computed values
     activeTrips: number;
@@ -195,6 +197,7 @@ type DataContextType = {
     maintResult: string | null;
     fuelResult: string | null;
     maintenancePredictionMap: Record<string, MaintenancePrediction>;
+    refreshFuelForecasts: () => Promise<void>;
 
     // Handlers
     handleSaveVehicle: (e: FormEvent) => Promise<void>;
@@ -293,6 +296,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [serviceBookings, setServiceBookings] = useState<ServiceBooking[]>([]);
     const [driverScores, setDriverScores] = useState<DriverScore[]>([]);
     const [maintenancePredictions, setMaintenancePredictions] = useState<MaintenancePrediction[]>([]);
+    const [fuelForecasts, setFuelForecasts] = useState<FuelForecast[]>([]);
 
     const deriveTripStatus = (trip: Trip) => {
         if (trip.status) return trip.status;
@@ -621,6 +625,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceBookings([]);
                     setDriverScores([]);
                     setMaintenancePredictions([]);
+                    setFuelForecasts([]);
                     setLiveTrips([]);
                     setMlVehicleId("");
                     return;
@@ -636,6 +641,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setServiceBookings([]);
                     setDriverScores([]);
                     setMaintenancePredictions([]);
+                    setFuelForecasts([]);
                     setLiveTrips([]);
                     setMlVehicleId("");
                     return;
@@ -663,6 +669,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setServiceBookings(sb);
                 setDriverScores(ds);
                 setMaintenancePredictions(mp);
+                setFuelForecasts([]);
                 setLiveTrips([]);
             } catch (e: any) {
                 setError(e.message);
@@ -707,6 +714,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (intervalId !== null) window.clearInterval(intervalId);
         };
     }, [token, role, setError]);
+
+    async function refreshFuelForecasts() {
+        if (!token || role !== "manager") return;
+        const response = await apiGet<{ forecasts: FuelForecast[] }>("/ml/fuel/forecast", token);
+        setFuelForecasts(response.forecasts || []);
+    }
+
+    useEffect(() => {
+        if (!token || role !== "manager") return;
+        refreshFuelForecasts().catch((err: any) => {
+            setFuelForecasts([]);
+            setError(err.message || "Fuel forecast load failed");
+        });
+    }, [token, role, vehicles.length, fuelLogs.length, trips.length]);
 
     useEffect(() => {
         if (role !== "driver" || !token || !activeTripId || watchIdRef.current !== null) return;
@@ -765,6 +786,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setServiceBookings([]);
         setDriverScores([]);
         setMaintenancePredictions([]);
+        setFuelForecasts([]);
         setMlVehicleId("");
         setVehicleMileage("");
         setEditingFuelId(null);
@@ -1836,6 +1858,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 maintResult,
                 fuelResult,
                 maintenancePredictionMap,
+                fuelForecasts,
+                refreshFuelForecasts,
                 handleSaveVehicle,
                 handleEditVehicle,
                 handleCancelVehicleEdit,

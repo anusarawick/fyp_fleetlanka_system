@@ -107,6 +107,12 @@ create table if not exists public.vehicles (
   tire_condition text,
   brake_condition text,
   battery_status text,
+  last_service_cost_lkr numeric,
+  next_service_due_km numeric,
+  avg_monthly_km numeric,
+  recent_trip_count_30d int default 0,
+  recent_fuel_efficiency_avg numeric,
+  service_center_visits_12m int default 0,
   created_at timestamptz not null default now(),
   unique (org_id, plate_no)
 );

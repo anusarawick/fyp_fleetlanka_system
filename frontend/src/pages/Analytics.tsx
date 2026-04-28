@@ -6,6 +6,18 @@ type FuelLog = {
   vehicle_id: string;
 };
 
+type FuelForecast = {
+  vehicle_id: string;
+  plate_no: string;
+  forecast_liters_7d: number;
+  recent_7d_liters: number;
+  recent_30d_liters: number;
+  recent_distance_km_30d: number;
+  recent_trip_count_30d: number;
+  recent_avg_speed_kmh: number;
+  fuel_efficiency_gap_ratio: number;
+};
+
 type MaintenanceRecord = {
   id: string;
   service_date: string;
@@ -13,25 +25,57 @@ type MaintenanceRecord = {
 };
 
 type AnalyticsProps = {
-  fuelLogs: FuelLog[];
   maintenance: MaintenanceRecord[];
+  fuelCostTotal: number;
+  projectedFuelDemand: number;
+  avgFuelPerVehicle: number;
   vehicleCount: number;
   driverCount: number;
   activeTrips: number;
   topPerformers: { driverId: string; driverName: string; score: number }[];
-  onExportFuel: () => void;
   onExportMaintenance: () => void;
 };
 
-export default function Analytics(props: AnalyticsProps) {
-  const fuelCostTotal = props.fuelLogs.reduce(
-    (sum, f) => sum + (f.cost_lkr || 0),
-    0
-  );
-  const fuelLitersTotal = props.fuelLogs.reduce((sum, f) => sum + f.liters, 0);
-  const avgFuelPerVehicle =
-    props.vehicleCount > 0 ? fuelLitersTotal / props.vehicleCount : 0;
+type AnalyticsIconName = "fuel" | "average" | "projection" | "maintenance" | "drivers";
 
+function AnalyticsIcon({ name }: { name: AnalyticsIconName }) {
+  switch (name) {
+    case "fuel":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "average":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 19V9m7 10V5m7 14v-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "projection":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 18 10 11l4 3 5-8m0 0h-5m5 0v5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "maintenance":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "drivers":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+export default function Analytics(props: AnalyticsProps) {
   const upcomingMaintenance = props.maintenance.filter((m) => {
     if (!m.predicted_due_date) return false;
     const due = new Date(m.predicted_due_date).getTime();
@@ -40,100 +84,57 @@ export default function Analytics(props: AnalyticsProps) {
     return due >= now && due <= now + sevenDays;
   });
 
-  const fuelByDate = props.fuelLogs.reduce<Record<string, number>>((acc, f) => {
-    acc[f.fuel_date] = (acc[f.fuel_date] || 0) + f.liters;
-    return acc;
-  }, {});
-
-  const fuelSeries = Object.entries(fuelByDate)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-7);
-
-  const maxFuel = fuelSeries.reduce((m, [, v]) => Math.max(m, v), 1);
-
   return (
     <section className="section">
-      <h2>Analytics</h2>
-      <section className="stats">
-        <div className="stat-card">
-          <div className="stat-icon">⛽</div>
-          <div className="stat-value">{fuelCostTotal.toFixed(0)}</div>
+      <section className="analytics-page analytics-page--summary">
+      <section className="stats stats--five analytics-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><AnalyticsIcon name="fuel" /></div>
+          <div className="stat-value">{props.fuelCostTotal.toFixed(0)}</div>
           <div className="stat-label">Fuel Cost (LKR)</div>
           <div className="stat-sub">Total logged</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">📊</div>
-          <div className="stat-value">{avgFuelPerVehicle.toFixed(1)}</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><AnalyticsIcon name="average" /></div>
+          <div className="stat-value">{props.avgFuelPerVehicle.toFixed(1)}</div>
           <div className="stat-label">Avg Fuel / Vehicle</div>
           <div className="stat-sub">Liters</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🧰</div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><AnalyticsIcon name="projection" /></div>
+          <div className="stat-value">{props.projectedFuelDemand.toFixed(1)}</div>
+          <div className="stat-label">Projected Fuel (7d)</div>
+          <div className="stat-sub">Liters</div>
+        </div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><AnalyticsIcon name="maintenance" /></div>
           <div className="stat-value">{upcomingMaintenance.length}</div>
           <div className="stat-label">Maintenance Due (7d)</div>
           <div className="stat-sub">Upcoming</div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon">🧑‍✈️</div>
+          <div className="stat-icon"><AnalyticsIcon name="drivers" /></div>
           <div className="stat-value">{props.driverCount}</div>
           <div className="stat-label">Drivers</div>
           <div className="stat-sub">Registered</div>
         </div>
       </section>
 
-      <div className="grid">
-        <section className="card">
+      <div className="grid analytics-summary-grid">
+        <section className="card analytics-card--summary">
           <div className="card__header">
-            <h3>Fuel Trend (last 7 days)</h3>
-          </div>
-          {fuelSeries.length === 0 ? (
-            <p className="muted empty">No fuel data to plot.</p>
-          ) : (
-            <div className="bar-chart">
-              {fuelSeries.map(([date, value]) => (
-                <div key={date} className="bar">
-                  <div
-                    className="bar__fill"
-                    style={{ height: `${(value / maxFuel) * 100}%` }}
-                  />
-                  <div className="bar__label">{date.slice(5)}</div>
-                </div>
-              ))}
+            <div>
+              <h3>Maintenance Due Soon</h3>
+              <p className="muted analytics-card__subtitle">Scheduled work requiring attention in the next 7 days.</p>
             </div>
-          )}
-        </section>
-        <section className="card">
-          <div className="card__header">
-            <h3>Fuel Logs (latest)</h3>
-            <button className="btn btn--secondary" onClick={props.onExportFuel}>
-              Export CSV
-            </button>
-          </div>
-          {props.fuelLogs.length === 0 ? (
-            <p className="muted empty">No fuel logs yet.</p>
-          ) : (
-            <ul className="list">
-              {props.fuelLogs.slice(0, 8).map((f) => (
-                <li key={f.id}>
-                  <div className="list__title">{f.fuel_date}</div>
-                  <div className="list__meta">
-                    {f.liters} L • {f.cost_lkr || 0} LKR
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="card">
-          <div className="card__header">
-            <h3>Maintenance Due Soon</h3>
-            <button
-              className="btn btn--secondary"
-              onClick={props.onExportMaintenance}
-            >
-              Export CSV
-            </button>
+            <div className="analytics-card__actions">
+              <button
+                className="btn btn--secondary"
+                onClick={props.onExportMaintenance}
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
           {upcomingMaintenance.length === 0 ? (
             <p className="muted empty">No upcoming maintenance.</p>
@@ -149,9 +150,35 @@ export default function Analytics(props: AnalyticsProps) {
           )}
         </section>
 
-        <section className="card">
+        <section className="card analytics-card--summary">
           <div className="card__header">
-            <h3>Top Performing Drivers</h3>
+            <div>
+              <h3>Fleet Summary</h3>
+              <p className="muted analytics-card__subtitle">Current fleet and trip coverage across the portal.</p>
+            </div>
+          </div>
+          <ul className="list">
+            <li>
+              <div className="list__title">Registered Vehicles</div>
+              <div className="list__meta">{props.vehicleCount}</div>
+            </li>
+            <li>
+              <div className="list__title">Registered Drivers</div>
+              <div className="list__meta">{props.driverCount}</div>
+            </li>
+            <li>
+              <div className="list__title">Active Trips</div>
+              <div className="list__meta">{props.activeTrips}</div>
+            </li>
+          </ul>
+        </section>
+
+        <section className="card analytics-card--wide analytics-card--summary">
+          <div className="card__header">
+            <div>
+              <h3>Top Performing Drivers</h3>
+              <p className="muted analytics-card__subtitle">Latest top-scoring drivers from current performance snapshots.</p>
+            </div>
           </div>
           {props.topPerformers.length === 0 ? (
             <p className="muted empty">No driver scores recorded yet.</p>
@@ -167,6 +194,7 @@ export default function Analytics(props: AnalyticsProps) {
           )}
         </section>
       </div>
+      </section>
     </section>
   );
 }

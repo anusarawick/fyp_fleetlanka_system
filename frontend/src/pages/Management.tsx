@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 type Vehicle = {
   id: string;
+  org_id?: string;
   plate_no: string;
   make?: string;
   model?: string;
@@ -73,7 +74,43 @@ type ManagementProps = {
   onDeleteVehicle: (vehicleId: string) => void;
 };
 
+type ManagementTab = "overview" | "register";
+
+type ManagementIconName = "fleet" | "trips" | "service" | "risk";
+
+function ManagementIcon({ name }: { name: ManagementIconName }) {
+  switch (name) {
+    case "fleet":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 16V9l3-3h9l3 3v7M7 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "trips":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "service":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "risk":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function Management(props: ManagementProps) {
+  const [activeTab, setActiveTab] = useState<ManagementTab>("overview");
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [viewTarget, setViewTarget] = useState<Vehicle | null>(null);
@@ -104,6 +141,11 @@ export default function Management(props: ManagementProps) {
   const paginatedVehicles = filteredVehicles.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
+  );
+  const maintenanceVehicles = props.vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance");
+  const activeVehicles = props.vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "active");
+  const flaggedVehicles = Object.values(props.maintenancePredictionMap).filter(
+    (prediction) => prediction.risk_level === "medium" || prediction.risk_level === "high"
   );
 
   useEffect(() => {
@@ -187,29 +229,126 @@ export default function Management(props: ManagementProps) {
 
   return (
     <section className="section">
-      <div className="grid">
-        <section className="card">
+      <section className="admin-page">
+      <section className="stats stats--four admin-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><ManagementIcon name="fleet" /></div>
+          <div className="stat-value">{props.vehicles.length}</div>
+          <div className="stat-label">Fleet Vehicles</div>
+          <div className="stat-sub">Registered assets</div>
+        </div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><ManagementIcon name="trips" /></div>
+          <div className="stat-value">{props.activeTrips}</div>
+          <div className="stat-label">Active Trips</div>
+          <div className="stat-sub">Vehicles currently dispatched</div>
+        </div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><ManagementIcon name="service" /></div>
+          <div className="stat-value">{maintenanceVehicles.length}</div>
+          <div className="stat-label">In Maintenance</div>
+          <div className="stat-sub">Service-state vehicles</div>
+        </div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><ManagementIcon name="risk" /></div>
+          <div className="stat-value">{flaggedVehicles.length}</div>
+          <div className="stat-label">Flagged Risk</div>
+          <div className="stat-sub">Medium or high prediction results</div>
+        </div>
+      </section>
+
+      <nav className="admin-tabs" aria-label="Fleet management sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="grid admin-summary-grid admin-summary-grid--balanced">
+        <section className="card admin-card--action">
           <div className="card__header">
-            <h3>Fleet Actions</h3>
+            <div>
+              <h3>Fleet Actions</h3>
+              <p className="muted admin-card__subtitle">Create or update vehicle records from one place.</p>
+            </div>
           </div>
-          <button className="btn" type="button" onClick={openCreateModal}>
-            + Add Vehicle
-          </button>
+          <div className="quick-actions quick-actions--single">
+            <button className="btn" type="button" onClick={openCreateModal}>
+              Add Vehicle
+            </button>
+          </div>
         </section>
 
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>📍 Active Trips</h3>
+            <div>
+              <h3>Fleet Status</h3>
+              <p className="muted admin-card__subtitle">Current balance between active and maintenance availability.</p>
+            </div>
           </div>
-          <div className="stat-value" style={{ marginBottom: "8px" }}>
-            {props.activeTrips}
+          <ul className="list">
+            <li>
+              <div className="list__title">Active Vehicles</div>
+              <div className="list__meta">{activeVehicles.length} vehicles currently available</div>
+            </li>
+            <li>
+              <div className="list__title">Maintenance State</div>
+              <div className="list__meta">{maintenanceVehicles.length} vehicles currently under service attention</div>
+            </li>
+          </ul>
+        </section>
+
+        <section className="card admin-card--summary">
+          <div className="card__header">
+            <div>
+              <h3>Maintenance Watch</h3>
+              <p className="muted admin-card__subtitle">Latest model-driven attention list for the fleet register.</p>
+            </div>
           </div>
+          {flaggedVehicles.length === 0 ? (
+            <p className="empty">No medium or high maintenance-risk vehicles yet.</p>
+          ) : (
+            <ul className="list">
+              {flaggedVehicles.slice(0, 3).map((prediction) => {
+                const vehicle = props.vehicles.find((item) => item.id === prediction.vehicle_id);
+                return (
+                  <li key={prediction.vehicle_id}>
+                    <div className="list__title">{vehicle?.plate_no || "Vehicle"}</div>
+                    <div className="list__meta">
+                      {formatRiskLabel(prediction.risk_level)} • {Math.round(prediction.probability * 100)}%
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
+      )}
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      {activeTab === "register" && (
+      <section className="card admin-table-section">
         <div className="card__header">
-          <h3>📋 Current Vehicles</h3>
+          <div>
+            <h3>Vehicle Register</h3>
+            <p className="muted admin-card__subtitle">Search, filter, review, and maintain the current fleet record.</p>
+          </div>
+          <div className="button-row">
+            <button className="btn btn--compact" type="button" onClick={openCreateModal}>
+              Add Vehicle
+            </button>
+          </div>
         </div>
         {props.vehicles.length === 0 ? (
           <p className="empty">No vehicles added yet.</p>
@@ -393,6 +532,7 @@ export default function Management(props: ManagementProps) {
           </>
         )}
       </section>
+      )}
 
       {showVehicleModal && (
         <div className="modal-backdrop" role="presentation">
@@ -656,6 +796,7 @@ export default function Management(props: ManagementProps) {
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

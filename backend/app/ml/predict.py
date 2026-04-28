@@ -62,6 +62,8 @@ class _BasePredictor:
         try:
             raw: Any = json.loads(meta_file.read_text())
             features = raw.get("features", [])
+            if not features:
+                features = raw.get("feature_columns", [])
             if isinstance(features, list) and all(isinstance(x, str) for x in features):
                 self.feature_names = features
                 self.expected_features = len(features)
@@ -184,3 +186,30 @@ class FuelPredictor(_BasePredictor):
     def predict(self, features: list[list[float]]) -> list[float]:
         self._validate_features(features)
         return self.model.predict(features).tolist()
+
+    def predict_records(self, records: list[dict[str, object]]) -> list[float]:
+        frame = self._records_to_frame(records)
+        return self.model.predict(frame).tolist()
+
+    def _records_to_frame(self, records: list[dict[str, object]]) -> pd.DataFrame:
+        if not records:
+            raise ValueError("records cannot be empty")
+        if not self.feature_names:
+            raise ValueError("could not determine feature columns from metadata or model pipeline")
+
+        frame = pd.DataFrame(records)
+        missing = [c for c in self.feature_names if c not in frame.columns]
+        if missing:
+            raise ValueError(f"missing required fields: {', '.join(missing)}")
+
+        frame = frame[self.feature_names].copy()
+
+        for col in self.numeric_features:
+            if col in frame.columns:
+                frame[col] = pd.to_numeric(frame[col], errors="coerce")
+
+        for col in self.categorical_features:
+            if col in frame.columns:
+                frame[col] = frame[col].astype(str)
+
+        return frame

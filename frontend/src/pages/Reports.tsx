@@ -22,6 +22,15 @@ type ReportProps = {
 
 type ReportCategory = "vehicles" | "drivers" | "trips" | "fuel" | "maintenance" | "documents";
 
+const REPORT_TABS: Array<{ value: ReportCategory; label: string }> = [
+  { value: "vehicles", label: "Vehicles" },
+  { value: "drivers", label: "Drivers" },
+  { value: "trips", label: "Trips" },
+  { value: "fuel", label: "Fuel" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "documents", label: "Documents" },
+];
+
 function withinDateRange(dateValue: string | undefined, fromDate: string, toDate: string) {
   if (!dateValue) return false;
   if (fromDate && dateValue < fromDate) return false;
@@ -211,6 +220,12 @@ export default function Reports(props: ReportProps) {
   const totalPages = Math.max(1, Math.ceil(activeDataset.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
   const previewRows = activeDataset.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const totalRowsAcrossDatasets =
+    vehicles.length + drivers.length + trips.length + fuelLogs.length + maintenance.length + documents.length;
+  const supportsDateRange =
+    category === "trips" || category === "fuel" || category === "maintenance" || category === "documents";
+  const supportsVehicleFilter =
+    category === "trips" || category === "fuel" || category === "maintenance" || category === "documents";
 
   function handleCategoryChange(nextCategory: ReportCategory) {
     setCategory(nextCategory);
@@ -423,25 +438,74 @@ export default function Reports(props: ReportProps) {
   }
 
   return (
-    <section className="section reports-page">
-      <section className="card">
+    <section className="section">
+      <section className="admin-page reports-page">
+      <section className="stats stats--three reports-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-value">{REPORT_TABS.length}</div>
+          <div className="stat-label">Report Datasets</div>
+          <div className="stat-sub">Vehicles, drivers, trips, fuel, maintenance, and documents</div>
+        </div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-value">{activeDataset.length}</div>
+          <div className="stat-label">Filtered Rows</div>
+          <div className="stat-sub">Current result set for the active report tab</div>
+        </div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-value">{totalRowsAcrossDatasets}</div>
+          <div className="stat-label">Indexed Records</div>
+          <div className="stat-sub">Available reportable records across the manager portal</div>
+        </div>
+      </section>
+
+      <nav className="admin-tabs" aria-label="Report categories">
+        {REPORT_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            className={`admin-tab ${category === tab.value ? "admin-tab--active" : ""}`}
+            onClick={() => handleCategoryChange(tab.value)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="grid reports-summary-grid reports-summary-grid--single admin-panel">
+        <section className="card admin-card--summary">
+          <div className="card__header">
+            <div>
+              <h3>Current Dataset</h3>
+              <p className="muted admin-card__subtitle">The active tab controls filters, preview rows, and export output.</p>
+            </div>
+          </div>
+          <div className="reports-summary">
+            <div className="reports-summary__item">
+              <span>Dataset</span>
+              <strong>{REPORT_TABS.find((tab) => tab.value === category)?.label}</strong>
+            </div>
+            <div className="reports-summary__item">
+              <span>Rows Ready</span>
+              <strong>{activeDataset.length}</strong>
+            </div>
+            <div className="reports-summary__item">
+              <span>Pages</span>
+              <strong>{totalPages}</strong>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section className="card admin-table-section reports-builder-card">
         <div className="card__header">
-          <h3>Report Builder</h3>
+          <div>
+            <h3>Report Builder</h3>
+            <p className="muted admin-card__subtitle">Apply dataset filters, preview the result, and export the current report view.</p>
+          </div>
         </div>
         <div className="reports-builder">
           <div className="reports-builder__row">
             <div className="reports-builder__group reports-builder__group--primary">
-              <label className="table-controls__label">
-                Dataset
-                <select value={category} onChange={(e) => handleCategoryChange(e.target.value as ReportCategory)}>
-                  <option value="vehicles">Vehicles</option>
-                  <option value="drivers">Drivers</option>
-                  <option value="trips">Trips</option>
-                  <option value="fuel">Fuel Logs</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="documents">Documents</option>
-                </select>
-              </label>
               <label className="table-controls__label table-controls__label--search reports-builder__search">
                 Search
                 <input type="search" placeholder="Search report rows..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -475,7 +539,7 @@ export default function Reports(props: ReportProps) {
           </div>
 
           <div className="reports-builder__row reports-builder__row--filters">
-            {(category === "trips" || category === "fuel" || category === "maintenance" || category === "documents") && (
+            {supportsDateRange && (
               <>
                 <label className="table-controls__label">
                   From
@@ -487,7 +551,7 @@ export default function Reports(props: ReportProps) {
                 </label>
               </>
             )}
-            {(category === "trips" || category === "fuel" || category === "maintenance" || category === "documents") && (
+            {supportsVehicleFilter && (
               <label className="table-controls__label">
                 Vehicle
                 <select value={vehicleFilter} onChange={(e) => { setVehicleFilter(e.target.value); setPage(1); }}>
@@ -546,6 +610,7 @@ export default function Reports(props: ReportProps) {
           </div>
           {activeDataset.length === 0 ? <p className="empty">No rows match the current report filters.</p> : previewTable()}
         </div>
+      </section>
       </section>
     </section>
   );

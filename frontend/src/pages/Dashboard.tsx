@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import MapView from "../components/MapView";
 import { DriverScore, LiveTrip, Maintenance, MaintenancePrediction, ServiceBooking, Vehicle } from "../types";
 import { Link } from "react-router-dom";
@@ -18,18 +18,6 @@ type DashboardProps = {
   upcomingDocs: { id: string; doc_type: string; expiry_date?: string }[];
 };
 
-type LiveTripFilter = "all" | "live" | "stale";
-
-function formatDateTime(value?: string) {
-  if (!value) return "Unavailable";
-  return new Date(value).toLocaleString();
-}
-
-function formatTime(value?: string) {
-  if (!value) return "Unavailable";
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 function formatCompactDateTime(value?: string) {
   if (!value) return "Unavailable";
   const date = new Date(value);
@@ -39,6 +27,39 @@ function formatCompactDateTime(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+type DashboardIconName = "fleet" | "trips" | "service" | "fuel";
+
+function DashboardIcon({ name }: { name: DashboardIconName }) {
+  switch (name) {
+    case "fleet":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 16V9l3-3h9l3 3v7M7 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "trips":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "service":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "fuel":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
 
 export default function Dashboard({
@@ -55,16 +76,6 @@ export default function Dashboard({
   alerts,
   upcomingDocs,
 }: DashboardProps) {
-  const [liveTripFilter, setLiveTripFilter] = useState<LiveTripFilter>("all");
-
-  const filteredLiveTrips = useMemo(() => {
-    if (liveTripFilter === "live") return liveTrips.filter((trip) => !trip.stale);
-    if (liveTripFilter === "stale") return liveTrips.filter((trip) => trip.stale);
-    return liveTrips;
-  }, [liveTripFilter, liveTrips]);
-
-  const liveCount = liveTrips.filter((trip) => !trip.stale).length;
-  const staleCount = liveTrips.filter((trip) => trip.stale).length;
   const vehiclesInMaintenance = useMemo(
     () => vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance").slice(0, 4),
     [vehicles]
@@ -138,25 +149,25 @@ export default function Dashboard({
     <>
       <section className="stats">
         <div className="stat-card stat-card--blue">
-          <div className="stat-icon">🚚</div>
+          <div className="stat-icon"><DashboardIcon name="fleet" /></div>
           <div className="stat-value">{vehicleCount}</div>
           <div className="stat-label">Total Vehicles</div>
           <div className="stat-sub">All active in fleet</div>
         </div>
         <div className="stat-card stat-card--green">
-          <div className="stat-icon">🧭</div>
+          <div className="stat-icon"><DashboardIcon name="trips" /></div>
           <div className="stat-value">{activeTrips}</div>
           <div className="stat-label">Active Trips</div>
           <div className="stat-sub">Driver-tracked sessions</div>
         </div>
         <div className="stat-card stat-card--amber">
-          <div className="stat-icon">🔧</div>
+          <div className="stat-icon"><DashboardIcon name="service" /></div>
           <div className="stat-value">{upcomingMaintenance.length}</div>
           <div className="stat-label">Upcoming Maintenance</div>
           <div className="stat-sub">Due today or later</div>
         </div>
         <div className="stat-card stat-card--purple">
-          <div className="stat-icon">⛽</div>
+          <div className="stat-icon"><DashboardIcon name="fuel" /></div>
           <div className="stat-value">{fuelCostTotal}</div>
           <div className="stat-label">Fuel Costs</div>
           <div className="stat-sub">Total logged</div>
@@ -164,76 +175,30 @@ export default function Dashboard({
       </section>
 
       <section className="dashboard-grid">
+        <div className="dashboard-section-heading">
+          <span className="dashboard-section-heading__eyebrow">Operational Monitoring</span>
+          <h2>Live fleet activity</h2>
+        </div>
         <div className="card card--map">
           <div className="card__header">
             <div>
               <h2>Live Trip Map</h2>
+              <p className="muted dashboard-map__subtitle">Track currently active vehicles and the freshness of location updates.</p>
             </div>
-            <span className="pill">{filteredLiveTrips.length} shown</span>
+            <span className="pill">{liveTrips.length} tracked</span>
           </div>
+          <MapView trips={liveTrips} />
+        </div>
 
-          <div className="dashboard-map__filters">
-            <button
-              className={`filter-chip ${liveTripFilter === "all" ? "filter-chip--active" : ""}`}
-              type="button"
-              onClick={() => setLiveTripFilter("all")}
-            >
-              All ({liveTrips.length})
-            </button>
-            <button
-              className={`filter-chip ${liveTripFilter === "live" ? "filter-chip--active" : ""}`}
-              type="button"
-              onClick={() => setLiveTripFilter("live")}
-            >
-              Live ({liveCount})
-            </button>
-            <button
-              className={`filter-chip ${liveTripFilter === "stale" ? "filter-chip--active" : ""}`}
-              type="button"
-              onClick={() => setLiveTripFilter("stale")}
-            >
-              Stale ({staleCount})
-            </button>
+        <div className="card">
+          <div className="card__header">
+            <h2>Quick Actions</h2>
           </div>
-
-          <MapView trips={filteredLiveTrips} />
-
-          <div className="dashboard-map__list">
-            <div className="dashboard-map__list-header">
-              <h3>Active Trips</h3>
-              <span className="muted">Last feed refresh: now</span>
-            </div>
-            {filteredLiveTrips.length === 0 ? (
-              <p className="empty">No active tracked trips for the current filter.</p>
-            ) : (
-              <ul className="live-trip-list">
-                {filteredLiveTrips.map((trip) => (
-                  <li key={trip.trip_id} className="live-trip-item">
-                    <div className="live-trip-item__main">
-                      <div className="live-trip-item__title">
-                        {trip.vehicle_plate_no || "Vehicle"}
-                        <span className={`pill ${trip.stale ? "pill--warning" : "pill--success"}`}>
-                          {trip.stale ? "Stale" : "Live"}
-                        </span>
-                      </div>
-                      <div className="live-trip-item__meta">
-                        {trip.vehicle_label || "Assigned vehicle"}
-                        {trip.driver_name ? ` • ${trip.driver_name}` : ""}
-                      </div>
-                    </div>
-                    <div className="live-trip-item__stats">
-                      <span>Started {formatTime(trip.start_time)}</span>
-                      <span>Updated {formatDateTime(trip.recorded_at)}</span>
-                      <span>
-                        {trip.speed_kmh !== undefined && trip.speed_kmh !== null
-                          ? `${trip.speed_kmh.toFixed(1)} km/h`
-                          : "Speed unavailable"}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="quick-actions">
+            <Link className="btn" to="/management">Add Vehicle</Link>
+            <Link className="btn btn--secondary" to="/maintenance">Log Maintenance</Link>
+            <Link className="btn btn--secondary" to="/maintenance">Book Service</Link>
+            <Link className="btn btn--secondary" to="/ml">Run ML Check</Link>
           </div>
         </div>
 
@@ -278,6 +243,11 @@ export default function Dashboard({
             </ul>
           )}
         </Link>
+
+        <div className="dashboard-section-heading dashboard-section-heading--spaced">
+          <span className="dashboard-section-heading__eyebrow">Exceptions & Attention</span>
+          <h2>Items that need review</h2>
+        </div>
 
         <div className="card">
           <div className="card__header">
@@ -338,18 +308,6 @@ export default function Dashboard({
               ))}
             </ul>
           )}
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2>Quick Actions</h2>
-          </div>
-          <div className="quick-actions">
-            <Link className="btn" to="/management">Add Vehicle</Link>
-            <Link className="btn btn--secondary" to="/maintenance">Log Maintenance</Link>
-            <Link className="btn btn--secondary" to="/maintenance">Book Service</Link>
-            <Link className="btn btn--secondary" to="/ml">Run ML Check</Link>
-          </div>
         </div>
 
         <div className="card">

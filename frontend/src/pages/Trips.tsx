@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import MapView from "../components/MapView";
 import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../services/api";
@@ -62,6 +63,42 @@ type TripsProps = {
   onDeleteTrip: (tripId: string) => Promise<void>;
 };
 
+type TripsTab = "overview" | "workflow" | "history" | "places";
+type LiveTripFilter = "all" | "live" | "stale";
+
+type TripsIconName = "total" | "active" | "distance" | "duration";
+
+function TripsIcon({ name }: { name: TripsIconName }) {
+  switch (name) {
+    case "total":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "active":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v18m9-9H3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "distance":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 16c4-8 12-8 16 0M8 12c2-4 6-4 8 0M12 18h.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "duration":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 7v5l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 function formatDateTime(value?: string) {
   if (!value) return "--";
   return new Date(value).toLocaleString("en-LK", {
@@ -113,6 +150,8 @@ function formatCoordinates(lat: number, lon: number) {
 
 export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading, onCreateTripAssignment, onUpdateTripAssignment, onDeleteTrip }: TripsProps) {
   const { token, setError } = useAuth();
+  const [activeTab, setActiveTab] = useState<TripsTab>("overview");
+  const [liveTripFilter, setLiveTripFilter] = useState<LiveTripFilter>("all");
   const [search, setSearch] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [workflowRowsPerPage, setWorkflowRowsPerPage] = useState(10);
@@ -142,7 +181,6 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
   const [placePage, setPlacePage] = useState(1);
   const [originPlaceId, setOriginPlaceId] = useState("");
   const [destinationPlaceId, setDestinationPlaceId] = useState("");
-  const [showPlacesManager, setShowPlacesManager] = useState(false);
   const [showPlaceModal, setShowPlaceModal] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SavedPlace | null>(null);
   const [placeTarget, setPlaceTarget] = useState<"origin" | "destination">("origin");
@@ -195,8 +233,14 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
   const totalDistance = trips.reduce((sum, trip) => sum + (trip.distance_km || 0), 0);
   const completedTrips = trips.filter((trip) => deriveTripStatus(trip) === "completed");
   const activeTrips = trips.filter((trip) => deriveTripStatus(trip) === "in_progress");
+  const assignedTrips = trips.filter((trip) => deriveTripStatus(trip) === "assigned");
   const liveTrackedTrips = liveTrips.filter((trip) => !trip.stale);
   const staleTrackedTrips = liveTrips.filter((trip) => trip.stale);
+  const filteredLiveTrips = useMemo(() => {
+    if (liveTripFilter === "live") return liveTrips.filter((trip) => !trip.stale);
+    if (liveTripFilter === "stale") return liveTrips.filter((trip) => trip.stale);
+    return liveTrips;
+  }, [liveTripFilter, liveTrips]);
   const avgDuration =
     completedTrips.length > 0
       ? completedTrips.reduce((sum, trip) => sum + (trip.duration_min || 0), 0) / completedTrips.length
@@ -572,55 +616,99 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
 
   return (
     <section className="section">
-      <div className="stats trips-stats">
-        <div className="stat-card">
-          <div className="stat-icon">🧭</div>
+      <section className="admin-page">
+      <div className="stats stats--four trips-stats admin-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><TripsIcon name="total" /></div>
           <div className="stat-value">{trips.length}</div>
           <div className="stat-label">Total Trips</div>
+          <div className="stat-sub">All scheduled and historical journeys</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🟢</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><TripsIcon name="active" /></div>
           <div className="stat-value">{activeTrips.length}</div>
           <div className="stat-label">Active Now</div>
+          <div className="stat-sub">Ongoing operational trips</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">📍</div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><TripsIcon name="distance" /></div>
           <div className="stat-value">{totalDistance.toFixed(0)} km</div>
           <div className="stat-label">Distance Logged</div>
+          <div className="stat-sub">Completed trip distance</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">⏱️</div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><TripsIcon name="duration" /></div>
           <div className="stat-value">{avgDuration > 0 ? formatDuration(Math.round(avgDuration)) : "--"}</div>
           <div className="stat-label">Avg Completed Duration</div>
+          <div className="stat-sub">Average trip cycle time</div>
         </div>
       </div>
 
-      <div className="grid" style={{ marginBottom: "24px" }}>
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Trip sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "workflow" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("workflow")}
+        >
+          Workflow
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "history" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("history")}
+        >
+          History
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "places" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("places")}
+        >
+          Saved Places
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <>
+      <div className="grid admin-summary-grid admin-summary-grid--balanced">
+        <section className="card admin-card--action">
           <div className="card__header">
-            <h3>Trip Actions</h3>
+            <div>
+              <h3>Trip Actions</h3>
+              <p className="muted admin-card__subtitle">Create assignments and manage the saved places library.</p>
+            </div>
           </div>
           <div className="button-row">
             <button className="btn" type="button" onClick={openCreateModal}>
-              + Assign Trip
+              Assign Trip
             </button>
             <button className="btn" type="button" onClick={() => openPlaceModal("origin")}>
-              + Add Place
+              Add Place
             </button>
-            <button className="btn btn--compact" type="button" onClick={() => setShowPlacesManager(true)}>
+            <button className="btn btn--compact" type="button" onClick={() => setActiveTab("places")}>
               Manage Places
             </button>
           </div>
         </section>
 
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>Trip Overview</h3>
+            <div>
+              <h3>Trip Overview</h3>
+              <p className="muted admin-card__subtitle">Operational status across assigned and completed work.</p>
+            </div>
           </div>
           <ul className="list">
             <li>
                 <div className="list__title">Assigned Trips</div>
-                <div className="list__meta">{trips.filter((trip) => deriveTripStatus(trip) === "assigned").length} jobs waiting for driver start</div>
+                <div className="list__meta">{assignedTrips.length} jobs waiting for driver start</div>
               </li>
               <li>
                 <div className="list__title">Completed Trips</div>
@@ -637,9 +725,12 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           </ul>
         </section>
 
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>Live Tracking Snapshot</h3>
+            <div>
+              <h3>Live Tracking Snapshot</h3>
+              <p className="muted admin-card__subtitle">Latest location-signal health across currently tracked trips.</p>
+            </div>
           </div>
           {liveTrips.length === 0 ? (
             <p className="empty">No trips are currently reporting live driver tracking.</p>
@@ -666,9 +757,94 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         </section>
       </div>
 
-      <section className="card">
+      <section className="card admin-table-section">
         <div className="card__header">
-          <h3>Assigned and Ongoing Trips</h3>
+          <div>
+            <h3>Active Trip Monitoring</h3>
+            <p className="muted admin-card__subtitle">Live vehicle-tracking state, update freshness, and current driver telemetry from the active trip feed.</p>
+          </div>
+        </div>
+        <div className="dashboard-map__filters">
+          <button
+            className={`filter-chip ${liveTripFilter === "all" ? "filter-chip--active" : ""}`}
+            type="button"
+            onClick={() => setLiveTripFilter("all")}
+          >
+            All ({liveTrips.length})
+          </button>
+          <button
+            className={`filter-chip ${liveTripFilter === "live" ? "filter-chip--active" : ""}`}
+            type="button"
+            onClick={() => setLiveTripFilter("live")}
+          >
+            Live ({liveTrackedTrips.length})
+          </button>
+          <button
+            className={`filter-chip ${liveTripFilter === "stale" ? "filter-chip--active" : ""}`}
+            type="button"
+            onClick={() => setLiveTripFilter("stale")}
+          >
+            Stale ({staleTrackedTrips.length})
+          </button>
+        </div>
+        <section className="card analytics-card--wide">
+          <div className="card__header">
+            <div>
+              <h3>Live Trip Map</h3>
+              <p className="muted admin-card__subtitle">Track currently active vehicles and the freshness of location updates for the selected live-trip filter.</p>
+            </div>
+            <span className="pill">{filteredLiveTrips.length} shown</span>
+          </div>
+          <MapView trips={filteredLiveTrips} />
+        </section>
+        <div className="dashboard-map__list">
+          <div className="dashboard-map__list-header">
+            <h3>Active Trips</h3>
+            <span className="muted">Last feed refresh: now</span>
+          </div>
+          {filteredLiveTrips.length === 0 ? (
+            <p className="empty">No active tracked trips for the current filter.</p>
+          ) : (
+            <ul className="live-trip-list">
+              {filteredLiveTrips.map((trip) => (
+                <li key={trip.trip_id} className="live-trip-item">
+                  <div className="live-trip-item__main">
+                    <div className="live-trip-item__title">
+                      {trip.vehicle_plate_no || "Vehicle"}
+                      <span className={`pill ${trip.stale ? "pill--warning" : "pill--success"}`}>
+                        {trip.stale ? "Stale" : "Live"}
+                      </span>
+                    </div>
+                    <div className="live-trip-item__meta">
+                      {trip.vehicle_label || "Assigned vehicle"}
+                      {trip.driver_name ? ` • ${trip.driver_name}` : ""}
+                    </div>
+                  </div>
+                  <div className="live-trip-item__stats">
+                    <span>Started {formatCompactDateTime(trip.start_time)}</span>
+                    <span>Updated {formatCompactDateTime(trip.recorded_at)}</span>
+                    <span>
+                      {trip.speed_kmh !== undefined && trip.speed_kmh !== null
+                        ? `${trip.speed_kmh.toFixed(1)} km/h`
+                        : "Speed unavailable"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+      </>
+      )}
+
+      {activeTab === "workflow" && (
+      <section className="card admin-table-section">
+        <div className="card__header">
+          <div>
+            <h3>Assigned and Ongoing Trips</h3>
+            <p className="muted admin-card__subtitle">Current workflow queue for active and not-yet-started assignments.</p>
+          </div>
         </div>
         {workflowTrips.length === 0 ? (
           <p className="empty">No assigned or ongoing trips match the current filters.</p>
@@ -807,10 +983,15 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           </>
         )}
       </section>
+      )}
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      {activeTab === "history" && (
+      <section className="card admin-table-section">
         <div className="card__header">
-          <h3>Trip History</h3>
+          <div>
+            <h3>Trip History</h3>
+            <p className="muted admin-card__subtitle">Completed and cancelled trips that match the current search and filters.</p>
+          </div>
         </div>
         {historyTrips.length === 0 ? (
           <p className="empty">No completed trip history matches the current filters.</p>
@@ -896,6 +1077,105 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           </>
         )}
       </section>
+      )}
+
+      {activeTab === "places" && (
+      <section className="card admin-table-section admin-panel">
+        <div className="card__header">
+          <div>
+            <h3>Saved Places</h3>
+            <p className="muted admin-card__subtitle">Manage the shared saved place library used by trip assignments.</p>
+          </div>
+          <div className="button-row">
+            <button className="btn" type="button" onClick={openStandalonePlaceModal}>
+              Add Place
+            </button>
+          </div>
+        </div>
+        <div className="table-controls">
+          <div className="table-controls__filters">
+            <label className="table-controls__label table-controls__label--search">
+              Search
+              <input
+                type="search"
+                placeholder="Name, address, contact..."
+                value={placeSearch}
+                onChange={(e) => setPlaceSearch(e.target.value)}
+              />
+            </label>
+            <label className="table-controls__label">
+              Rows
+              <select value={placeRowsPerPage} onChange={(e) => setPlaceRowsPerPage(Number(e.target.value))}>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+            </label>
+          </div>
+          <div className="table-pagination">
+            <span className="table-pagination__meta">
+              Page {currentPlacePage} of {placeTotalPages}
+            </span>
+            <button
+              className="btn btn--secondary btn--compact"
+              type="button"
+              onClick={() => setPlacePage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPlacePage === 1}
+            >
+              Prev
+            </button>
+            <button
+              className="btn btn--secondary btn--compact"
+              type="button"
+              onClick={() => setPlacePage((prev) => Math.min(placeTotalPages, prev + 1))}
+              disabled={currentPlacePage === placeTotalPages}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        {savedPlaces.length === 0 ? (
+          <p className="empty">No saved places yet. Add your frequent locations first.</p>
+        ) : (
+          <div className="table places-table" style={{ ["--table-columns" as any]: 5 }}>
+            <div className="table__head places-table__head">
+              <span>Place</span>
+              <span>Address</span>
+              <span>Contact</span>
+              <span>Coordinates</span>
+              <span>Actions</span>
+            </div>
+            {paginatedPlaces.map((place) => (
+              <div className="table__row places-table__row" key={place.id}>
+                <span data-label="Place">{place.name}</span>
+                <span data-label="Address">{place.label}</span>
+                <span data-label="Contact">{place.contact_phone || place.contact_name || "--"}</span>
+                <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
+                <span className="table__actions places-table__actions" data-label="Actions">
+                  <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
+                    <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                    </svg>
+                  </button>
+                  <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
+                    <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
+                    <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      )}
 
       {selectedTrip && (
         <div className="modal-backdrop" role="presentation">
@@ -1192,114 +1472,6 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         </div>
       )}
 
-      {showPlacesManager && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Manage saved places">
-            <div className="modal__header">
-              <div>
-                <h3>Manage Places</h3>
-                <p className="modal__subtle">Manage the saved place library used by trip assignments.</p>
-              </div>
-              <button className="modal__close" type="button" onClick={() => setShowPlacesManager(false)} aria-label="Close places manager">
-                ✕
-              </button>
-            </div>
-            <div className="form form--scroll">
-              <div className="table-controls">
-                <div className="table-controls__filters">
-                  <label className="table-controls__label table-controls__label--search">
-                    Search
-                    <input
-                      type="search"
-                      placeholder="Name, address, contact..."
-                      value={placeSearch}
-                      onChange={(e) => setPlaceSearch(e.target.value)}
-                    />
-                  </label>
-                  <label className="table-controls__label">
-                    Rows
-                    <select value={placeRowsPerPage} onChange={(e) => setPlaceRowsPerPage(Number(e.target.value))}>
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="table-pagination">
-                  <span className="table-pagination__meta">
-                    Page {currentPlacePage} of {placeTotalPages}
-                  </span>
-                  <button
-                    className="btn btn--secondary btn--compact"
-                    type="button"
-                    onClick={() => setPlacePage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentPlacePage === 1}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    className="btn btn--secondary btn--compact"
-                    type="button"
-                    onClick={() => setPlacePage((prev) => Math.min(placeTotalPages, prev + 1))}
-                    disabled={currentPlacePage === placeTotalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-
-              {savedPlaces.length === 0 ? (
-                <p className="empty">No saved places yet. Add your frequent locations first.</p>
-              ) : (
-                <div className="table places-table" style={{ ["--table-columns" as any]: 5 }}>
-                  <div className="table__head places-table__head">
-                    <span>Place</span>
-                    <span>Address</span>
-                    <span>Contact</span>
-                    <span>Coordinates</span>
-                    <span>Actions</span>
-                  </div>
-                  {paginatedPlaces.map((place) => (
-                    <div className="table__row places-table__row" key={place.id}>
-                      <span data-label="Place">{place.name}</span>
-                      <span data-label="Address">{place.label}</span>
-                      <span data-label="Contact">{place.contact_phone || place.contact_name || "--"}</span>
-                      <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
-                      <span className="table__actions places-table__actions" data-label="Actions">
-                        <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
-                          <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                          </svg>
-                        </button>
-                        <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
-                          <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                        <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
-                          <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="modal__actions">
-              <button className="btn btn--secondary" type="button" onClick={() => setShowPlacesManager(false)}>
-                Close
-              </button>
-              <button className="btn" type="button" onClick={openStandalonePlaceModal}>
-                + Add Place
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showPlaceModal && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Add saved place">
@@ -1471,6 +1643,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

@@ -2,7 +2,7 @@
 
 export type Vehicle = {
   id: string;
-  org_id: string;
+  org_id?: string;
   plate_no: string;
   make?: string;
   model?: string;
@@ -20,12 +20,18 @@ export type Vehicle = {
   tire_condition?: string;
   brake_condition?: string;
   battery_status?: string;
+  last_service_cost_lkr?: number;
+  next_service_due_km?: number;
+  avg_monthly_km?: number;
+  recent_trip_count_30d?: number;
+  recent_fuel_efficiency_avg?: number;
+  service_center_visits_12m?: number;
 };
 
 export type Driver = {
   id: string;
-  org_id: string;
-  role: string;
+  org_id?: string;
+  role?: string;
   email?: string;
   status?: string;
   full_name?: string;
@@ -97,6 +103,18 @@ export type FuelLog = {
   cost_lkr?: number;
   odometer_km?: number;
   vendor?: string;
+};
+
+export type FuelForecast = {
+  vehicle_id: string;
+  plate_no: string;
+  forecast_liters_7d: number;
+  recent_7d_liters: number;
+  recent_30d_liters: number;
+  recent_distance_km_30d: number;
+  recent_trip_count_30d: number;
+  recent_avg_speed_kmh: number;
+  fuel_efficiency_gap_ratio: number;
 };
 
 export type Maintenance = {

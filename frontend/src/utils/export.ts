@@ -1,7 +1,7 @@
 import { Vehicle, FuelLog, Maintenance, Driver, Trip, Document } from "../types";
 
-export const exportCSV = (filename: string, rows: string[][]) => {
-    const csv = rows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
+export const exportCSV = (filename: string, rows: Array<Array<string | undefined>>) => {
+    const csv = rows.map((r) => r.map((v) => `"${v ?? ""}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -72,7 +72,7 @@ export const exportTrips = (trips: Trip[]) => {
     const rows = [
         ["start_time", "end_time", "distance_km", "duration_min", "avg_speed_kmh", "idle_min", "vehicle_id"],
         ...trips.map((t) => [
-            t.start_time,
+            t.start_time || "",
             t.end_time || "",
             String(t.distance_km || ""),
             String(t.duration_min || ""),

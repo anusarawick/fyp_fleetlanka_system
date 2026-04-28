@@ -7,7 +7,7 @@ type Vehicle = {
 
 type MaintenanceRecord = {
   id: string;
-  vehicle_id?: string;
+  vehicle_id: string;
   service_center_id?: string;
   service_booking_id?: string;
   service_date: string;
@@ -106,7 +106,44 @@ type MaintenanceProps = {
   onRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
 };
 
+type MaintenanceTab = "overview" | "centers" | "workflow" | "history";
+
+type MaintenanceIconName = "records" | "centers" | "cost" | "review";
+
+function MaintenanceIcon({ name }: { name: MaintenanceIconName }) {
+  switch (name) {
+    case "records":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 4.5h8l3 3V19.5H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M15 4.5v3h3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "centers":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4.5 19.5V9l7.5-4.5L19.5 9v10.5M9 19.5v-4.5h6v4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "cost":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v18m4.5-14.25h-6a2.25 2.25 0 0 0 0 4.5h3a2.25 2.25 0 0 1 0 4.5H7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "review":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 export default function Maintenance(props: MaintenanceProps) {
+  const [activeTab, setActiveTab] = useState<MaintenanceTab>("overview");
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [showCenterModal, setShowCenterModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -236,6 +273,8 @@ export default function Maintenance(props: MaintenanceProps) {
       return status === "pending" || status === "confirmed";
     })
     .slice(0, 4);
+  const pendingApprovalCount = workflowBookings.filter((booking) => isPendingCompletionReview(booking)).length;
+  const linkedCentersCount = props.centers.filter((center) => Boolean(center.profile_id)).length;
 
   useEffect(() => {
     setMaintenancePage(1);
@@ -325,28 +364,73 @@ export default function Maintenance(props: MaintenanceProps) {
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: "24px" }}>
-        <div className="stat-card">
-          <div className="stat-icon">🔧</div>
+      <section className="admin-page">
+      <section className="stats stats--four admin-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><MaintenanceIcon name="records" /></div>
           <div className="stat-value">{props.maintenance.length}</div>
           <div className="stat-label">Service Records</div>
+          <div className="stat-sub">Logged maintenance history</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🏪</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><MaintenanceIcon name="centers" /></div>
           <div className="stat-value">{props.centers.length}</div>
           <div className="stat-label">Service Centers</div>
+          <div className="stat-sub">{linkedCentersCount} centers linked to portal access</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">Rs</div>
-          <div className="stat-value">{totalCost.toLocaleString()}</div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><MaintenanceIcon name="cost" /></div>
+          <div className="stat-value">Rs.{totalCost.toLocaleString()}</div>
           <div className="stat-label">Total Maintenance Cost</div>
+          <div className="stat-sub">Recorded service expenditure</div>
         </div>
-      </div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><MaintenanceIcon name="review" /></div>
+          <div className="stat-value">{pendingApprovalCount}</div>
+          <div className="stat-label">Pending Approval</div>
+          <div className="stat-sub">Completed bookings waiting for manager review</div>
+        </div>
+      </section>
 
-      <div className="grid">
-        <section className="card">
+      <nav className="admin-tabs" aria-label="Maintenance sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "centers" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("centers")}
+        >
+          Service Centers
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "workflow" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("workflow")}
+        >
+          Booking Workflow
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "history" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("history")}
+        >
+          History
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="grid admin-summary-grid admin-summary-grid--balanced admin-panel">
+        <section className="card admin-card--action">
           <div className="card__header">
-            <h3>Maintenance Actions</h3>
+            <div>
+              <h3>Maintenance Actions</h3>
+              <p className="muted admin-card__subtitle">Log service records, register workshops, and schedule service work from one workspace.</p>
+            </div>
           </div>
           <div className="button-row maintenance-actions__row">
             <button
@@ -357,7 +441,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 setShowMaintenanceModal(true);
               }}
             >
-              + Log Maintenance
+              Log Maintenance
             </button>
             <button
               className="btn maintenance-actions__btn"
@@ -367,7 +451,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 setShowCenterModal(true);
               }}
             >
-              + Add Center
+              Add Center
             </button>
             <button
               className="btn maintenance-actions__btn"
@@ -377,14 +461,17 @@ export default function Maintenance(props: MaintenanceProps) {
                 setShowBookingModal(true);
               }}
             >
-              + Book Service
+              Book Service
             </button>
           </div>
         </section>
 
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>Upcoming Bookings</h3>
+            <div>
+              <h3>Upcoming Bookings</h3>
+              <p className="muted admin-card__subtitle">Next service appointments that are still pending or confirmed.</p>
+            </div>
           </div>
           {upcomingBookings.length === 0 ? (
             <p className="empty">No upcoming service bookings.</p>
@@ -406,163 +493,196 @@ export default function Maintenance(props: MaintenanceProps) {
             </ul>
           )}
         </section>
-      </div>
 
-      <div className="grid" style={{ marginTop: "24px" }}>
-        <section className="card">
+        <section className="card admin-card--summary">
           <div className="card__header">
-            <h3>Registered Centers</h3>
+            <div>
+              <h3>Operational Snapshot</h3>
+              <p className="muted admin-card__subtitle">Current workload, service network, and review queue in one summary.</p>
+            </div>
           </div>
-          {props.centers.length === 0 ? (
-            <p className="empty">No service centers added yet.</p>
+          {props.maintenance.length === 0 && workflowBookings.length === 0 ? (
+            <p className="empty">No maintenance activity has been recorded yet.</p>
           ) : (
-            <>
-              <div className="table-controls">
-                <div className="table-controls__filters">
-                  <label className="table-controls__label table-controls__label--search">
-                    Search
-                    <input
-                      type="search"
-                      placeholder="Center, phone, address..."
-                      value={centerSearch}
-                      onChange={(e) => setCenterSearch(e.target.value)}
-                    />
-                  </label>
-                  <label className="table-controls__label">
-                    Rows
-                    <select
-                      value={centerRowsPerPage}
-                      onChange={(e) => setCenterRowsPerPage(Number(e.target.value))}
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="table-pagination">
-                  <span className="table-pagination__meta">
-                    Page {currentCenterPage} of {centerTotalPages}
-                  </span>
-                  <button
-                    className="btn btn--secondary btn--compact"
-                    type="button"
-                    onClick={() => setCenterPage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentCenterPage === 1}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    className="btn btn--secondary btn--compact"
-                    type="button"
-                    onClick={() => setCenterPage((prev) => Math.min(centerTotalPages, prev + 1))}
-                    disabled={currentCenterPage === centerTotalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-              {filteredCenters.length === 0 ? (
-                <p className="empty">No service centers match the search.</p>
-              ) : (
-                <div className="table centers-table" style={{ ["--table-columns" as any]: 4 }}>
-                  <div className="table__head centers-table__head">
-                    <span>Center</span>
-                    <span>Phone</span>
-                    <span>Portal</span>
-                    <span>Actions</span>
-                  </div>
-                  {paginatedCenters.map((center) => (
-                    <div className="table__row centers-table__row" key={center.id}>
-                      <span className="centers-table__cell" data-label="Center">{center.name}</span>
-                      <span className="centers-table__cell" data-label="Phone">{center.phone || "--"}</span>
-                      <span className="centers-table__cell" data-label="Portal">
-                        <span className={`pill pill--${center.profile_id ? "success" : "warning"}`}>
-                          {center.profile_id ? "Linked" : "Not Linked"}
-                        </span>
-                      </span>
-                      <span className="table__actions centers-table__actions" data-label="Actions">
-                        <button
-                          className="icon-action"
-                          type="button"
-                          onClick={() => setSelectedCenter(center)}
-                          aria-label={`View center ${center.name}`}
-                          title="View center"
-                        >
-                          <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.75"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                          </svg>
-                        </button>
-                        <button
-                          className="icon-action"
-                          type="button"
-                          onClick={() => {
-                            props.onEditCenter(center);
-                            setShowCenterModal(true);
-                          }}
-                          aria-label={`Edit center ${center.name}`}
-                          title="Edit center"
-                        >
-                          <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.75"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M13.5 6.75 17.25 10.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.75"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          className="icon-action icon-action--danger"
-                          type="button"
-                          onClick={() => setDeleteCenterTarget(center)}
-                          disabled={props.loading}
-                          aria-label={`Delete center ${center.name}`}
-                          title="Delete center"
-                        >
-                          <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.75"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </button>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
+            <ul className="list">
+              <li>
+                <div className="list__title">Workflow Load</div>
+                <div className="list__meta">{workflowBookings.length} service bookings currently active or under review</div>
+              </li>
+              <li>
+                <div className="list__title">Approval Queue</div>
+                <div className="list__meta">{pendingApprovalCount} completed bookings waiting for manager approval</div>
+              </li>
+              <li>
+                <div className="list__title">Center Network</div>
+                <div className="list__meta">{props.centers.length} centers registered, {linkedCentersCount} with linked portal access</div>
+              </li>
+            </ul>
           )}
         </section>
       </div>
+      )}
 
-      <section id="booking-workflow" className="card" style={{ marginTop: "24px" }}>
+      {activeTab === "centers" && (
+      <section className="card admin-table-section admin-panel">
+        <div className="card__header">
+          <div>
+            <h3>Registered Centers</h3>
+            <p className="muted admin-card__subtitle">Search and maintain the service-center network used for workshop bookings and portal coordination.</p>
+          </div>
+        </div>
+        {props.centers.length === 0 ? (
+          <p className="empty">No service centers added yet.</p>
+        ) : (
+          <>
+            <div className="table-controls">
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Center, phone, address..."
+                    value={centerSearch}
+                    onChange={(e) => setCenterSearch(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select
+                    value={centerRowsPerPage}
+                    onChange={(e) => setCenterRowsPerPage(Number(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
+              <div className="table-pagination">
+                <span className="table-pagination__meta">
+                  Page {currentCenterPage} of {centerTotalPages}
+                </span>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setCenterPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentCenterPage === 1}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setCenterPage((prev) => Math.min(centerTotalPages, prev + 1))}
+                  disabled={currentCenterPage === centerTotalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            {filteredCenters.length === 0 ? (
+              <p className="empty">No service centers match the search.</p>
+            ) : (
+              <div className="table centers-table" style={{ ["--table-columns" as any]: 4 }}>
+                <div className="table__head centers-table__head">
+                  <span>Center</span>
+                  <span>Phone</span>
+                  <span>Portal</span>
+                  <span>Actions</span>
+                </div>
+                {paginatedCenters.map((center) => (
+                  <div className="table__row centers-table__row" key={center.id}>
+                    <span className="centers-table__cell" data-label="Center">{center.name}</span>
+                    <span className="centers-table__cell" data-label="Phone">{center.phone || "--"}</span>
+                    <span className="centers-table__cell" data-label="Portal">
+                      <span className={`pill pill--${center.profile_id ? "success" : "warning"}`}>
+                        {center.profile_id ? "Linked" : "Not Linked"}
+                      </span>
+                    </span>
+                    <span className="table__actions centers-table__actions" data-label="Actions">
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => setSelectedCenter(center)}
+                        aria-label={`View center ${center.name}`}
+                        title="View center"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => {
+                          props.onEditCenter(center);
+                          setShowCenterModal(true);
+                        }}
+                        aria-label={`Edit center ${center.name}`}
+                        title="Edit center"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M13.5 6.75 17.25 10.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        className="icon-action icon-action--danger"
+                        type="button"
+                        onClick={() => setDeleteCenterTarget(center)}
+                        disabled={props.loading}
+                        aria-label={`Delete center ${center.name}`}
+                        title="Delete center"
+                      >
+                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+      )}
+
+      {activeTab === "workflow" && (
+      <section className="card admin-table-section admin-panel">
         <div className="card__header">
           <div>
             <h3>Booking Workflow</h3>
+            <p className="muted admin-card__subtitle">Track active bookings, review completion updates, and approve or reject proposed vehicle changes.</p>
           </div>
         </div>
         {workflowBookings.length === 0 ? (
@@ -757,10 +877,15 @@ export default function Maintenance(props: MaintenanceProps) {
           </>
         )}
       </section>
+      )}
 
-      <section className="card" style={{ marginTop: "24px" }}>
+      {activeTab === "history" && (
+      <section className="card admin-table-section admin-panel">
         <div className="card__header">
-          <h3>Maintenance History</h3>
+          <div>
+            <h3>Maintenance History</h3>
+            <p className="muted admin-card__subtitle">Review logged service records, their source, and related cost history.</p>
+          </div>
         </div>
         {props.maintenance.length === 0 ? (
           <p className="empty">No maintenance records yet.</p>
@@ -921,6 +1046,7 @@ export default function Maintenance(props: MaintenanceProps) {
           </>
         )}
       </section>
+      )}
 
       {showMaintenanceModal && (
         <div className="modal-backdrop" role="presentation">
@@ -1006,7 +1132,7 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setMaintPredictedDate(e.target.value)}
                 />
               </label>
-              <label style={{ gridColumn: "1 / -1" }}>
+              <label className="form__field--full">
                 Notes
                 <textarea
                   placeholder="Additional details..."
@@ -1410,6 +1536,7 @@ export default function Maintenance(props: MaintenanceProps) {
           </div>
         </div>
       )}
+      </section>
     </section>
   );
 }

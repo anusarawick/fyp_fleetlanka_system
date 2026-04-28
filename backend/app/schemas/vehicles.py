@@ -23,6 +23,12 @@ class VehicleCreate(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    last_service_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
+    avg_monthly_km: Optional[float] = None
+    recent_trip_count_30d: Optional[int] = None
+    recent_fuel_efficiency_avg: Optional[float] = None
+    service_center_visits_12m: Optional[int] = None
 
 
 class VehicleUpdate(BaseModel):
@@ -43,6 +49,12 @@ class VehicleUpdate(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    last_service_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
+    avg_monthly_km: Optional[float] = None
+    recent_trip_count_30d: Optional[int] = None
+    recent_fuel_efficiency_avg: Optional[float] = None
+    service_center_visits_12m: Optional[int] = None
 
 
 class VehicleOut(BaseModel):
@@ -65,6 +77,12 @@ class VehicleOut(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    last_service_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
+    avg_monthly_km: Optional[float] = None
+    recent_trip_count_30d: Optional[int] = None
+    recent_fuel_efficiency_avg: Optional[float] = None
+    service_center_visits_12m: Optional[int] = None
 
 
 class VehicleOutMinimal(BaseModel):
