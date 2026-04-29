@@ -176,6 +176,35 @@ function getStatusClass(status: string) {
   }
 }
 
+function buildGoogleMapsDirectionsUrl(trip?: Trip | null) {
+  if (
+    !trip ||
+    trip.destination_lat == null ||
+    trip.destination_lon == null ||
+    !Number.isFinite(trip.destination_lat) ||
+    !Number.isFinite(trip.destination_lon)
+  ) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    api: "1",
+    destination: `${trip.destination_lat},${trip.destination_lon}`,
+    travelmode: "driving",
+  });
+
+  if (
+    trip.origin_lat != null &&
+    trip.origin_lon != null &&
+    Number.isFinite(trip.origin_lat) &&
+    Number.isFinite(trip.origin_lon)
+  ) {
+    params.set("origin", `${trip.origin_lat},${trip.origin_lon}`);
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 function DriverIcon({ name, className }: { name: DriverIconName; className?: string }) {
   const props: SVGProps<SVGSVGElement> = {
     viewBox: "0 0 24 24",
@@ -393,6 +422,9 @@ export default function DriverTrips(props: DriverProps) {
   const currentVehicleForFuel = activeVehicle || nextAssignedVehicle;
   const availabilityStatus = getAvailabilityStatus(profile?.status, props.activeTripId);
   const headerTitle = activeTab === "trips" ? "Trips" : activeTab === "fuel" ? "Fuel" : activeTab === "profile" ? "Profile" : "";
+  const activeTripMapsUrl = buildGoogleMapsDirectionsUrl(activeTrip);
+  const nextAssignedTripMapsUrl = buildGoogleMapsDirectionsUrl(nextAssignedTrip);
+  const selectedAssignedTripMapsUrl = buildGoogleMapsDirectionsUrl(selectedAssignedTrip);
 
   return (
     <div className="pwa-app pwa-app--driver-ref">
@@ -456,6 +488,14 @@ export default function DriverTrips(props: DriverProps) {
                     {props.loading ? "Ending..." : "End Trip"}
                   </button>
                 </div>
+                {activeTripMapsUrl ? (
+                  <div className="pwa-hero-card__nav-action">
+                    <a className="pwa-btn pwa-btn--maps pwa-btn--full" href={activeTripMapsUrl} target="_blank" rel="noreferrer">
+                      <DriverIcon name="location" />
+                      Open in Google Maps
+                    </a>
+                  </div>
+                ) : null}
               </section>
             ) : (
               <section className="pwa-hero-card pwa-hero-card--assigned">
@@ -480,6 +520,14 @@ export default function DriverTrips(props: DriverProps) {
                         {props.loading ? "Starting..." : "Start Trip"}
                       </button>
                     </div>
+                    {nextAssignedTripMapsUrl ? (
+                      <div className="pwa-hero-card__nav-action">
+                        <a className="pwa-btn pwa-btn--maps pwa-btn--full" href={nextAssignedTripMapsUrl} target="_blank" rel="noreferrer">
+                          <DriverIcon name="location" />
+                          Open in Google Maps
+                        </a>
+                      </div>
+                    ) : null}
                     {(nextAssignedTrip.origin_lat != null && nextAssignedTrip.origin_lon != null) ||
                     (nextAssignedTrip.destination_lat != null && nextAssignedTrip.destination_lon != null) ? (
                       <div className="pwa-hero-card__map">
@@ -833,7 +881,14 @@ export default function DriverTrips(props: DriverProps) {
                 </div>
               ) : null}
             </div>
-            <div className="modal__actions"><button className="btn btn--secondary" type="button" onClick={() => setShowActiveTripDetails(false)}>Close</button></div>
+            <div className="modal__actions">
+              {activeTripMapsUrl ? (
+                <a className="btn btn--primary driver-maps-link" href={activeTripMapsUrl} target="_blank" rel="noreferrer">
+                  Open in Google Maps
+                </a>
+              ) : null}
+              <button className="btn btn--secondary" type="button" onClick={() => setShowActiveTripDetails(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
@@ -869,7 +924,14 @@ export default function DriverTrips(props: DriverProps) {
                 </div>
               ) : null}
             </div>
-            <div className="modal__actions"><button className="btn btn--secondary" type="button" onClick={() => setSelectedAssignedTripId(null)}>Close</button></div>
+            <div className="modal__actions">
+              {selectedAssignedTripMapsUrl ? (
+                <a className="btn btn--primary driver-maps-link" href={selectedAssignedTripMapsUrl} target="_blank" rel="noreferrer">
+                  Open in Google Maps
+                </a>
+              ) : null}
+              <button className="btn btn--secondary" type="button" onClick={() => setSelectedAssignedTripId(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}

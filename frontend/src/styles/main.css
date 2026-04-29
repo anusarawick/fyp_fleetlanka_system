@@ -4504,6 +4504,7 @@ textarea {
   transition: all 0.2s ease;
   border: none;
   min-width: 0;
+  text-decoration: none;
 }
 
 .pwa-btn--outline {
@@ -5683,6 +5684,10 @@ textarea {
   gap: 10px;
 }
 
+.pwa-app--driver-ref .pwa-hero-card__nav-action {
+  margin-top: 10px;
+}
+
 .pwa-app--driver-ref .pwa-hero-card__actions--two > * {
   flex: 1;
 }
@@ -5698,12 +5703,27 @@ textarea {
   color: #dc2626;
 }
 
+.pwa-app--driver-ref .pwa-btn--maps {
+  background: rgba(15, 23, 42, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: white;
+}
+
+.pwa-app--driver-ref .pwa-btn--maps svg {
+  width: 16px;
+  height: 16px;
+}
+
+.driver-maps-link {
+  text-decoration: none;
+}
+
 .pwa-app--driver-ref .pwa-hero-card__map {
   margin-top: 14px;
 }
 
 .pwa-app--driver-ref .pwa-hero-card__map .trip-route-map {
-  height: 120px;
+  height: 160px;
   border-radius: 12px;
   border: none;
 }
@@ -6263,7 +6283,7 @@ textarea {
   }
 
   .pwa-app--driver-ref .pwa-hero-card__map .trip-route-map {
-    height: 104px;
+    height: 180px;
   }
 
   .pwa-app--driver-ref .pwa-trip-row__footer,

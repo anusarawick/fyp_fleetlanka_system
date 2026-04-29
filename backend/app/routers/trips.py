@@ -1,9 +1,14 @@
-from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
+import json
 import math
+from typing import Any, Dict, List, Literal, Optional
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
+from app.core.config import settings
 from app.core.deps import (
     get_bearer_token,
     require_manager_profile,
@@ -15,6 +20,13 @@ from app.services.supabase_client import get_supabase_client
 from app.services.vehicle_feature_sync import sync_trip_vehicle_features
 
 router = APIRouter(prefix="/trips", tags=["trips"])
+
+
+class RoutePreviewOut(BaseModel):
+    coordinates: List[List[float]]
+    distance_m: Optional[float] = None
+    duration_s: Optional[float] = None
+    source: Literal["openrouteservice", "fallback"]
 
 
 def _parse_iso_datetime(value: str) -> Optional[datetime]:
@@ -50,6 +62,32 @@ def _to_float(value: object) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _is_valid_lat_lon(lat: float, lon: float) -> bool:
+    return (
+        math.isfinite(lat)
+        and math.isfinite(lon)
+        and -90 <= lat <= 90
+        and -180 <= lon <= 180
+    )
+
+
+def _route_preview_fallback(
+    origin_lat: float,
+    origin_lon: float,
+    destination_lat: float,
+    destination_lon: float,
+) -> RoutePreviewOut:
+    return RoutePreviewOut(
+        coordinates=[
+            [origin_lat, origin_lon],
+            [destination_lat, destination_lon],
+        ],
+        distance_m=None,
+        duration_s=None,
+        source="fallback",
+    )
 
 
 def _compute_trip_metrics(supabase, trip_id: str, trip: dict) -> dict:
@@ -167,6 +205,66 @@ def list_trips(
         query = query.eq("driver_id", profile["id"])
     response = query.execute()
     return response.data or []
+
+
+@router.get("/route-preview", response_model=RoutePreviewOut)
+def get_route_preview(
+    origin_lat: float = Query(...),
+    origin_lon: float = Query(...),
+    destination_lat: float = Query(...),
+    destination_lon: float = Query(...),
+    profile: dict = Depends(require_manager_or_driver_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> RoutePreviewOut:
+    _require_token(token)
+    if not _is_valid_lat_lon(origin_lat, origin_lon) or not _is_valid_lat_lon(destination_lat, destination_lon):
+        raise HTTPException(status_code=422, detail="Invalid route coordinates")
+
+    fallback = _route_preview_fallback(origin_lat, origin_lon, destination_lat, destination_lon)
+    if not settings.openrouteservice_api_key:
+        return fallback
+
+    body = json.dumps(
+        {
+            "coordinates": [
+                [origin_lon, origin_lat],
+                [destination_lon, destination_lat],
+            ],
+        }
+    ).encode("utf-8")
+    request = urlrequest.Request(
+        "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
+        data=body,
+        headers={
+            "Authorization": settings.openrouteservice_api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlrequest.urlopen(request, timeout=6) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        feature = (data.get("features") or [None])[0] or {}
+        geometry = feature.get("geometry") or {}
+        raw_coordinates = geometry.get("coordinates") or []
+        coordinates = [
+            [float(lat), float(lon)]
+            for lon, lat in raw_coordinates
+            if _is_valid_lat_lon(float(lat), float(lon))
+        ]
+        if len(coordinates) < 2:
+            return fallback
+        summary = ((feature.get("properties") or {}).get("summary") or {})
+        return RoutePreviewOut(
+            coordinates=coordinates,
+            distance_m=_to_float(summary.get("distance")),
+            duration_s=_to_float(summary.get("duration")),
+            source="openrouteservice",
+        )
+    except (OSError, ValueError, KeyError, urlerror.URLError, urlerror.HTTPError):
+        return fallback
 
 
 @router.get("/live", response_model=List[LiveTripOut])

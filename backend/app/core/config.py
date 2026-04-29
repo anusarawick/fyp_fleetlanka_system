@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
     database_url: str = ""
+    openrouteservice_api_key: str = ""
 
     class Config:
         env_file = ".env"
