@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Activity, Clock, Eye, Gauge, Pencil, Route, Trash2, type LucideIcon } from "lucide-react";
 import MapView from "../components/MapView";
 import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
@@ -69,34 +70,14 @@ type LiveTripFilter = "all" | "live" | "stale";
 type TripsIconName = "total" | "active" | "distance" | "duration";
 
 function TripsIcon({ name }: { name: TripsIconName }) {
-  switch (name) {
-    case "total":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "active":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v18m9-9H3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "distance":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 16c4-8 12-8 16 0M8 12c2-4 6-4 8 0M12 18h.01" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "duration":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 7v5l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<TripsIconName, LucideIcon> = {
+    total: Route,
+    active: Activity,
+    distance: Gauge,
+    duration: Clock,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 function formatDateTime(value?: string) {
@@ -685,14 +666,14 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               <p className="muted admin-card__subtitle">Create assignments and manage the saved places library.</p>
             </div>
           </div>
-          <div className="button-row">
+          <div className="admin-action-buttons">
             <button className="btn" type="button" onClick={openCreateModal}>
               Assign Trip
             </button>
             <button className="btn" type="button" onClick={() => openPlaceModal("origin")}>
               Add Place
             </button>
-            <button className="btn btn--compact" type="button" onClick={() => setActiveTab("places")}>
+            <button className="btn" type="button" onClick={() => setActiveTab("places")}>
               Manage Places
             </button>
           </div>
@@ -956,22 +937,15 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                         aria-label="View trip"
                         title="View trip"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       {(status === "assigned" || status === "cancelled") && (
                         <>
                           <button className="icon-action" type="button" onClick={() => openEditModal(trip)} aria-label="Edit trip" title="Edit trip">
-                            <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                            <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                           </button>
                           <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteTarget(trip)} aria-label="Delete trip" title="Delete trip">
-                            <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                            <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                           </button>
                         </>
                       )}
@@ -1064,10 +1038,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                         aria-label="View trip"
                         title="View trip"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                     </span>
                   </div>
@@ -1154,20 +1125,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                 <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
                 <span className="table__actions places-table__actions" data-label="Actions">
                   <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
-                    <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                    </svg>
+                    <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                   </button>
                   <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
-                    <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                   </button>
                   <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
-                    <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                   </button>
                 </span>
               </div>

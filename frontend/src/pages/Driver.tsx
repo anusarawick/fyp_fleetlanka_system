@@ -498,7 +498,7 @@ export default function DriverTrips(props: DriverProps) {
                 ) : null}
               </section>
             ) : (
-              <section className="pwa-hero-card pwa-hero-card--assigned">
+              <section className={`pwa-hero-card pwa-hero-card--assigned ${nextAssignedTrip ? "" : "pwa-hero-card--empty"}`}>
                 <div className="pwa-hero-card__top">
                   <span className="pwa-hero-card__eyebrow">Assigned Trip</span>
                   {nextAssignedTrip ? <span className="pwa-pill pwa-pill--light">Scheduled</span> : null}

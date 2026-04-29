@@ -2,6 +2,22 @@ import { useMemo } from "react";
 import MapView from "../components/MapView";
 import { DriverScore, LiveTrip, Maintenance, MaintenancePrediction, ServiceBooking, Vehicle } from "../types";
 import { Link } from "react-router-dom";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  CalendarClock,
+  Car,
+  ClipboardCheck,
+  FileText,
+  Fuel,
+  MapPinned,
+  ShieldCheck,
+  Trophy,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 
 type DashboardProps = {
   vehicleCount: number;
@@ -32,34 +48,14 @@ function formatCompactDateTime(value?: string) {
 type DashboardIconName = "fleet" | "trips" | "service" | "fuel";
 
 function DashboardIcon({ name }: { name: DashboardIconName }) {
-  switch (name) {
-    case "fleet":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 16V9l3-3h9l3 3v7M7 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "trips":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "service":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "fuel":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<DashboardIconName, LucideIcon> = {
+    fleet: Car,
+    trips: MapPinned,
+    service: Wrench,
+    fuel: Fuel,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Dashboard({
@@ -142,25 +138,37 @@ export default function Dashboard({
     <>
       <section className="stats">
         <div className="stat-card stat-card--blue">
-          <div className="stat-icon"><DashboardIcon name="fleet" /></div>
+          <div className="stat-card__top">
+            <div className="stat-icon"><DashboardIcon name="fleet" /></div>
+            <span className="stat-badge stat-badge--steady">Fleet</span>
+          </div>
           <div className="stat-value">{vehicleCount}</div>
           <div className="stat-label">Total Vehicles</div>
           <div className="stat-sub">All active in fleet</div>
         </div>
         <div className="stat-card stat-card--green">
-          <div className="stat-icon"><DashboardIcon name="trips" /></div>
+          <div className="stat-card__top">
+            <div className="stat-icon"><DashboardIcon name="trips" /></div>
+            <span className="stat-badge stat-badge--live">Live</span>
+          </div>
           <div className="stat-value">{activeTrips}</div>
           <div className="stat-label">Active Trips</div>
           <div className="stat-sub">Driver-tracked sessions</div>
         </div>
         <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><DashboardIcon name="service" /></div>
+          <div className="stat-card__top">
+            <div className="stat-icon"><DashboardIcon name="service" /></div>
+            <span className="stat-badge stat-badge--watch">Due</span>
+          </div>
           <div className="stat-value">{upcomingMaintenance.length}</div>
           <div className="stat-label">Upcoming Maintenance</div>
           <div className="stat-sub">Due today or later</div>
         </div>
         <div className="stat-card stat-card--purple">
-          <div className="stat-icon"><DashboardIcon name="fuel" /></div>
+          <div className="stat-card__top">
+            <div className="stat-icon"><DashboardIcon name="fuel" /></div>
+            <span className="stat-badge stat-badge--cost">Cost</span>
+          </div>
           <div className="stat-value">{fuelCostTotal}</div>
           <div className="stat-label">Fuel Costs</div>
           <div className="stat-sub">Total logged</div>
@@ -175,7 +183,7 @@ export default function Dashboard({
         <div className="card card--map">
           <div className="card__header">
             <div>
-              <h2>Live Trip Map</h2>
+              <h2><Activity aria-hidden="true" /> Live Trip Map</h2>
               <p className="muted dashboard-map__subtitle">Track currently active vehicles and the freshness of location updates.</p>
             </div>
             <span className="pill">{liveTrips.length} tracked</span>
@@ -183,21 +191,37 @@ export default function Dashboard({
           <MapView trips={liveTrips} />
         </div>
 
-        <div className="card">
+        <div className="card dashboard-actions-card">
           <div className="card__header">
-            <h2>Quick Actions</h2>
+            <h2><ClipboardCheck aria-hidden="true" /> Quick Actions</h2>
           </div>
           <div className="quick-actions">
-            <Link className="btn" to="/management">Add Vehicle</Link>
-            <Link className="btn btn--secondary" to="/maintenance">Log Maintenance</Link>
-            <Link className="btn btn--secondary" to="/maintenance">Book Service</Link>
-            <Link className="btn btn--secondary" to="/ml">Run ML Check</Link>
+            <Link className="dashboard-action" to="/management">
+              <span><Car aria-hidden="true" /></span>
+              <strong>Add Vehicle</strong>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link className="dashboard-action" to="/maintenance">
+              <span><Wrench aria-hidden="true" /></span>
+              <strong>Log Maintenance</strong>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link className="dashboard-action" to="/maintenance">
+              <span><CalendarClock aria-hidden="true" /></span>
+              <strong>Book Service</strong>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link className="dashboard-action" to="/ml">
+              <span><Bot aria-hidden="true" /></span>
+              <strong>Run ML Check</strong>
+              <ArrowRight aria-hidden="true" />
+            </Link>
           </div>
         </div>
 
         <div className="card">
           <div className="card__header">
-            <h2>Top Driver Scores</h2>
+            <h2><Trophy aria-hidden="true" /> Top Driver Scores</h2>
           </div>
           {topPerformers.length === 0 ? (
             <p className="empty">No driver score snapshots available yet.</p>
@@ -218,7 +242,8 @@ export default function Dashboard({
 
         <Link className="card card--link-panel" to="/maintenance#booking-workflow">
           <div className="card__header">
-            <h2>Pending Service Approvals</h2>
+            <h2><ClipboardCheck aria-hidden="true" /> Pending Service Approvals</h2>
+            <ArrowRight aria-hidden="true" className="card__header-action" />
           </div>
           {pendingApprovals.length === 0 ? (
             <p className="empty">No completed service bookings waiting for review.</p>
@@ -244,7 +269,7 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Upcoming Maintenance</h2>
+            <h2><Wrench aria-hidden="true" /> Upcoming Maintenance</h2>
           </div>
           {upcomingMaintenance.length === 0 ? (
             <p className="empty">No upcoming maintenance scheduled</p>
@@ -269,7 +294,7 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Expiring Documents</h2>
+            <h2><FileText aria-hidden="true" /> Expiring Documents</h2>
           </div>
           {upcomingDocs.length === 0 ? (
             <p className="empty">All documents up to date</p>
@@ -287,7 +312,7 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Vehicles in Maintenance</h2>
+            <h2><ShieldCheck aria-hidden="true" /> Vehicles in Maintenance</h2>
           </div>
           {vehiclesInMaintenance.length === 0 ? (
             <p className="empty">No vehicles are currently in maintenance mode.</p>
@@ -307,7 +332,7 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>High Maintenance Risk</h2>
+            <h2><AlertTriangle aria-hidden="true" /> High Maintenance Risk</h2>
           </div>
           {highRiskVehicles.length === 0 ? (
             <p className="empty">No recent maintenance risk results yet.</p>
@@ -330,7 +355,7 @@ export default function Dashboard({
 
         <div className="card">
           <div className="card__header">
-            <h2>Recent Alerts</h2>
+            <h2><AlertTriangle aria-hidden="true" /> Recent Alerts</h2>
             {alerts.length > 0 && (
               <span className="pill pill--warning">{alerts.length}</span>
             )}

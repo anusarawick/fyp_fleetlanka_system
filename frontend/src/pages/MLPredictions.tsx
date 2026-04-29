@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { BrainCircuit, Car, History } from "lucide-react";
 import { MaintenancePrediction, Vehicle } from "../types";
 
 type MLPredictionsProps = {
@@ -97,16 +98,19 @@ export default function MLPredictions(props: MLPredictionsProps) {
       <section className="admin-page">
         <section className="stats stats--three admin-stats">
           <div className="stat-card stat-card--blue">
+            <div className="stat-icon"><Car aria-hidden="true" /></div>
             <div className="stat-value">{props.vehicles.length}</div>
             <div className="stat-label">Tracked Vehicles</div>
             <div className="stat-sub">Vehicles available for maintenance model checks</div>
           </div>
           <div className="stat-card stat-card--green">
+            <div className="stat-icon"><BrainCircuit aria-hidden="true" /></div>
             <div className="stat-value">{props.maintenancePredictions.length}</div>
             <div className="stat-label">Prediction Runs</div>
             <div className="stat-sub">Stored prediction snapshots across the fleet</div>
           </div>
           <div className="stat-card stat-card--purple">
+            <div className="stat-icon"><History aria-hidden="true" /></div>
             <div className="stat-value">{selectedVehicleHistory.length}</div>
             <div className="stat-label">Selected History</div>
             <div className="stat-sub">Runs currently available for the chosen vehicle</div>

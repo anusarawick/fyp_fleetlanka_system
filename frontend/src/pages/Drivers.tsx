@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Eye, MailCheck, Pencil, Trash2, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 
 type Driver = {
   id: string;
@@ -35,34 +36,14 @@ type DriversTab = "overview" | "register";
 type DriversIconName = "drivers" | "active" | "inactive" | "coverage";
 
 function DriversIcon({ name }: { name: DriversIconName }) {
-  switch (name) {
-    case "drivers":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m17 0v-2a4 4 0 0 0-3-3.87M14 3.13a4 4 0 0 1 0 7.75M9.5 11A4 4 0 1 0 9.5 3a4 4 0 0 0 0 8Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "active":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "inactive":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m18 6-12 12M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "coverage":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 5.5h16v13H4zM4 7l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<DriversIconName, LucideIcon> = {
+    drivers: Users,
+    active: UserCheck,
+    inactive: UserX,
+    coverage: MailCheck,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Drivers(props: DriversProps) {
@@ -198,7 +179,7 @@ export default function Drivers(props: DriversProps) {
               <p className="muted admin-card__subtitle">Create driver accounts and manage mobile-access roster records from one place.</p>
             </div>
           </div>
-          <div className="quick-actions quick-actions--single">
+          <div className="admin-action-buttons">
             <button className="btn" type="button" onClick={openCreateModal}>
               Add Driver
             </button>
@@ -329,24 +310,7 @@ export default function Drivers(props: DriversProps) {
                       aria-label={`View ${d.full_name || "driver"}`}
                       title="View driver"
                     >
-                      <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="3"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                        />
-                      </svg>
+                      <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                     </button>
                     <button
                       className="icon-action"
@@ -355,16 +319,7 @@ export default function Drivers(props: DriversProps) {
                       aria-label={`Edit ${d.full_name || "driver"}`}
                       title="Edit driver"
                     >
-                      <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                     </button>
                     <button
                       className="icon-action icon-action--danger"
@@ -374,16 +329,7 @@ export default function Drivers(props: DriversProps) {
                       aria-label={`Delete ${d.full_name || "driver"}`}
                       title="Delete driver"
                     >
-                      <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                     </button>
                   </span>
                 </div>

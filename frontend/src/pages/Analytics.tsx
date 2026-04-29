@@ -1,3 +1,5 @@
+import { BarChart3, Fuel, TrendingUp, Users, Wrench, type LucideIcon } from "lucide-react";
+
 type FuelLog = {
   id: string;
   fuel_date: string;
@@ -39,40 +41,15 @@ type AnalyticsProps = {
 type AnalyticsIconName = "fuel" | "average" | "projection" | "maintenance" | "drivers";
 
 function AnalyticsIcon({ name }: { name: AnalyticsIconName }) {
-  switch (name) {
-    case "fuel":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "average":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 19V9m7 10V5m7 14v-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "projection":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 18 10 11l4 3 5-8m0 0h-5m5 0v5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "maintenance":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "drivers":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<AnalyticsIconName, LucideIcon> = {
+    fuel: Fuel,
+    average: BarChart3,
+    projection: TrendingUp,
+    maintenance: Wrench,
+    drivers: Users,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Analytics(props: AnalyticsProps) {

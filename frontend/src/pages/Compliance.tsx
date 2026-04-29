@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { AlertTriangle, CalendarClock, ClipboardCheck, Wrench } from "lucide-react";
 
 type Document = {
   id: string;
@@ -241,21 +242,25 @@ export default function Compliance(props: ComplianceProps) {
       <section className="admin-page compliance-page">
       <div className="stats compliance-stats admin-stats">
         <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><AlertTriangle aria-hidden="true" /></div>
           <div className="stat-value">{expiredDocuments.length}</div>
           <div className="stat-label">Expired Documents</div>
           <div className="stat-sub">Requires immediate action</div>
         </div>
         <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><CalendarClock aria-hidden="true" /></div>
           <div className="stat-value">{expiringSoonDocuments.length}</div>
           <div className="stat-label">Expiring in 30 Days</div>
           <div className="stat-sub">Renewal watch</div>
         </div>
         <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><Wrench aria-hidden="true" /></div>
           <div className="stat-value">{vehiclesInMaintenance.length}</div>
           <div className="stat-label">Vehicles in Maintenance</div>
           <div className="stat-sub">Currently unavailable</div>
         </div>
         <div className="stat-card stat-card--green">
+          <div className="stat-icon"><ClipboardCheck aria-hidden="true" /></div>
           <div className="stat-value">{pendingApprovals.length}</div>
           <div className="stat-label">Pending Approvals</div>
           <div className="stat-sub">Completed services awaiting review</div>

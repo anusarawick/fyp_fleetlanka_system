@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Building2, CircleDollarSign, ClipboardList, Eye, Pencil, Trash2, type LucideIcon } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -109,35 +110,14 @@ type MaintenanceTab = "overview" | "centers" | "workflow" | "history";
 type MaintenanceIconName = "records" | "centers" | "cost" | "review";
 
 function MaintenanceIcon({ name }: { name: MaintenanceIconName }) {
-  switch (name) {
-    case "records":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 4.5h8l3 3V19.5H7a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M15 4.5v3h3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "centers":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4.5 19.5V9l7.5-4.5L19.5 9v10.5M9 19.5v-4.5h6v4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "cost":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v18m4.5-14.25h-6a2.25 2.25 0 0 0 0 4.5h3a2.25 2.25 0 0 1 0 4.5H7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "review":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<MaintenanceIconName, LucideIcon> = {
+    records: ClipboardList,
+    centers: Building2,
+    cost: CircleDollarSign,
+    review: AlertTriangle,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Maintenance(props: MaintenanceProps) {
@@ -429,9 +409,9 @@ export default function Maintenance(props: MaintenanceProps) {
               <p className="muted admin-card__subtitle">Log service records, register workshops, and schedule service work from one workspace.</p>
             </div>
           </div>
-          <div className="button-row maintenance-actions__row">
+          <div className="admin-action-buttons">
             <button
-              className="btn maintenance-actions__btn"
+              className="btn"
               type="button"
               onClick={() => {
                 props.onCancelMaintenanceEdit();
@@ -441,7 +421,7 @@ export default function Maintenance(props: MaintenanceProps) {
               Log Maintenance
             </button>
             <button
-              className="btn maintenance-actions__btn"
+              className="btn"
               type="button"
               onClick={() => {
                 props.onCancelCenterEdit();
@@ -451,7 +431,7 @@ export default function Maintenance(props: MaintenanceProps) {
               Add Center
             </button>
             <button
-              className="btn maintenance-actions__btn"
+              className="btn"
               type="button"
               onClick={() => {
                 props.onCancelBookingEdit();
@@ -604,17 +584,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`View center ${center.name}`}
                         title="View center"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action"
@@ -626,24 +596,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Edit center ${center.name}`}
                         title="Edit center"
                       >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action icon-action--danger"
@@ -653,16 +606,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Delete center ${center.name}`}
                         title="Delete center"
                       >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                       </button>
                     </span>
                   </div>
@@ -778,17 +722,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`View booking ${booking.id}`}
                         title="View booking"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action"
@@ -801,24 +735,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Edit booking ${booking.id}`}
                         title="Edit booking"
                       >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action icon-action--danger"
@@ -828,16 +745,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Delete booking ${booking.id}`}
                         title="Delete booking"
                       >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                       </button>
                       {isPendingCompletionReview(booking) && (
                         <button
@@ -968,24 +876,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`View maintenance ${record.id}`}
                         title="View record"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="3"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                          />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action"
@@ -997,24 +888,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Edit maintenance ${record.id}`}
                         title="Edit record"
                       >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action icon-action--danger"
@@ -1024,16 +898,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         aria-label={`Delete maintenance ${record.id}`}
                         title="Delete record"
                       >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                       </button>
                     </span>
                   </div>

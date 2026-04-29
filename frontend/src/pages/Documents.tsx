@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Car, FileText, TimerReset, Eye, Pencil, Trash2 } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -168,16 +169,19 @@ export default function Documents(props: DocumentsProps) {
       <section className="admin-page">
       <section className="stats stats--three admin-stats">
         <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><FileText aria-hidden="true" /></div>
           <div className="stat-value">{props.documents.length}</div>
           <div className="stat-label">Documents</div>
           <div className="stat-sub">Tracked vehicle and driver documents</div>
         </div>
         <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><TimerReset aria-hidden="true" /></div>
           <div className="stat-value">{expiringSoonCount}</div>
           <div className="stat-label">Expiring Soon</div>
           <div className="stat-sub">Documents with expiry dates inside the next 30 days</div>
         </div>
         <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><Car aria-hidden="true" /></div>
           <div className="stat-value">{props.vehicles.length}</div>
           <div className="stat-label">Fleet Vehicles</div>
           <div className="stat-sub">Available vehicle owners for document registration</div>
@@ -210,7 +214,7 @@ export default function Documents(props: DocumentsProps) {
               <p className="muted admin-card__subtitle">Register new compliance documents and keep expiry tracking visible from the same workspace.</p>
             </div>
           </div>
-          <div className="button-row">
+          <div className="admin-action-buttons">
             <button
               className="btn"
               type="button"
@@ -369,17 +373,7 @@ export default function Documents(props: DocumentsProps) {
                         aria-label={`View document ${doc.id}`}
                         title="View document"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action"
@@ -392,24 +386,7 @@ export default function Documents(props: DocumentsProps) {
                         aria-label={`Edit document ${doc.id}`}
                         title="Edit document"
                       >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action icon-action--danger"
@@ -418,16 +395,7 @@ export default function Documents(props: DocumentsProps) {
                         aria-label={`Delete document ${doc.id}`}
                         title="Delete document"
                       >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                       </button>
                     </span>
                   </div>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Database, Filter, Rows3 } from "lucide-react";
 import { Document, Driver, FuelLog, Maintenance, ServiceBooking, ServiceCenter, Trip, Vehicle } from "../types";
 import {
   exportDocuments,
@@ -442,16 +443,19 @@ export default function Reports(props: ReportProps) {
       <section className="admin-page reports-page">
       <section className="stats stats--three reports-stats">
         <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><Database aria-hidden="true" /></div>
           <div className="stat-value">{REPORT_TABS.length}</div>
           <div className="stat-label">Report Datasets</div>
           <div className="stat-sub">Vehicles, drivers, trips, fuel, maintenance, and documents</div>
         </div>
         <div className="stat-card stat-card--green">
+          <div className="stat-icon"><Filter aria-hidden="true" /></div>
           <div className="stat-value">{activeDataset.length}</div>
           <div className="stat-label">Filtered Rows</div>
           <div className="stat-sub">Current result set for the active report tab</div>
         </div>
         <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><Rows3 aria-hidden="true" /></div>
           <div className="stat-value">{totalRowsAcrossDatasets}</div>
           <div className="stat-label">Indexed Records</div>
           <div className="stat-sub">Available reportable records across the manager portal</div>

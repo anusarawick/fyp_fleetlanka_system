@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { BarChart3, CircleDollarSign, ClipboardList, Eye, Fuel as FuelIconGlyph, Pencil, Trash2, TrendingUp, type LucideIcon } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -51,40 +52,15 @@ type FuelTab = "overview" | "forecast" | "register";
 type FuelIconName = "logs" | "volume" | "cost" | "trend" | "demand";
 
 function FuelIcon({ name }: { name: FuelIconName }) {
-  switch (name) {
-    case "logs":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 3h7l4 4v14H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v4h4M9 13h6M9 17h6M9 9h2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "volume":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 21h8V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v16Zm8-11h2l2 2v5a2 2 0 0 1-2 2h-2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "cost":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v18M17 7.5c0-1.93-2.24-3.5-5-3.5s-5 1.57-5 3.5 2.24 3.5 5 3.5 5 1.57 5 3.5-2.24 3.5-5 3.5-5-1.57-5-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "trend":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 18 10 11l4 3 5-8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "demand":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 19V9m7 10V5m7 14v-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<FuelIconName, LucideIcon> = {
+    logs: ClipboardList,
+    volume: FuelIconGlyph,
+    cost: CircleDollarSign,
+    trend: TrendingUp,
+    demand: BarChart3,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Fuel(props: FuelProps) {
@@ -247,7 +223,7 @@ export default function Fuel(props: FuelProps) {
               <p className="muted analytics-card__subtitle">Log and manage operational fuel entries from one place.</p>
             </div>
           </div>
-          <div className="quick-actions quick-actions--single">
+          <div className="admin-action-buttons">
             <button
               className="btn"
               type="button"
@@ -509,17 +485,7 @@ export default function Fuel(props: FuelProps) {
                         aria-label={`View fuel log ${log.id}`}
                         title="View fuel log"
                       >
-                        <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                        </svg>
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action"
@@ -531,24 +497,7 @@ export default function Fuel(props: FuelProps) {
                         aria-label={`Edit fuel log ${log.id}`}
                         title="Edit fuel log"
                       >
-                        <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M4.5 19.5h3.75L18.75 9 15 5.25 4.5 15.75v3.75Z"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M13.5 6.75 17.25 10.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                       </button>
                       <button
                         className="icon-action icon-action--danger"
@@ -558,16 +507,7 @@ export default function Fuel(props: FuelProps) {
                         title="Delete fuel log"
                         disabled={props.loading}
                       >
-                        <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M9.75 9.75v6.75M14.25 9.75v6.75M5.25 6.75h13.5M8.25 6.75V5.25A1.5 1.5 0 0 1 9.75 3.75h4.5a1.5 1.5 0 0 1 1.5 1.5v1.5m-9.75 0 .6 10.2A1.5 1.5 0 0 0 8.1 18.75h7.8a1.5 1.5 0 0 0 1.497-1.8l-.597-10.2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.75"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                       </button>
                     </span>
                   </div>

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { AlertTriangle, Car, Eye, Pencil, Route, Trash2, Wrench, type LucideIcon } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -79,34 +80,14 @@ type ManagementTab = "overview" | "register";
 type ManagementIconName = "fleet" | "trips" | "service" | "risk";
 
 function ManagementIcon({ name }: { name: ManagementIconName }) {
-  switch (name) {
-    case "fleet":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 16V9l3-3h9l3 3v7M7 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "trips":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 18 19 6M13 6h6v6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "service":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m14.7 6.3 3 3-8.9 8.9-3.6.6.6-3.6 8.9-8.9ZM13 8l3 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "risk":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons: Record<ManagementIconName, LucideIcon> = {
+    fleet: Car,
+    trips: Route,
+    service: Wrench,
+    risk: AlertTriangle,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function Management(props: ManagementProps) {
@@ -283,7 +264,7 @@ export default function Management(props: ManagementProps) {
               <p className="muted admin-card__subtitle">Create or update vehicle records from one place.</p>
             </div>
           </div>
-          <div className="quick-actions quick-actions--single">
+          <div className="admin-action-buttons">
             <button className="btn" type="button" onClick={openCreateModal}>
               Add Vehicle
             </button>
@@ -465,24 +446,7 @@ export default function Management(props: ManagementProps) {
                       aria-label={`View ${v.plate_no}`}
                       title="View vehicle"
                     >
-                      <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <circle
-                          cx="12"
-                          cy="12"
-                          r="3"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                        />
-                      </svg>
+                      <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                     </button>
                     <button
                       className="icon-action"
@@ -491,16 +455,7 @@ export default function Management(props: ManagementProps) {
                       aria-label={`Edit ${v.plate_no}`}
                       title="Edit vehicle"
                     >
-                      <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="m16.862 4.487 2.651 2.651m-1.616-4.687a2.25 2.25 0 1 1 3.182 3.182L7.5 19.212 3.75 20.25l1.038-3.75L17.897 2.451Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                     </button>
                     <button
                       className="icon-action icon-action--danger"
@@ -510,16 +465,7 @@ export default function Management(props: ManagementProps) {
                       aria-label={`Delete ${v.plate_no}`}
                       title="Delete vehicle"
                     >
-                      <svg className="icon-action__svg icon-action__svg--delete" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M6 7.5h12m-10.5 0V6A1.5 1.5 0 0 1 9 4.5h6A1.5 1.5 0 0 1 16.5 6v1.5m-9 0 .664 9.294A1.5 1.5 0 0 0 9.66 18.75h4.68a1.5 1.5 0 0 0 1.496-1.956L16.5 7.5m-6 3v4.5m3-4.5v4.5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
                     </button>
                   </span>
                       </>
