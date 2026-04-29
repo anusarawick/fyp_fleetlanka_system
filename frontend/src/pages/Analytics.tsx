@@ -21,7 +21,7 @@ type FuelForecast = {
 type MaintenanceRecord = {
   id: string;
   service_date: string;
-  predicted_due_date?: string;
+  next_service_due_km?: number;
 };
 
 type AnalyticsProps = {
@@ -76,13 +76,9 @@ function AnalyticsIcon({ name }: { name: AnalyticsIconName }) {
 }
 
 export default function Analytics(props: AnalyticsProps) {
-  const upcomingMaintenance = props.maintenance.filter((m) => {
-    if (!m.predicted_due_date) return false;
-    const due = new Date(m.predicted_due_date).getTime();
-    const now = new Date().getTime();
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    return due >= now && due <= now + sevenDays;
-  });
+  const upcomingMaintenance = props.maintenance
+    .filter((m) => typeof m.next_service_due_km === "number")
+    .sort((a, b) => (a.next_service_due_km || 0) - (b.next_service_due_km || 0));
 
   return (
     <section className="section">
@@ -109,8 +105,8 @@ export default function Analytics(props: AnalyticsProps) {
         <div className="stat-card stat-card--amber">
           <div className="stat-icon"><AnalyticsIcon name="maintenance" /></div>
           <div className="stat-value">{upcomingMaintenance.length}</div>
-          <div className="stat-label">Maintenance Due (7d)</div>
-          <div className="stat-sub">Upcoming</div>
+          <div className="stat-label">Maintenance Tracked</div>
+          <div className="stat-sub">By next due km</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon"><AnalyticsIcon name="drivers" /></div>
@@ -124,8 +120,8 @@ export default function Analytics(props: AnalyticsProps) {
         <section className="card analytics-card--summary">
           <div className="card__header">
             <div>
-              <h3>Maintenance Due Soon</h3>
-              <p className="muted analytics-card__subtitle">Scheduled work requiring attention in the next 7 days.</p>
+              <h3>Maintenance Thresholds</h3>
+              <p className="muted analytics-card__subtitle">Maintenance records carrying explicit next-due odometer thresholds.</p>
             </div>
             <div className="analytics-card__actions">
               <button
@@ -137,13 +133,13 @@ export default function Analytics(props: AnalyticsProps) {
             </div>
           </div>
           {upcomingMaintenance.length === 0 ? (
-            <p className="muted empty">No upcoming maintenance.</p>
+            <p className="muted empty">No next-due mileage thresholds recorded.</p>
           ) : (
             <ul className="list">
               {upcomingMaintenance.slice(0, 8).map((m) => (
                 <li key={m.id}>
-                  <div className="list__title">{m.predicted_due_date}</div>
-                  <div className="list__meta">Scheduled</div>
+                  <div className="list__title">{typeof m.next_service_due_km === "number" ? `${m.next_service_due_km.toLocaleString()} km` : "--"}</div>
+                  <div className="list__meta">{m.service_date}</div>
                 </li>
               ))}
             </ul>

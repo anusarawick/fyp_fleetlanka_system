@@ -54,6 +54,7 @@ def _sync_maintenance_from_booking(admin_client, booking: dict, center: dict, *,
         "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
         "cost_lkr": booking.get("final_cost_lkr"),
         "odometer_km": vehicle.get("odometer_km"),
+        "next_service_due_km": booking.get("next_service_due_km"),
         "notes": " | ".join(note_parts) if note_parts else None,
     }
 
@@ -185,6 +186,7 @@ def update_service_portal_booking(
         update_data["completion_reviewed_by"] = None
         if current_status == "completed" and next_status == "confirmed":
             update_data["final_cost_lkr"] = None
+            update_data["next_service_due_km"] = None
             update_data["proposed_tire_condition"] = None
             update_data["proposed_brake_condition"] = None
             update_data["proposed_battery_status"] = None

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.deps import DRIVER_ROLES, get_bearer_token, get_current_profile
 from app.schemas.fuel_logs import FuelLogCreate, FuelLogOut, FuelLogUpdate
 from app.services.supabase_client import get_supabase_client
+from app.services.vehicle_feature_sync import sync_fuel_vehicle_features
 
 router = APIRouter(prefix="/fuel-logs", tags=["fuel-logs"])
 
@@ -50,6 +51,8 @@ def create_fuel_log(
     response = supabase.table("fuel_logs").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
+    if response.data[0].get("vehicle_id"):
+        sync_fuel_vehicle_features(supabase, response.data[0]["vehicle_id"])
     return response.data[0]
 
 
@@ -61,6 +64,7 @@ def update_fuel_log(
 ) -> FuelLogOut:
     token = _require_token(token)
     supabase = get_supabase_client(token)
+    sync_client = get_supabase_client(use_service_role=True)
     response = (
         supabase.table("fuel_logs")
         .update(payload.model_dump(exclude_none=True))
@@ -69,6 +73,8 @@ def update_fuel_log(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
+    if response.data[0].get("vehicle_id"):
+        sync_fuel_vehicle_features(sync_client, response.data[0]["vehicle_id"])
     return response.data[0]
 
 
@@ -78,7 +84,12 @@ def delete_fuel_log(
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)
+    sync_client = get_supabase_client(use_service_role=True)
+    existing = supabase.table("fuel_logs").select("vehicle_id").eq("id", fuel_id).single().execute()
+    vehicle_id = existing.data.get("vehicle_id") if existing.data else None
     response = supabase.table("fuel_logs").delete().eq("id", fuel_id).execute()
     if response.data is None:
         raise HTTPException(status_code=400, detail="Delete failed")
+    if vehicle_id:
+        sync_fuel_vehicle_features(sync_client, vehicle_id)
     return {"status": "ok"}

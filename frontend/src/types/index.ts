@@ -127,7 +127,6 @@ export type Maintenance = {
   cost_lkr?: number;
   odometer_km?: number;
   next_service_due_km?: number;
-  predicted_due_date?: string;
   notes?: string;
 };
 
@@ -169,6 +168,7 @@ export type ServiceBooking = {
   completion_reviewed_by?: string;
   completed_at?: string;
   final_cost_lkr?: number;
+  next_service_due_km?: number;
 };
 
 export type Alert = {

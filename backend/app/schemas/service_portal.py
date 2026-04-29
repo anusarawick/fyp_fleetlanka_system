@@ -48,6 +48,7 @@ class ServicePortalBookingOut(BaseModel):
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
 
 
 class ServicePortalBookingUpdate(BaseModel):
@@ -58,3 +59,4 @@ class ServicePortalBookingUpdate(BaseModel):
     proposed_brake_condition: Optional[str] = None
     proposed_battery_status: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None

@@ -14,7 +14,6 @@ class MaintenanceCreate(BaseModel):
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None
-    predicted_due_date: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -29,7 +28,6 @@ class MaintenanceOut(BaseModel):
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None
-    predicted_due_date: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -41,5 +39,4 @@ class MaintenanceUpdate(BaseModel):
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None
-    predicted_due_date: Optional[str] = None
     notes: Optional[str] = None

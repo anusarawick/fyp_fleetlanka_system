@@ -37,6 +37,7 @@ type ServicePortalBooking = {
   completion_review_status?: string;
   completed_at?: string;
   final_cost_lkr?: number;
+  next_service_due_km?: number;
   vehicle_plate_no?: string;
   vehicle_make?: string;
   vehicle_model?: string;
@@ -135,6 +136,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const [customWorkType, setCustomWorkType] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [nextServiceDueKm, setNextServiceDueKm] = useState("");
   const [proposedTireCondition, setProposedTireCondition] = useState("");
   const [proposedBrakeCondition, setProposedBrakeCondition] = useState("");
   const [proposedBatteryStatus, setProposedBatteryStatus] = useState("");
@@ -179,6 +181,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         booking.service_notes,
         vehicleLabel(booking),
         typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "",
+        typeof booking.next_service_due_km === "number" ? String(booking.next_service_due_km) : "",
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
@@ -244,6 +247,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setNextServiceDueKm(typeof booking.next_service_due_km === "number" ? String(booking.next_service_due_km) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
     setProposedBrakeCondition(booking.proposed_brake_condition || "");
     setProposedBatteryStatus(booking.proposed_battery_status || "");
@@ -258,6 +262,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setNextServiceDueKm(typeof booking.next_service_due_km === "number" ? String(booking.next_service_due_km) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
     setProposedBrakeCondition(booking.proposed_brake_condition || "");
     setProposedBatteryStatus(booking.proposed_battery_status || "");
@@ -270,6 +275,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType("");
     setServiceNotes("");
     setFinalCost("");
+    setNextServiceDueKm("");
     setProposedTireCondition("");
     setProposedBrakeCondition("");
     setProposedBatteryStatus("");
@@ -311,6 +317,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               work_type: effectiveWorkType || undefined,
               service_notes: serviceNotes || undefined,
               final_cost_lkr: currentStatus === "completed" && finalCost ? Number(finalCost) : undefined,
+              next_service_due_km:
+                currentStatus === "completed" && nextServiceDueKm ? Number(nextServiceDueKm) : undefined,
               proposed_tire_condition: currentStatus === "completed" ? proposedTireCondition || undefined : undefined,
               proposed_brake_condition: currentStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
               proposed_battery_status: currentStatus === "completed" ? proposedBatteryStatus || undefined : undefined,
@@ -323,6 +331,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               proposed_brake_condition: nextStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
               proposed_battery_status: nextStatus === "completed" ? proposedBatteryStatus || undefined : undefined,
               final_cost_lkr: nextStatus === "completed" && finalCost ? Number(finalCost) : undefined,
+              next_service_due_km: nextStatus === "completed" && nextServiceDueKm ? Number(nextServiceDueKm) : undefined,
             };
       const updated = await apiPatch<ServicePortalBooking>(
         `/service-portal/bookings/${editingBooking.id}`,
@@ -687,6 +696,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
               <div className="detail-item"><span>Final Cost (LKR)</span><strong>{typeof selectedBooking.final_cost_lkr === "number" ? `Rs.${selectedBooking.final_cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Next Due (km)</span><strong>{typeof selectedBooking.next_service_due_km === "number" ? selectedBooking.next_service_due_km.toLocaleString() : "--"}</strong></div>
               <div className="detail-item"><span>Tire Condition</span><strong>{selectedBooking.proposed_tire_condition || "--"}</strong></div>
               <div className="detail-item"><span>Brake Condition</span><strong>{selectedBooking.proposed_brake_condition || "--"}</strong></div>
               <div className="detail-item"><span>Battery Status</span><strong>{selectedBooking.proposed_battery_status || "--"}</strong></div>
@@ -785,6 +795,15 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                       placeholder="Enter final cost"
                       value={finalCost}
                       onChange={(e) => setFinalCost(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Next Service Due (km)
+                    <input
+                      type="number"
+                      placeholder="Enter next due odometer"
+                      value={nextServiceDueKm}
+                      onChange={(e) => setNextServiceDueKm(e.target.value)}
                     />
                   </label>
                   <label>

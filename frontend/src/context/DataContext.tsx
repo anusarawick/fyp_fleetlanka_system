@@ -142,8 +142,6 @@ type DataContextType = {
     setMaintOdometer: (v: string) => void;
     maintNextDue: string;
     setMaintNextDue: (v: string) => void;
-    maintPredictedDate: string;
-    setMaintPredictedDate: (v: string) => void;
     maintNotes: string;
     setMaintNotes: (v: string) => void;
     editingMaintenanceId: string | null;
@@ -357,7 +355,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [maintCost, setMaintCost] = useState("");
     const [maintOdometer, setMaintOdometer] = useState("");
     const [maintNextDue, setMaintNextDue] = useState("");
-    const [maintPredictedDate, setMaintPredictedDate] = useState("");
     const [maintNotes, setMaintNotes] = useState("");
     const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
 
@@ -803,7 +800,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintCost("");
         setMaintOdometer("");
         setMaintNextDue("");
-        setMaintPredictedDate("");
         setMaintNotes("");
         setCenterName("");
         setCenterPhone("");
@@ -1286,7 +1282,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 cost_lkr: maintCost ? Number(maintCost) : undefined,
                 odometer_km: maintOdometer ? Number(maintOdometer) : undefined,
                 next_service_due_km: maintNextDue ? Number(maintNextDue) : undefined,
-                predicted_due_date: maintPredictedDate || undefined,
                 notes: maintNotes || undefined,
             };
             if (editingMaintenanceId) {
@@ -1302,7 +1297,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setMaintCost("");
             setMaintOdometer("");
             setMaintNextDue("");
-            setMaintPredictedDate("");
             setMaintNotes("");
             setEditingMaintenanceId(null);
         } catch (err: any) {
@@ -1320,7 +1314,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintCost(typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "");
         setMaintOdometer(typeof record.odometer_km === "number" ? String(record.odometer_km) : "");
         setMaintNextDue(typeof record.next_service_due_km === "number" ? String(record.next_service_due_km) : "");
-        setMaintPredictedDate(record.predicted_due_date || "");
         setMaintNotes(record.notes || "");
     }
 
@@ -1332,7 +1325,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintCost("");
         setMaintOdometer("");
         setMaintNextDue("");
-        setMaintPredictedDate("");
         setMaintNotes("");
     }
 
@@ -1674,18 +1666,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const now = nowDate.getTime();
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
 
-        maintenance.forEach((m) => {
-            const dueDate = m.predicted_due_date;
-            if (!dueDate) return;
-            const date = new Date(dueDate).getTime();
-            if (date >= now && date <= now + sevenDays) {
-                alerts.push({
-                    title: `Maintenance due: ${m.service_type || "Service"}`,
-                    meta: `Due ${dueDate}`,
-                });
-            }
-        });
-
         documents.forEach((d) => {
             if (!d.expiry_date) return;
             const date = new Date(d.expiry_date).getTime();
@@ -1811,8 +1791,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setMaintOdometer,
                 maintNextDue,
                 setMaintNextDue,
-                maintPredictedDate,
-                setMaintPredictedDate,
                 maintNotes,
                 setMaintNotes,
                 editingMaintenanceId,

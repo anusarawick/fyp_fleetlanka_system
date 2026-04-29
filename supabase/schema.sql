@@ -198,7 +198,6 @@ create table if not exists public.maintenance (
   cost_lkr numeric,
   odometer_km numeric,
   next_service_due_km numeric,
-  predicted_due_date date,
   notes text,
   created_at timestamptz not null default now()
 );
@@ -264,6 +263,7 @@ create table if not exists public.service_bookings (
   completion_reviewed_by uuid references public.profiles(id) on delete set null,
   completed_at timestamptz,
   final_cost_lkr numeric,
+  next_service_due_km numeric,
   created_at timestamptz not null default now()
 );
 

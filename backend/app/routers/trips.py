@@ -12,6 +12,7 @@ from app.core.deps import (
 from app.schemas.gps_points import GPSPointCreate
 from app.schemas.trips import LiveTripOut, TripCreate, TripOut, TripUpdate
 from app.services.supabase_client import get_supabase_client
+from app.services.vehicle_feature_sync import sync_trip_vehicle_features
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -366,6 +367,8 @@ def update_trip(
             )
             if finalized.data:
                 updated_trip = finalized.data[0]
+        if updated_trip.get("status") == "completed" and updated_trip.get("vehicle_id"):
+            sync_trip_vehicle_features(supabase, updated_trip["vehicle_id"])
 
     return updated_trip
 

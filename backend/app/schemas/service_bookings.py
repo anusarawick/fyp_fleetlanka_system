@@ -22,6 +22,7 @@ class ServiceBookingCreate(BaseModel):
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
 
 
 class ServiceBookingOut(BaseModel):
@@ -43,6 +44,7 @@ class ServiceBookingOut(BaseModel):
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
 
 
 class ServiceBookingUpdate(BaseModel):
@@ -60,6 +62,7 @@ class ServiceBookingUpdate(BaseModel):
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
+    next_service_due_km: Optional[float] = None
 
 
 class ServiceBookingReviewDecision(BaseModel):

@@ -28,15 +28,15 @@ export const exportFuel = (fuelLogs: FuelLog[]) => {
 
 export const exportMaintenance = (maintenance: Maintenance[]) => {
     const rows = [
-        ["service_date", "service_type", "cost_lkr", "odometer_km", "service_center_id", "source", "predicted_due_date", "vehicle_id"],
+        ["service_date", "service_type", "cost_lkr", "odometer_km", "next_service_due_km", "service_center_id", "source", "vehicle_id"],
         ...maintenance.map((m) => [
             m.service_date,
             m.service_type || "",
             String(m.cost_lkr || 0),
             String(m.odometer_km || ""),
+            String(m.next_service_due_km || ""),
             m.service_center_id || "",
             m.service_booking_id ? "Service Booking" : "Manual",
-            m.predicted_due_date || "",
             m.vehicle_id,
         ]),
     ];

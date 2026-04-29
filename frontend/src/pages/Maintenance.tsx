@@ -15,7 +15,6 @@ type MaintenanceRecord = {
   cost_lkr?: number;
   odometer_km?: number;
   next_service_due_km?: number;
-  predicted_due_date?: string;
   notes?: string;
 };
 
@@ -45,6 +44,7 @@ type ServiceBooking = {
   completion_reviewed_by?: string;
   completed_at?: string;
   final_cost_lkr?: number;
+  next_service_due_km?: number;
 };
 
 type MaintenanceProps = {
@@ -65,8 +65,6 @@ type MaintenanceProps = {
   setMaintOdometer: (v: string) => void;
   maintNextDue: string;
   setMaintNextDue: (v: string) => void;
-  maintPredictedDate: string;
-  setMaintPredictedDate: (v: string) => void;
   maintNotes: string;
   setMaintNotes: (v: string) => void;
   editingMaintenanceId: string | null;
@@ -192,7 +190,6 @@ export default function Maintenance(props: MaintenanceProps) {
     return [
       record.service_date,
       record.service_type,
-      record.predicted_due_date,
       record.notes,
       record.service_booking_id ? "service booking" : "manual",
       record.service_center_id ? centerLabelMap[record.service_center_id] : "",
@@ -1124,14 +1121,6 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setMaintNextDue(e.target.value)}
                 />
               </label>
-              <label>
-                Predicted Due Date
-                <input
-                  type="date"
-                  value={props.maintPredictedDate}
-                  onChange={(e) => props.setMaintPredictedDate(e.target.value)}
-                />
-              </label>
               <label className="form__field--full">
                 Notes
                 <textarea
@@ -1324,7 +1313,6 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Service Center</span><strong>{selectedRecord.service_center_id ? centerLabelMap[selectedRecord.service_center_id] || "--" : "--"}</strong></div>
               <div className="detail-item"><span>Odometer</span><strong>{selectedRecord.odometer_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Next Due (km)</span><strong>{selectedRecord.next_service_due_km ?? "--"}</strong></div>
-              <div className="detail-item"><span>Predicted Due Date</span><strong>{selectedRecord.predicted_due_date || "--"}</strong></div>
               <div className="detail-item"><span>Linked Booking</span><strong>{selectedRecord.service_booking_id || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedRecord.notes || "--"}</strong></div>
             </div>
@@ -1377,6 +1365,7 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{typeof selectedBooking.final_cost_lkr === "number" ? `Rs.${selectedBooking.final_cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Next Due (km)</span><strong>{typeof selectedBooking.next_service_due_km === "number" ? selectedBooking.next_service_due_km.toLocaleString() : "--"}</strong></div>
               <div className="detail-item"><span>Completed At</span><strong>{selectedBooking.completed_at || "--"}</strong></div>
               <div className="detail-item"><span>Tire Condition</span><strong>{selectedBooking.proposed_tire_condition || "--"}</strong></div>
               <div className="detail-item"><span>Brake Condition</span><strong>{selectedBooking.proposed_brake_condition || "--"}</strong></div>

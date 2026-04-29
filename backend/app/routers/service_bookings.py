@@ -11,6 +11,7 @@ from app.schemas.service_bookings import (
     ServiceBookingUpdate,
 )
 from app.services.supabase_client import get_supabase_client
+from app.services.vehicle_feature_sync import sync_service_maintenance_vehicle_features
 
 router = APIRouter(prefix="/service-bookings", tags=["service-bookings"])
 
@@ -52,6 +53,7 @@ def _sync_maintenance_from_booking(supabase, booking: dict, center: dict) -> Non
         "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
         "cost_lkr": booking.get("final_cost_lkr"),
         "odometer_km": vehicle.get("odometer_km"),
+        "next_service_due_km": booking.get("next_service_due_km"),
         "notes": " | ".join(note_parts) if note_parts else None,
     }
     existing = (
@@ -92,6 +94,7 @@ def create_booking(
     forbidden_create_fields = [
         payload.service_notes,
         payload.final_cost_lkr,
+        payload.next_service_due_km,
         payload.completed_at,
         payload.proposed_tire_condition,
         payload.proposed_brake_condition,
@@ -107,6 +110,7 @@ def create_booking(
         exclude={
             "service_notes",
             "final_cost_lkr",
+            "next_service_due_km",
             "completed_at",
             "proposed_tire_condition",
             "proposed_brake_condition",
@@ -151,6 +155,7 @@ def update_booking(
         "status",
         "service_notes",
         "final_cost_lkr",
+        "next_service_due_km",
         "completed_at",
         "proposed_tire_condition",
         "proposed_brake_condition",
@@ -282,8 +287,13 @@ def approve_completed_booking(
         vehicle_updates["brake_condition"] = booking["proposed_brake_condition"]
     if booking.get("proposed_battery_status"):
         vehicle_updates["battery_status"] = booking["proposed_battery_status"]
-
     supabase.table("vehicles").update(vehicle_updates).eq("id", booking["vehicle_id"]).execute()
+    sync_service_maintenance_vehicle_features(
+        supabase,
+        booking["vehicle_id"],
+        last_service_cost_lkr=booking.get("final_cost_lkr"),
+        next_service_due_km=booking.get("next_service_due_km"),
+    )
 
     review_updates = {
         "completion_review_status": "approved",

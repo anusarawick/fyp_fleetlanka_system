@@ -100,16 +100,9 @@ export default function Dashboard({
     [maintenancePredictionMap]
   );
   const upcomingMaintenance = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
     return maintenance
-      .map((record) => {
-        const dueDate = record.predicted_due_date;
-        const dueTime = dueDate ? new Date(dueDate).getTime() : Number.NaN;
-        return { record, dueDate, dueTime };
-      })
-      .filter(({ dueDate, dueTime }) => Boolean(dueDate) && Number.isFinite(dueTime) && dueTime >= now.getTime())
-      .sort((a, b) => a.dueTime - b.dueTime)
+      .filter((record) => typeof record.next_service_due_km === "number")
+      .sort((a, b) => (a.next_service_due_km || 0) - (b.next_service_due_km || 0))
       .slice(0, 4);
   }, [maintenance]);
   const performanceBuckets = useMemo(() => {
@@ -257,14 +250,16 @@ export default function Dashboard({
             <p className="empty">No upcoming maintenance scheduled</p>
           ) : (
             <ul className="list">
-              {upcomingMaintenance.map(({ record, dueDate }) => {
+              {upcomingMaintenance.map((record) => {
                 const vehicle = vehicles.find((item) => item.id === record.vehicle_id);
                 return (
                   <li key={record.id}>
                     <div className="list__title">
                       {vehicle?.plate_no || "Vehicle"} • {record.service_type || "Service"}
                     </div>
-                    <div className="list__meta">Due {dueDate}</div>
+                    <div className="list__meta">
+                      Next due at {typeof record.next_service_due_km === "number" ? `${record.next_service_due_km.toLocaleString()} km` : "--"}
+                    </div>
                   </li>
                 );
               })}

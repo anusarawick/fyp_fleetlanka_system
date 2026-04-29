@@ -194,7 +194,7 @@ function DriverLogin({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <section className="driver-auth">
+    <section className="driver-auth driver-auth--driver-ref">
       <header className="driver-auth__header">
         <button className="driver-auth__back" onClick={onBack} aria-label="Back to role selection">←</button>
         <span className="driver-auth__brand">FleetLanka</span>
@@ -546,8 +546,6 @@ function ManagerRoutes() {
               setMaintOdometer={data.setMaintOdometer}
               maintNextDue={data.maintNextDue}
               setMaintNextDue={data.setMaintNextDue}
-              maintPredictedDate={data.maintPredictedDate}
-              setMaintPredictedDate={data.setMaintPredictedDate}
               maintNotes={data.maintNotes}
               setMaintNotes={data.setMaintNotes}
               editingMaintenanceId={data.editingMaintenanceId}
