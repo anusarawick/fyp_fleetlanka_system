@@ -113,6 +113,10 @@ type DataContextType = {
     activeTripId: string | null;
     tripTrackingStatus: "inactive" | "tracking" | "stale" | "error";
     tripTrackingLastUpdated: string | null;
+    pendingTripSyncCount: number;
+    pendingGpsPointCount: number;
+    syncingTripQueue: boolean;
+    pendingTripStatusById: Record<string, "pending_start" | "pending_completion" | "sync_failed">;
 
     // Fuel form state
     fuelVehicle: string;
@@ -279,6 +283,81 @@ type DataContextType = {
 
 const DataContext = createContext<DataContextType | null>(null);
 
+type OfflineGpsPoint = {
+    trip_id: string;
+    recorded_at: string;
+    lat: number;
+    lon: number;
+    speed_kmh: number | null;
+};
+
+type PendingTripEvent = {
+    trip_id: string;
+    type: "start" | "end";
+    event_time: string;
+    created_at: string;
+    point?: OfflineGpsPoint;
+    error?: string;
+};
+
+type PendingGpsPoint = {
+    temp_id: string;
+    payload: OfflineGpsPoint;
+};
+
+const DRIVER_PENDING_TRIPS_KEY = "fleetlanka.driver.pendingTrips.v1";
+const DRIVER_PENDING_GPS_POINTS_KEY = "fleetlanka.driver.pendingGpsPoints.v1";
+
+function readLocalStorage<T>(key: string, fallback: T): T {
+    if (typeof window === "undefined") return fallback;
+    try {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) as T : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+function writeLocalStorage<T>(key: string, value: T) {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function removeLocalStorage(key: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(key);
+}
+
+function buildGpsPointFromPosition(tripId: string, pos: GeolocationPosition): OfflineGpsPoint {
+    return {
+        trip_id: tripId,
+        recorded_at: new Date(pos.timestamp).toISOString(),
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+        speed_kmh: pos.coords.speed ? Number((pos.coords.speed * 3.6).toFixed(2)) : null,
+    };
+}
+
+function applyPendingTripEventsToTrips(rows: Trip[], events: PendingTripEvent[]): Trip[] {
+    if (!events.length) return rows;
+    return rows.map((trip) => {
+        const tripEvents = events.filter((event) => event.trip_id === trip.id);
+        if (!tripEvents.length) return trip;
+        const startEvent = tripEvents.find((event) => event.type === "start");
+        const endEvent = tripEvents.find((event) => event.type === "end");
+        return {
+            ...trip,
+            status: endEvent ? "completed" : startEvent ? "in_progress" : trip.status,
+            start_time: startEvent?.event_time || trip.start_time,
+            start_lat: startEvent?.point?.lat ?? trip.start_lat,
+            start_lon: startEvent?.point?.lon ?? trip.start_lon,
+            end_time: endEvent?.event_time || trip.end_time,
+            end_lat: endEvent?.point?.lat ?? trip.end_lat,
+            end_lon: endEvent?.point?.lon ?? trip.end_lon,
+        };
+    });
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
     const { token, orgId, role, fullName, setError, setLoading, loading } = useAuth();
 
@@ -336,8 +415,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [activeTripId, setActiveTripId] = useState<string | null>(null);
     const [tripTrackingStatus, setTripTrackingStatus] = useState<"inactive" | "tracking" | "stale" | "error">("inactive");
     const [tripTrackingLastUpdated, setTripTrackingLastUpdated] = useState<string | null>(null);
+    const [pendingTripEvents, setPendingTripEvents] = useState<PendingTripEvent[]>(() =>
+        readLocalStorage<PendingTripEvent[]>(DRIVER_PENDING_TRIPS_KEY, [])
+    );
+    const [pendingGpsPoints, setPendingGpsPoints] = useState<PendingGpsPoint[]>(() =>
+        readLocalStorage<PendingGpsPoint[]>(DRIVER_PENDING_GPS_POINTS_KEY, [])
+    );
+    const [syncingTripQueue, setSyncingTripQueue] = useState(false);
+    const [driverOnline, setDriverOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
     const watchIdRef = useRef<number | null>(null);
     const lastSavedScoreSignatureRef = useRef<string>("");
+    const pendingTripStatusRef = useRef<Record<string, "pending_start" | "pending_completion" | "sync_failed">>({});
+    const lastTripSyncFailureSignatureRef = useRef<string>("");
+    const syncingTripQueueRef = useRef(false);
 
     // Fuel form
     const [fuelVehicle, setFuelVehicle] = useState("");
@@ -381,6 +471,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [bookingDate, setBookingDate] = useState("");
     const [bookingNotes, setBookingNotes] = useState("");
     const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+
+    const pendingTripStatusById = useMemo(() => {
+        const statusMap: Record<string, "pending_start" | "pending_completion" | "sync_failed"> = {};
+        for (const event of pendingTripEvents) {
+            if (event.error) {
+                statusMap[event.trip_id] = "sync_failed";
+            } else if (event.type === "end") {
+                statusMap[event.trip_id] = "pending_completion";
+            } else if (!statusMap[event.trip_id]) {
+                statusMap[event.trip_id] = "pending_start";
+            }
+        }
+        return statusMap;
+    }, [pendingTripEvents]);
+
+    useEffect(() => {
+        pendingTripStatusRef.current = pendingTripStatusById;
+    }, [pendingTripStatusById]);
 
     // ML state
     const [maintFeatures, setMaintFeatures] = useState("");
@@ -598,6 +706,195 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return () => window.clearInterval(intervalId);
     }, [role, activeTripId, tripTrackingLastUpdated]);
 
+    useEffect(() => {
+        function handleOnline() {
+            lastTripSyncFailureSignatureRef.current = "";
+            setDriverOnline(true);
+        }
+        function handleOffline() {
+            lastTripSyncFailureSignatureRef.current = "";
+            setDriverOnline(false);
+        }
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (pendingTripEvents.length) {
+            writeLocalStorage(DRIVER_PENDING_TRIPS_KEY, pendingTripEvents);
+        } else {
+            removeLocalStorage(DRIVER_PENDING_TRIPS_KEY);
+        }
+    }, [pendingTripEvents]);
+
+    useEffect(() => {
+        if (pendingGpsPoints.length) {
+            writeLocalStorage(DRIVER_PENDING_GPS_POINTS_KEY, pendingGpsPoints);
+        } else {
+            removeLocalStorage(DRIVER_PENDING_GPS_POINTS_KEY);
+        }
+    }, [pendingGpsPoints]);
+
+    useEffect(() => {
+        if (
+            !token ||
+            role !== "driver" ||
+            !driverOnline ||
+            syncingTripQueueRef.current ||
+            (!pendingTripEvents.length && !pendingGpsPoints.length)
+        ) {
+            return;
+        }
+
+        let cancelled = false;
+        const eventsSnapshot = pendingTripEvents;
+        const gpsSnapshot = pendingGpsPoints;
+        const syncSignature = JSON.stringify({
+            events: eventsSnapshot.map((event) => [event.trip_id, event.type, event.event_time]),
+            points: gpsSnapshot.map((point) => [point.temp_id, point.payload.recorded_at]),
+        });
+        if (lastTripSyncFailureSignatureRef.current === syncSignature) return;
+
+        async function syncTripQueue() {
+            syncingTripQueueRef.current = true;
+            setSyncingTripQueue(true);
+            const serverTrips = await apiGet<Trip[]>("/trips", token);
+            const serverTripMap = new Map(serverTrips.map((trip) => [trip.id, trip]));
+            const tripIds = Array.from(new Set([
+                ...eventsSnapshot.map((event) => event.trip_id),
+                ...gpsSnapshot.map((point) => point.payload.trip_id),
+            ]));
+
+            try {
+                for (const tripId of tripIds) {
+                    if (cancelled) return;
+                    setPendingTripEvents((prev) => prev.map((event) =>
+                        event.trip_id === tripId ? { ...event, error: undefined } : event
+                    ));
+
+                    const startEvent = eventsSnapshot.find((event) => event.trip_id === tripId && event.type === "start");
+                    const endEvent = eventsSnapshot.find((event) => event.trip_id === tripId && event.type === "end");
+                    let serverTrip = serverTripMap.get(tripId) || null;
+                    let serverStatus = serverTrip ? deriveTripStatus(serverTrip) : "";
+                    const tripGpsPoints = gpsSnapshot
+                        .filter((point) => point.payload.trip_id === tripId)
+                        .sort((a, b) => a.payload.recorded_at.localeCompare(b.payload.recorded_at));
+
+                    try {
+                        if (!serverTrip) {
+                            throw new Error("Trip was not found on the server");
+                        }
+
+                        if (serverStatus === "cancelled") {
+                            throw new Error("Trip was cancelled before offline changes could sync");
+                        }
+
+                        if (startEvent) {
+                            if (serverStatus === "assigned") {
+                                serverTrip = await apiPatch<Trip>(
+                                    `/trips/${tripId}`,
+                                    {
+                                        status: "in_progress",
+                                        start_time: startEvent.event_time,
+                                        start_lat: startEvent.point?.lat,
+                                        start_lon: startEvent.point?.lon,
+                                    },
+                                    token
+                                );
+                                serverTripMap.set(tripId, serverTrip);
+                                serverStatus = deriveTripStatus(serverTrip);
+                                if (cancelled) return;
+                                setTrips((prev) => prev.map((trip) => trip.id === serverTrip?.id ? serverTrip as Trip : trip));
+                            }
+                            setPendingTripEvents((prev) => prev.filter((event) => !(event.trip_id === tripId && event.type === "start")));
+                        }
+
+                        if (endEvent && serverStatus === "assigned") {
+                            const syntheticStartTime = startEvent?.event_time || endEvent.event_time;
+                            serverTrip = await apiPatch<Trip>(
+                                `/trips/${tripId}`,
+                                {
+                                    status: "in_progress",
+                                    start_time: syntheticStartTime,
+                                    start_lat: startEvent?.point?.lat ?? endEvent.point?.lat,
+                                    start_lon: startEvent?.point?.lon ?? endEvent.point?.lon,
+                                },
+                                token
+                            );
+                            serverTripMap.set(tripId, serverTrip);
+                            serverStatus = deriveTripStatus(serverTrip);
+                            if (cancelled) return;
+                            setTrips((prev) => prev.map((trip) => trip.id === serverTrip?.id ? serverTrip as Trip : trip));
+                        }
+
+                        if (serverStatus === "completed") {
+                            setPendingGpsPoints((prev) => prev.filter((item) => item.payload.trip_id !== tripId));
+                            setPendingTripEvents((prev) => prev.filter((event) => event.trip_id !== tripId));
+                            continue;
+                        }
+
+                        if (serverStatus !== "in_progress") {
+                            throw new Error("Trip is not available for offline sync");
+                        }
+
+                        for (const point of tripGpsPoints) {
+                            if (cancelled) return;
+                            await apiPost(`/trips/${tripId}/points`, point.payload, token);
+                            setPendingGpsPoints((prev) => prev.filter((item) => item.temp_id !== point.temp_id));
+                        }
+
+                        if (endEvent) {
+                            serverTrip = await apiPatch<Trip>(
+                                    `/trips/${tripId}`,
+                                    {
+                                        status: "completed",
+                                        end_time: endEvent.event_time,
+                                        end_lat: endEvent.point?.lat,
+                                        end_lon: endEvent.point?.lon,
+                                    },
+                                    token
+                                );
+                            if (cancelled) return;
+                            serverTripMap.set(tripId, serverTrip);
+                            setTrips((prev) => prev.map((trip) => trip.id === serverTrip?.id ? serverTrip as Trip : trip));
+                            setPendingTripEvents((prev) => prev.filter((event) => !(event.trip_id === tripId && event.type === "end")));
+                            setActiveTripId((current) => current === tripId ? null : current);
+                            setTripTrackingStatus((current) => current === "tracking" ? "inactive" : current);
+                            setTripTrackingLastUpdated(null);
+                        }
+                    } catch (err: any) {
+                        const message = err.message || "Trip sync failed. It will retry when connected.";
+                        lastTripSyncFailureSignatureRef.current = syncSignature;
+                        setPendingTripEvents((prev) => prev.map((event) =>
+                            event.trip_id === tripId ? { ...event, error: message } : event
+                        ));
+                        setError(message);
+                        return;
+                    }
+                }
+
+                if (!cancelled) {
+                    const refreshedTrips = await apiGet<Trip[]>("/trips", token);
+                    setTrips(refreshedTrips);
+                    const activeTrip = refreshedTrips.find((trip) => deriveTripStatus(trip) === "in_progress") || null;
+                    setActiveTripId(activeTrip?.id || null);
+                }
+            } finally {
+                syncingTripQueueRef.current = false;
+                if (!cancelled) setSyncingTripQueue(false);
+            }
+        }
+
+        syncTripQueue();
+        return () => {
+            cancelled = true;
+        };
+    }, [token, role, driverOnline, pendingTripEvents, pendingGpsPoints, setError]);
+
     // Data loading
     useEffect(() => {
         if (!token || !role) return;
@@ -608,9 +905,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                         apiGet<Vehicle[]>("/vehicles", token),
                         apiGet<Trip[]>("/trips", token),
                     ]);
+                    const displayTrips = applyPendingTripEventsToTrips(t, pendingTripEvents);
                     setVehicles(v);
-                    setTrips(t);
-                    const activeTrip = t.find((trip) => deriveTripStatus(trip) === "in_progress") || null;
+                    setTrips(displayTrips);
+                    const activeTrip = displayTrips.find((trip) => deriveTripStatus(trip) === "in_progress") || null;
                     setActiveTripId(activeTrip?.id || null);
                     setTripTrackingStatus(activeTrip ? "stale" : "inactive");
                     setTripTrackingLastUpdated(null);
@@ -735,21 +1033,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         watchIdRef.current = navigator.geolocation.watchPosition(
             async (pos) => {
-                const pointTime = new Date(pos.timestamp).toISOString();
-                const point = {
-                    trip_id: activeTripId,
-                    recorded_at: pointTime,
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    speed_kmh: pos.coords.speed ? Number((pos.coords.speed * 3.6).toFixed(2)) : null,
-                };
+                const point = buildGpsPointFromPosition(activeTripId, pos);
+                const pointTime = point.recorded_at;
+                const shouldQueuePoint = !navigator.onLine || Boolean(pendingTripStatusRef.current[activeTripId]);
+                if (shouldQueuePoint) {
+                    setPendingGpsPoints((prev) => [
+                        ...prev,
+                        { temp_id: `offline-gps-${activeTripId}-${pointTime}`, payload: point },
+                    ]);
+                    setTripTrackingLastUpdated(pointTime);
+                    setTripTrackingStatus(navigator.onLine ? "stale" : "tracking");
+                    return;
+                }
                 try {
                     await apiPost(`/trips/${activeTripId}/points`, point, token);
                     setTripTrackingLastUpdated(pointTime);
                     setTripTrackingStatus("tracking");
                 } catch (e: any) {
+                    setPendingGpsPoints((prev) => [
+                        ...prev,
+                        { temp_id: `offline-gps-${activeTripId}-${pointTime}`, payload: point },
+                    ]);
+                    setTripTrackingLastUpdated(pointTime);
                     setTripTrackingStatus("error");
-                    setError(e.message || "Failed to save GPS point");
+                    setError(e.message || "GPS point saved locally and will retry when connected");
                 }
             },
             (err) => {
@@ -815,6 +1122,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setActiveTripId(null);
         setTripTrackingStatus("inactive");
         setTripTrackingLastUpdated(null);
+        setPendingTripEvents([]);
+        setPendingGpsPoints([]);
+        setSyncingTripQueue(false);
+        syncingTripQueueRef.current = false;
+        removeLocalStorage(DRIVER_PENDING_TRIPS_KEY);
+        removeLocalStorage(DRIVER_PENDING_GPS_POINTS_KEY);
         setDocOwnerType("vehicle");
         setDocVehicle("");
         setDocDriver("");
@@ -1072,6 +1385,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    async function getCurrentGpsPoint(tripId: string): Promise<OfflineGpsPoint | undefined> {
+        if (!geoSupported || typeof navigator === "undefined" || !navigator.geolocation) return undefined;
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve(buildGpsPointFromPosition(tripId, pos)),
+                () => resolve(undefined),
+                { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
+            );
+        });
+    }
+
     async function startTrip(tripId?: string) {
         if (!token) return;
         setError(null);
@@ -1081,7 +1405,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (!geoSupported)
                 throw new Error("Geolocation is not supported on this device");
             if (!tripId) throw new Error("No assigned trip is available to start");
+            if (pendingTripEvents.length) throw new Error("A pending trip sync must finish before starting another trip");
             const now = new Date();
+            if (!navigator.onLine) {
+                const start_time = now.toISOString();
+                const point = await getCurrentGpsPoint(tripId);
+                const event: PendingTripEvent = {
+                    trip_id: tripId,
+                    type: "start",
+                    event_time: start_time,
+                    created_at: start_time,
+                    point,
+                };
+                setPendingTripEvents((prev) => [...prev, event]);
+                setTrips((prev) => prev.map((trip) => trip.id === tripId ? {
+                    ...trip,
+                    status: "in_progress",
+                    start_time,
+                    start_lat: point?.lat ?? trip.start_lat,
+                    start_lon: point?.lon ?? trip.start_lon,
+                } : trip));
+                if (point) {
+                    setPendingGpsPoints((prev) => [
+                        ...prev,
+                        { temp_id: `offline-gps-${tripId}-${point.recorded_at}`, payload: point },
+                    ]);
+                    setTripTrackingLastUpdated(point.recorded_at);
+                } else {
+                    setTripTrackingLastUpdated(null);
+                }
+                setActiveTripId(tripId);
+                setTripTrackingStatus("tracking");
+                setError("Trip started offline. It will sync when the connection returns.");
+                return;
+            }
             const payload = { status: "in_progress", start_time: now.toISOString() };
             const trip = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
             setActiveTripId(trip.id);
@@ -1101,6 +1458,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             const now = new Date();
+            if (!navigator.onLine || pendingTripStatusById[activeTripId]) {
+                const end_time = now.toISOString();
+                const point = await getCurrentGpsPoint(activeTripId);
+                const event: PendingTripEvent = {
+                    trip_id: activeTripId,
+                    type: "end",
+                    event_time: end_time,
+                    created_at: end_time,
+                    point,
+                };
+                setPendingTripEvents((prev) => {
+                    const withoutExistingEnd = prev.filter((item) => !(item.trip_id === activeTripId && item.type === "end"));
+                    return [...withoutExistingEnd, event];
+                });
+                if (point) {
+                    setPendingGpsPoints((prev) => [
+                        ...prev,
+                        { temp_id: `offline-gps-${activeTripId}-${point.recorded_at}`, payload: point },
+                    ]);
+                }
+                setTrips((prev) => prev.map((trip) => trip.id === activeTripId ? {
+                    ...trip,
+                    status: "completed",
+                    end_time,
+                    end_lat: point?.lat ?? trip.end_lat,
+                    end_lon: point?.lon ?? trip.end_lon,
+                } : trip));
+                setActiveTripId(null);
+                setTripTrackingStatus("inactive");
+                setTripTrackingLastUpdated(null);
+                if (watchIdRef.current !== null) {
+                    navigator.geolocation.clearWatch(watchIdRef.current);
+                    watchIdRef.current = null;
+                }
+                setError("Trip ended offline. It will sync when the connection returns.");
+                return;
+            }
             const payload = { status: "completed", end_time: now.toISOString() };
             const updated = await apiPatch<Trip>(`/trips/${activeTripId}`, payload, token);
             setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -1766,6 +2160,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 activeTripId,
                 tripTrackingStatus,
                 tripTrackingLastUpdated,
+                pendingTripSyncCount: pendingTripEvents.length,
+                pendingGpsPointCount: pendingGpsPoints.length,
+                syncingTripQueue,
+                pendingTripStatusById,
                 fuelVehicle,
                 setFuelVehicle,
                 fuelDate,

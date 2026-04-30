@@ -328,6 +328,10 @@ function DriverRoutes() {
     activeTripId,
     tripTrackingStatus,
     tripTrackingLastUpdated,
+    pendingTripSyncCount,
+    pendingGpsPointCount,
+    syncingTripQueue,
+    pendingTripStatusById,
     startTrip,
     stopTrip,
     geoSupported,
@@ -342,6 +346,10 @@ function DriverRoutes() {
       activeTripId={activeTripId}
       tripTrackingStatus={tripTrackingStatus}
       tripTrackingLastUpdated={tripTrackingLastUpdated}
+      pendingTripSyncCount={pendingTripSyncCount}
+      pendingGpsPointCount={pendingGpsPointCount}
+      syncingTripQueue={syncingTripQueue}
+      pendingTripStatusById={pendingTripStatusById}
       driverScore={driverScore}
       driverScoreLabel={driverScoreLabel}
       driverScoreBreakdown={driverScoreBreakdown}
