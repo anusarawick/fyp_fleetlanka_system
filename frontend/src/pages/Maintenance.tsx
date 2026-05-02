@@ -1,5 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CircleDollarSign, ClipboardList, Eye, Pencil, Trash2, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  CircleDollarSign,
+  ClipboardList,
+  Eye,
+  FileText,
+  Pencil,
+  Trash2,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -258,8 +270,15 @@ export default function Maintenance(props: MaintenanceProps) {
       const status = booking.status || "pending";
       return status === "pending" || status === "confirmed";
     })
+    .sort((a, b) => a.requested_date.localeCompare(b.requested_date))
     .slice(0, 4);
   const pendingApprovalCount = workflowBookings.filter((booking) => isPendingCompletionReview(booking)).length;
+  const reviewQueue = workflowBookings
+    .filter((booking) => isPendingCompletionReview(booking))
+    .slice(0, 4);
+  const recentMaintenance = [...props.maintenance]
+    .sort((a, b) => b.service_date.localeCompare(a.service_date))
+    .slice(0, 5);
   const linkedCentersCount = props.centers.filter((center) => Boolean(center.profile_id)).length;
 
   useEffect(() => {
@@ -348,9 +367,34 @@ export default function Maintenance(props: MaintenanceProps) {
     return (booking.status || "pending") === "completed" && (booking.completion_review_status || "pending") !== "approved";
   }
 
+  function formatReadable(value?: string) {
+    if (!value) return "Not recorded";
+    return value
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function formatCurrency(value?: number) {
+    return typeof value === "number" ? `Rs.${value.toLocaleString()}` : "Not recorded";
+  }
+
+  function bookingStatusLabel(booking: ServiceBooking) {
+    if (isPendingCompletionReview(booking)) return "Pending approval";
+    return formatReadable(booking.status || "pending");
+  }
+
+  function bookingStatusTone(booking: ServiceBooking) {
+    if (isPendingCompletionReview(booking)) return "warning";
+    const status = booking.status || "pending";
+    if (status === "completed") return "success";
+    if (status === "cancelled") return "danger";
+    if (status === "confirmed") return "info";
+    return "warning";
+  }
+
   return (
     <section className="section">
-      <section className="admin-page">
+      <section className="admin-page maintenance-page">
       <section className="stats stats--four admin-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><MaintenanceIcon name="records" /></div>
@@ -410,100 +454,163 @@ export default function Maintenance(props: MaintenanceProps) {
       </nav>
 
       {activeTab === "overview" && (
-      <div className="grid admin-summary-grid admin-summary-grid--balanced admin-panel">
-        <section className="card admin-card--action">
-          <div className="card__header">
+      <div className="maintenance-workspace">
+        <section className="card maintenance-panel maintenance-panel--review">
+          <div className="maintenance-panel__header">
             <div>
-              <h3>Maintenance Actions</h3>
-              <p className="muted admin-card__subtitle">Log service records, register workshops, and schedule service work from one workspace.</p>
+              <span className="maintenance-panel__eyebrow">Booking review</span>
+              <h3>Review Queue</h3>
+              <p>Completed workshop jobs waiting for manager approval before vehicle updates are applied.</p>
             </div>
-          </div>
-          <div className="admin-action-buttons">
-            <button
-              className="btn"
-              type="button"
-              onClick={() => {
-                props.onCancelMaintenanceEdit();
-                setShowMaintenanceModal(true);
-              }}
-            >
-              Log Maintenance
-            </button>
-            <button
-              className="btn"
-              type="button"
-              onClick={() => {
-                props.onCancelCenterEdit();
-                setShowCenterModal(true);
-              }}
-            >
-              Add Center
-            </button>
-            <button
-              className="btn"
-              type="button"
-              onClick={() => {
-                props.onCancelBookingEdit();
-                setShowBookingModal(true);
-              }}
-            >
-              Book Service
+            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("workflow")}>
+              View Workflow
             </button>
           </div>
-        </section>
-
-        <section className="card admin-card--summary">
-          <div className="card__header">
-            <div>
-              <h3>Upcoming Bookings</h3>
-              <p className="muted admin-card__subtitle">Next service appointments that are still pending or confirmed.</p>
+          {reviewQueue.length === 0 ? (
+            <div className="maintenance-empty-state">
+              <ClipboardList aria-hidden="true" />
+              <div>
+                <strong>No bookings waiting for approval</strong>
+                <span>Completed service jobs will appear here for final review.</span>
+              </div>
             </div>
-          </div>
-          {upcomingBookings.length === 0 ? (
-            <p className="empty">No upcoming service bookings.</p>
           ) : (
-            <ul className="list">
-              {upcomingBookings.map((booking) => (
-                <li key={booking.id}>
-                  <div className="list__title">
-                    {vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"} • {booking.requested_date}
+            <div className="maintenance-review-list">
+              {reviewQueue.map((booking) => (
+                <button
+                  className="maintenance-review-item"
+                  type="button"
+                  key={booking.id}
+                  onClick={() => setSelectedBooking(booking)}
+                >
+                  <div>
+                    <strong>{vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"}</strong>
+                    <span>{centerLabelMap[booking.center_id || ""] || "Service center"} • {formatCurrency(booking.final_cost_lkr)}</span>
                   </div>
-                  <div className="list__meta">
-                    {centerLabelMap[booking.center_id || ""] || "Service center"}{" "}
-                    <span className={`pill pill--${booking.status === "confirmed" ? "info" : "warning"}`}>
-                      {booking.status || "Pending"}
-                    </span>
-                  </div>
-                </li>
+                  <span className="pill pill--warning">Pending approval</span>
+                </button>
               ))}
-            </ul>
+            </div>
           )}
         </section>
 
-        <section className="card admin-card--summary">
-          <div className="card__header">
+        <aside className="maintenance-side-stack">
+          <section className="card maintenance-panel">
+            <div className="maintenance-panel__header maintenance-panel__header--compact">
+              <div>
+                <span className="maintenance-panel__eyebrow">Actions</span>
+                <h3>Service Actions</h3>
+              </div>
+            </div>
+            <div className="maintenance-action-stack">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  props.onCancelMaintenanceEdit();
+                  setShowMaintenanceModal(true);
+                }}
+              >
+                Log Maintenance
+              </button>
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={() => {
+                  props.onCancelBookingEdit();
+                  setShowBookingModal(true);
+                }}
+              >
+                Book Service
+              </button>
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={() => {
+                  props.onCancelCenterEdit();
+                  setShowCenterModal(true);
+                }}
+              >
+                Add Workshop
+              </button>
+            </div>
+          </section>
+
+          <section className="card maintenance-panel">
+            <div className="maintenance-panel__header maintenance-panel__header--compact">
+              <div>
+                <span className="maintenance-panel__eyebrow">Workload</span>
+                <h3>Service Snapshot</h3>
+              </div>
+            </div>
+            <div className="maintenance-snapshot-grid">
+              <div><span>Active bookings</span><strong>{workflowBookings.length}</strong></div>
+              <div><span>Pending review</span><strong>{pendingApprovalCount}</strong></div>
+              <div><span>Workshops</span><strong>{props.centers.length}</strong></div>
+              <div><span>Portal linked</span><strong>{linkedCentersCount}</strong></div>
+            </div>
+          </section>
+        </aside>
+
+        <section className="card maintenance-panel">
+          <div className="maintenance-panel__header">
             <div>
-              <h3>Operational Snapshot</h3>
-              <p className="muted admin-card__subtitle">Current workload, service network, and review queue in one summary.</p>
+              <span className="maintenance-panel__eyebrow">Schedule</span>
+              <h3>Upcoming Service</h3>
+              <p>Confirmed and pending appointments ordered by service date.</p>
             </div>
           </div>
-          {props.maintenance.length === 0 && workflowBookings.length === 0 ? (
-            <p className="empty">No maintenance activity has been recorded yet.</p>
+          {upcomingBookings.length === 0 ? (
+            <div className="maintenance-empty-state">
+              <CalendarClock aria-hidden="true" />
+              <div>
+                <strong>No upcoming service bookings</strong>
+                <span>Book service work when a vehicle needs workshop attention.</span>
+              </div>
+            </div>
           ) : (
-            <ul className="list">
-              <li>
-                <div className="list__title">Workflow Load</div>
-                <div className="list__meta">{workflowBookings.length} service bookings currently active or under review</div>
-              </li>
-              <li>
-                <div className="list__title">Approval Queue</div>
-                <div className="list__meta">{pendingApprovalCount} completed bookings waiting for manager approval</div>
-              </li>
-              <li>
-                <div className="list__title">Center Network</div>
-                <div className="list__meta">{props.centers.length} centers registered, {linkedCentersCount} with linked portal access</div>
-              </li>
-            </ul>
+            <div className="maintenance-card-list">
+              {upcomingBookings.map((booking) => (
+                <button className="maintenance-card-row" type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
+                  <div>
+                    <strong>{vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"}</strong>
+                    <span>{booking.requested_date} • {centerLabelMap[booking.center_id || ""] || "Service center"}</span>
+                  </div>
+                  <span className={`pill pill--${bookingStatusTone(booking)}`}>{bookingStatusLabel(booking)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card maintenance-panel">
+          <div className="maintenance-panel__header">
+            <div>
+              <span className="maintenance-panel__eyebrow">Service history</span>
+              <h3>Recent Maintenance</h3>
+              <p>Latest service records by vehicle, source, and cost.</p>
+            </div>
+          </div>
+          {recentMaintenance.length === 0 ? (
+            <div className="maintenance-empty-state">
+              <FileText aria-hidden="true" />
+              <div>
+                <strong>No maintenance history yet</strong>
+                <span>Logged records will appear here after service work is completed.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="maintenance-card-list">
+              {recentMaintenance.map((record) => (
+                <button className="maintenance-card-row" type="button" key={record.id} onClick={() => setSelectedRecord(record)}>
+                  <div>
+                    <strong>{vehicleLabelMap[record.vehicle_id || ""] || "Vehicle"} • {record.service_type || "Service"}</strong>
+                    <span>{record.service_date} • {record.service_booking_id ? "Service booking" : "Manual record"}</span>
+                  </div>
+                  <span>{formatCurrency(record.cost_lkr)}</span>
+                </button>
+              ))}
+            </div>
           )}
         </section>
       </div>
@@ -705,22 +812,8 @@ export default function Maintenance(props: MaintenanceProps) {
                       {centerLabelMap[booking.center_id || ""] || "--"}
                     </span>
                     <span className="bookings-table__cell" data-label="Status">
-                      <span className={`pill pill--${
-                        (booking.status || "pending") === "completed" &&
-                        (booking.completion_review_status || "pending") !== "approved"
-                          ? "warning"
-                          : booking.status === "completed"
-                            ? "success"
-                            : booking.status === "cancelled"
-                              ? "danger"
-                              : booking.status === "confirmed"
-                                ? "info"
-                                : "warning"
-                      }`}>
-                        {(booking.status || "pending") === "completed" &&
-                        (booking.completion_review_status || "pending") !== "approved"
-                          ? "Completed. Pending Approval"
-                          : booking.status || "pending"}
+                      <span className={`pill pill--${bookingStatusTone(booking)}`}>
+                        {bookingStatusLabel(booking)}
                       </span>
                     </span>
                     <span className="table__actions bookings-table__actions" data-label="Actions">
@@ -868,7 +961,10 @@ export default function Maintenance(props: MaintenanceProps) {
                     <span className="maintenance-table__cell" data-label="Vehicle">
                       {vehicleLabelMap[record.vehicle_id || ""] || "--"}
                     </span>
-                    <span className="maintenance-table__cell" data-label="Service">{record.service_type || "Service"}</span>
+                    <span className="maintenance-table__cell maintenance-table__cell--service" data-label="Service">
+                      <strong>{record.service_type || "Service"}</strong>
+                      <small>{[formatReadable(record.event_type), formatReadable(record.severity)].filter((value) => value !== "Not recorded").join(" • ") || "General service"}</small>
+                    </span>
                     <span className="maintenance-table__cell" data-label="Source">
                       <span className={`pill ${record.service_booking_id ? "pill--info" : "pill--warning"}`}>
                         {record.service_booking_id ? "Service Booking" : "Manual"}
@@ -927,8 +1023,8 @@ export default function Maintenance(props: MaintenanceProps) {
                 <h3>{props.editingMaintenanceId ? "Edit Maintenance" : "Log Maintenance"}</h3>
                 <p className="modal__subtle">
                   {props.editingMaintenanceId
-                    ? "Update the selected service record without leaving the table view."
-                    : "Create a service record without leaving the table view."}
+                    ? "Update the selected service record."
+                    : "Record completed workshop work and service readings."}
                 </p>
               </div>
               <button className="modal__close" type="button" onClick={closeMaintenanceModal} aria-label="Close maintenance form">
@@ -936,6 +1032,13 @@ export default function Maintenance(props: MaintenanceProps) {
               </button>
             </div>
             <form id="maintenance-form" className="form form--two-col form--scroll" onSubmit={props.onAddMaintenance}>
+              <div className="form-section-title">
+                <Wrench aria-hidden="true" />
+                <div>
+                  <h4>Service Details</h4>
+                  <p>Select the vehicle, service date, and type of maintenance completed.</p>
+                </div>
+              </div>
               <label>
                 Vehicle
                 <select
@@ -977,6 +1080,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   <option value="repair">Repair</option>
                 </select>
               </label>
+              <div className="form-section-title">
+                <ClipboardList aria-hidden="true" />
+                <div>
+                  <h4>Vehicle Condition</h4>
+                  <p>Classify the service event so the vehicle history remains easy to review.</p>
+                </div>
+              </div>
               <label>
                 Event Category
                 <select value={props.maintEventCategory} onChange={(e) => props.setMaintEventCategory(e.target.value)}>
@@ -998,6 +1108,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   <option value="critical">Critical</option>
                 </select>
               </label>
+              <div className="form-section-title">
+                <CircleDollarSign aria-hidden="true" />
+                <div>
+                  <h4>Cost & Odometer</h4>
+                  <p>Record the workshop cost and odometer readings for future service planning.</p>
+                </div>
+              </div>
               <label>
                 Cost (LKR)
                 <input
@@ -1025,6 +1142,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setMaintNextDue(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <FileText aria-hidden="true" />
+                <div>
+                  <h4>Notes</h4>
+                  <p>Add any workshop findings, replaced parts, or follow-up reminders.</p>
+                </div>
+              </div>
               <label className="form__field--full">
                 Notes
                 <textarea
@@ -1063,6 +1187,13 @@ export default function Maintenance(props: MaintenanceProps) {
               </button>
             </div>
             <form id="center-form" className="form form--scroll" onSubmit={props.onAddCenter}>
+              <div className="form-section-title">
+                <Building2 aria-hidden="true" />
+                <div>
+                  <h4>Workshop Details</h4>
+                  <p>Keep the service-center contact record available for bookings and reviews.</p>
+                </div>
+              </div>
               <label>
                 Center Name
                 <input
@@ -1088,6 +1219,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setCenterAddress(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <ClipboardList aria-hidden="true" />
+                <div>
+                  <h4>Portal Access</h4>
+                  <p>Optional login details for service partners that update booking completion status.</p>
+                </div>
+              </div>
               <label>
                 Portal Email
                 <input
@@ -1127,7 +1265,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 <h3>{props.editingBookingId ? "Edit Service Booking" : "Book Service"}</h3>
                 <p className="modal__subtle">
                   {props.editingBookingId
-                    ? "Update the selected booking without leaving the table view."
+                    ? "Update the selected service appointment."
                     : "Schedule a vehicle with a registered center."}
                 </p>
               </div>
@@ -1136,6 +1274,13 @@ export default function Maintenance(props: MaintenanceProps) {
               </button>
             </div>
             <form id="service-booking-form" className="form form--scroll" onSubmit={props.onAddBooking}>
+              <div className="form-section-title">
+                <Wrench aria-hidden="true" />
+                <div>
+                  <h4>Vehicle</h4>
+                  <p>Select the vehicle that needs workshop attention.</p>
+                </div>
+              </div>
               <label>
                 Vehicle
                 <select
@@ -1151,6 +1296,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   ))}
                 </select>
               </label>
+              <div className="form-section-title">
+                <Building2 aria-hidden="true" />
+                <div>
+                  <h4>Workshop</h4>
+                  <p>Choose the service center responsible for the booking.</p>
+                </div>
+              </div>
               <label>
                 Service Center
                 <select
@@ -1166,6 +1318,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   ))}
                 </select>
               </label>
+              <div className="form-section-title">
+                <CalendarClock aria-hidden="true" />
+                <div>
+                  <h4>Schedule</h4>
+                  <p>Set the preferred service date.</p>
+                </div>
+              </div>
               <label>
                 Preferred Date
                 <input
@@ -1175,6 +1334,13 @@ export default function Maintenance(props: MaintenanceProps) {
                   required
                 />
               </label>
+              <div className="form-section-title">
+                <FileText aria-hidden="true" />
+                <div>
+                  <h4>Request Notes</h4>
+                  <p>Share the requested work or symptoms with the workshop.</p>
+                </div>
+              </div>
               <label>
                 Notes
                 <input
@@ -1202,7 +1368,7 @@ export default function Maintenance(props: MaintenanceProps) {
             <div className="modal__header">
               <div>
                 <h3>Maintenance Record</h3>
-                <p className="modal__subtle">Read-only view of the selected maintenance entry.</p>
+                <p className="modal__subtle">Service record, cost, source, and vehicle readings.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedRecord(null)} aria-label="Close maintenance details">
                 ✕
@@ -1213,6 +1379,9 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedRecord.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Service</span><strong>{selectedRecord.service_type || "--"}</strong></div>
               <div className="detail-item"><span>Source</span><strong>{selectedRecord.service_booking_id ? "Service Booking" : "Manual"}</strong></div>
+              <div className="detail-item"><span>Event Type</span><strong>{formatReadable(selectedRecord.event_type)}</strong></div>
+              <div className="detail-item"><span>Category</span><strong>{formatReadable(selectedRecord.event_category)}</strong></div>
+              <div className="detail-item"><span>Severity</span><strong>{formatReadable(selectedRecord.severity)}</strong></div>
               <div className="detail-item"><span>Cost</span><strong>{typeof selectedRecord.cost_lkr === "number" ? `Rs.${selectedRecord.cost_lkr.toLocaleString()}` : "--"}</strong></div>
               <div className="detail-item"><span>Service Center</span><strong>{selectedRecord.service_center_id ? centerLabelMap[selectedRecord.service_center_id] || "--" : "--"}</strong></div>
               <div className="detail-item"><span>Odometer</span><strong>{selectedRecord.odometer_km ?? "--"}</strong></div>
@@ -1230,7 +1399,7 @@ export default function Maintenance(props: MaintenanceProps) {
             <div className="modal__header">
               <div>
                 <h3>Service Center</h3>
-                <p className="modal__subtle">Read-only view of the selected service center.</p>
+                <p className="modal__subtle">Workshop contact details and portal access status.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedCenter(null)} aria-label="Close center details">
                 ✕
@@ -1253,7 +1422,7 @@ export default function Maintenance(props: MaintenanceProps) {
             <div className="modal__header">
               <div>
                 <h3>Service Booking</h3>
-                <p className="modal__subtle">Read-only view of the selected booking.</p>
+                <p className="modal__subtle">Booking request, workshop completion details, and review status.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedBooking(null)} aria-label="Close booking details">
                 ✕
@@ -1311,6 +1480,15 @@ export default function Maintenance(props: MaintenanceProps) {
               Approving this completed booking will write the linked maintenance record and apply the proposed vehicle updates for{" "}
               <strong>{vehicleLabelMap[approveBookingTarget.vehicle_id || ""] || "Vehicle"}</strong>.
             </p>
+            <div className="details-grid maintenance-review-summary">
+              <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[approveBookingTarget.vehicle_id || ""] || "Vehicle"}</strong></div>
+              <div className="detail-item"><span>Workshop</span><strong>{centerLabelMap[approveBookingTarget.center_id || ""] || "Service center"}</strong></div>
+              <div className="detail-item"><span>Final Cost</span><strong>{formatCurrency(approveBookingTarget.final_cost_lkr)}</strong></div>
+              <div className="detail-item"><span>Next Due</span><strong>{typeof approveBookingTarget.next_service_due_km === "number" ? `${approveBookingTarget.next_service_due_km.toLocaleString()} km` : "Not recorded"}</strong></div>
+              <div className="detail-item"><span>Tyres</span><strong>{approveBookingTarget.proposed_tire_condition || "Not recorded"}</strong></div>
+              <div className="detail-item"><span>Brakes</span><strong>{approveBookingTarget.proposed_brake_condition || "Not recorded"}</strong></div>
+              <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{approveBookingTarget.service_notes || "Not recorded"}</strong></div>
+            </div>
             <div className="modal__actions">
               <button className="btn btn--secondary" type="button" onClick={() => setApproveBookingTarget(null)}>
                 Cancel
@@ -1343,6 +1521,13 @@ export default function Maintenance(props: MaintenanceProps) {
                 onChange={(e) => setRejectBookingNote(e.target.value)}
               />
             </label>
+            <div className="details-grid maintenance-review-summary">
+              <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[rejectBookingTarget.vehicle_id || ""] || "Vehicle"}</strong></div>
+              <div className="detail-item"><span>Workshop</span><strong>{centerLabelMap[rejectBookingTarget.center_id || ""] || "Service center"}</strong></div>
+              <div className="detail-item"><span>Final Cost</span><strong>{formatCurrency(rejectBookingTarget.final_cost_lkr)}</strong></div>
+              <div className="detail-item"><span>Next Due</span><strong>{typeof rejectBookingTarget.next_service_due_km === "number" ? `${rejectBookingTarget.next_service_due_km.toLocaleString()} km` : "Not recorded"}</strong></div>
+              <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{rejectBookingTarget.service_notes || "Not recorded"}</strong></div>
+            </div>
             <div className="modal__actions">
               <button className="btn btn--secondary" type="button" onClick={() => {
                 setRejectBookingTarget(null);

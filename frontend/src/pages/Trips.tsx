@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, Clock, Eye, Gauge, Pencil, Route, Trash2, type LucideIcon } from "lucide-react";
+import { Activity, CalendarClock, CheckCircle2, ClipboardList, Clock, Eye, Gauge, MapPin, Pencil, Route, Trash2, type LucideIcon } from "lucide-react";
 import MapView from "../components/MapView";
 import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
@@ -231,6 +231,27 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
       ? completedTrips.reduce((sum, trip) => sum + (trip.avg_speed_kmh || 0), 0) / completedTrips.length
       : 0;
   const totalIdleMinutes = completedTrips.reduce((sum, trip) => sum + (trip.idle_min || 0), 0);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayTrips = trips.filter((trip) => {
+    const tripDate = trip.scheduled_start || trip.start_time || trip.end_time;
+    return tripDate ? String(tripDate).slice(0, 10) === todayKey : false;
+  });
+  const todayAssignedTrips = todayTrips.filter((trip) => deriveTripStatus(trip) === "assigned");
+  const todayActiveTrips = todayTrips.filter((trip) => deriveTripStatus(trip) === "in_progress");
+  const todayCompletedTrips = todayTrips.filter((trip) => deriveTripStatus(trip) === "completed");
+  const assignmentQueue = [...assignedTrips]
+    .sort(
+      (a, b) =>
+        new Date(a.scheduled_start || 0).getTime() -
+        new Date(b.scheduled_start || 0).getTime()
+    )
+    .slice(0, 5);
+  const recentCompletions = [...completedTrips]
+    .sort((a, b) => new Date(b.end_time || 0).getTime() - new Date(a.end_time || 0).getTime())
+    .slice(0, 5);
+  const placesMissingCoordinates = savedPlaces.filter(
+    (place) => Number.isNaN(Number(place.lat)) || Number.isNaN(Number(place.lon))
+  );
 
   const filteredTrips = useMemo(() => {
     return trips
@@ -597,7 +618,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
 
   return (
     <section className="section">
-      <section className="admin-page">
+      <section className="admin-page trips-page">
       <div className="stats stats--four trips-stats admin-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><TripsIcon name="total" /></div>
@@ -657,166 +678,149 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
       </nav>
 
       {activeTab === "overview" && (
-      <>
-      <div className="grid admin-summary-grid admin-summary-grid--balanced">
-        <section className="card admin-card--action">
-          <div className="card__header">
+      <div className="trips-workspace">
+        <section className="card trips-panel trips-panel--monitoring">
+          <div className="trips-panel__header">
             <div>
-              <h3>Trip Actions</h3>
-              <p className="muted admin-card__subtitle">Create assignments and manage the saved places library.</p>
-            </div>
-          </div>
-          <div className="admin-action-buttons">
-            <button className="btn" type="button" onClick={openCreateModal}>
-              Assign Trip
-            </button>
-            <button className="btn" type="button" onClick={() => openPlaceModal("origin")}>
-              Add Place
-            </button>
-            <button className="btn" type="button" onClick={() => setActiveTab("places")}>
-              Manage Places
-            </button>
-          </div>
-        </section>
-
-        <section className="card admin-card--summary">
-          <div className="card__header">
-            <div>
-              <h3>Trip Overview</h3>
-              <p className="muted admin-card__subtitle">Operational status across assigned and completed work.</p>
-            </div>
-          </div>
-          <ul className="list">
-            <li>
-                <div className="list__title">Assigned Trips</div>
-                <div className="list__meta">{assignedTrips.length} jobs waiting for driver start</div>
-              </li>
-              <li>
-                <div className="list__title">Completed Trips</div>
-                <div className="list__meta">{completedTrips.length} finished journeys recorded</div>
-              </li>
-            <li>
-              <div className="list__title">Average Speed</div>
-              <div className="list__meta">{avgSpeed > 0 ? `${avgSpeed.toFixed(1)} km/h` : "--"}</div>
-            </li>
-            <li>
-              <div className="list__title">Idle Time Logged</div>
-              <div className="list__meta">{totalIdleMinutes > 0 ? formatDuration(totalIdleMinutes) : "--"}</div>
-            </li>
-          </ul>
-        </section>
-
-        <section className="card admin-card--summary">
-          <div className="card__header">
-            <div>
-              <h3>Live Tracking Snapshot</h3>
-              <p className="muted admin-card__subtitle">Latest location-signal health across currently tracked trips.</p>
-            </div>
-          </div>
-          {liveTrips.length === 0 ? (
-            <p className="empty">No trips are currently reporting live driver tracking.</p>
-          ) : (
-            <ul className="list">
-              <li>
-                <div className="list__title">Live Signals</div>
-                <div className="list__meta">{liveTrackedTrips.length} trips currently updating location</div>
-              </li>
-              <li>
-                <div className="list__title">Stale Signals</div>
-                <div className="list__meta">{staleTrackedTrips.length} active trips need a fresh GPS update</div>
-              </li>
-              {liveTrips.slice(0, 2).map((trip) => (
-                <li key={trip.trip_id}>
-                  <div className="list__title">{trip.vehicle_plate_no || vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</div>
-                  <div className="list__meta">
-                    {trip.driver_name || "Driver"} • Updated {formatCompactDateTime(trip.recorded_at)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <section className="card admin-table-section">
-        <div className="card__header">
-          <div>
-            <h3>Active Trip Monitoring</h3>
-            <p className="muted admin-card__subtitle">Live vehicle-tracking state, update freshness, and current driver telemetry from the active trip feed.</p>
-          </div>
-        </div>
-        <div className="dashboard-map__filters">
-          <button
-            className={`filter-chip ${liveTripFilter === "all" ? "filter-chip--active" : ""}`}
-            type="button"
-            onClick={() => setLiveTripFilter("all")}
-          >
-            All ({liveTrips.length})
-          </button>
-          <button
-            className={`filter-chip ${liveTripFilter === "live" ? "filter-chip--active" : ""}`}
-            type="button"
-            onClick={() => setLiveTripFilter("live")}
-          >
-            Live ({liveTrackedTrips.length})
-          </button>
-          <button
-            className={`filter-chip ${liveTripFilter === "stale" ? "filter-chip--active" : ""}`}
-            type="button"
-            onClick={() => setLiveTripFilter("stale")}
-          >
-            Stale ({staleTrackedTrips.length})
-          </button>
-        </div>
-        <section className="card analytics-card--wide">
-          <div className="card__header">
-            <div>
-              <h3>Live Trip Map</h3>
-              <p className="muted admin-card__subtitle">Track currently active vehicles and the freshness of location updates for the selected live-trip filter.</p>
+              <span className="trips-panel__eyebrow">Active monitoring</span>
+              <h3>Live Dispatch Board</h3>
+              <p>Track vehicles that are currently on the road and review any stale location updates.</p>
             </div>
             <span className="pill">{filteredLiveTrips.length} shown</span>
           </div>
-          <MapView trips={filteredLiveTrips} />
-        </section>
-        <div className="dashboard-map__list">
-          <div className="dashboard-map__list-header">
-            <h3>Active Trips</h3>
-            <span className="muted">Last feed refresh: now</span>
+          <div className="dashboard-map__filters trips-filter-row">
+            <button className={`filter-chip ${liveTripFilter === "all" ? "filter-chip--active" : ""}`} type="button" onClick={() => setLiveTripFilter("all")}>
+              All ({liveTrips.length})
+            </button>
+            <button className={`filter-chip ${liveTripFilter === "live" ? "filter-chip--active" : ""}`} type="button" onClick={() => setLiveTripFilter("live")}>
+              Live ({liveTrackedTrips.length})
+            </button>
+            <button className={`filter-chip ${liveTripFilter === "stale" ? "filter-chip--active" : ""}`} type="button" onClick={() => setLiveTripFilter("stale")}>
+              Stale ({staleTrackedTrips.length})
+            </button>
+          </div>
+          <div className="trips-map-panel">
+            <MapView trips={filteredLiveTrips} />
           </div>
           {filteredLiveTrips.length === 0 ? (
-            <p className="empty">No active tracked trips for the current filter.</p>
+            <div className="trips-empty-state">
+              <Activity aria-hidden="true" />
+              <div>
+                <strong>No live trips for this filter</strong>
+                <span>Active driver tracking will appear here when a trip starts.</span>
+              </div>
+            </div>
           ) : (
-            <ul className="live-trip-list">
+            <div className="trips-live-list">
               {filteredLiveTrips.map((trip) => (
-                <li key={trip.trip_id} className="live-trip-item">
-                  <div className="live-trip-item__main">
-                    <div className="live-trip-item__title">
-                      {trip.vehicle_plate_no || "Vehicle"}
-                      <span className={`pill ${trip.stale ? "pill--warning" : "pill--success"}`}>
-                        {trip.stale ? "Stale" : "Live"}
-                      </span>
-                    </div>
-                    <div className="live-trip-item__meta">
-                      {trip.vehicle_label || "Assigned vehicle"}
-                      {trip.driver_name ? ` • ${trip.driver_name}` : ""}
-                    </div>
+                <button key={trip.trip_id} className="trips-live-item" type="button" onClick={() => setSelectedTrip(trips.find((row) => row.id === trip.trip_id) || null)}>
+                  <div>
+                    <strong>{trip.vehicle_plate_no || vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</strong>
+                    <span>{trip.driver_name || "Assigned driver"} • Updated {formatCompactDateTime(trip.recorded_at)}</span>
                   </div>
-                  <div className="live-trip-item__stats">
-                    <span>Started {formatCompactDateTime(trip.start_time)}</span>
-                    <span>Updated {formatCompactDateTime(trip.recorded_at)}</span>
-                    <span>
-                      {trip.speed_kmh !== undefined && trip.speed_kmh !== null
-                        ? `${trip.speed_kmh.toFixed(1)} km/h`
-                        : "Speed unavailable"}
-                    </span>
-                  </div>
-                </li>
+                  <span className={`pill ${trip.stale ? "pill--warning" : "pill--success"}`}>{trip.stale ? "Stale" : "Live"}</span>
+                </button>
               ))}
-            </ul>
+            </div>
           )}
+        </section>
+
+        <div className="trips-side-stack">
+          <section className="card trips-panel">
+            <div className="trips-panel__header trips-panel__header--compact">
+              <div>
+                <span className="trips-panel__eyebrow">Dispatch today</span>
+                <h3>Work Status</h3>
+              </div>
+            </div>
+            <div className="trips-dispatch-grid">
+              <div><span>Assigned</span><strong>{todayAssignedTrips.length}</strong></div>
+              <div><span>Active</span><strong>{todayActiveTrips.length}</strong></div>
+              <div><span>Completed</span><strong>{todayCompletedTrips.length}</strong></div>
+              <div><span>Stale GPS</span><strong>{staleTrackedTrips.length}</strong></div>
+            </div>
+          </section>
+
+          <section className="card trips-panel">
+            <div className="trips-panel__header trips-panel__header--compact">
+              <div>
+                <span className="trips-panel__eyebrow">Trip setup</span>
+                <h3>Dispatch Actions</h3>
+              </div>
+            </div>
+            <div className="trips-action-stack">
+              <button className="btn" type="button" onClick={openCreateModal}>Assign Trip</button>
+              <button className="btn btn--secondary" type="button" onClick={() => openPlaceModal("origin")}>Add Place</button>
+              <button className="btn btn--secondary" type="button" onClick={() => setActiveTab("places")}>Manage Places</button>
+            </div>
+          </section>
+
+          <section className="card trips-panel">
+            <div className="trips-panel__header trips-panel__header--compact">
+              <div>
+                <span className="trips-panel__eyebrow">Location library</span>
+                <h3>Saved Places</h3>
+              </div>
+            </div>
+            <div className="trips-dispatch-grid trips-dispatch-grid--places">
+              <div><span>Total Places</span><strong>{savedPlaces.length}</strong></div>
+              <div><span>Missing Coordinates</span><strong>{placesMissingCoordinates.length}</strong></div>
+            </div>
+          </section>
         </div>
-      </section>
-      </>
+
+        <section className="card trips-panel">
+          <div className="trips-panel__header">
+            <div>
+              <span className="trips-panel__eyebrow">Assignment queue</span>
+              <h3>Next Trips</h3>
+              <p>Upcoming assignments waiting for drivers to begin.</p>
+            </div>
+            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("workflow")}>View Queue</button>
+          </div>
+          {assignmentQueue.length === 0 ? (
+            <div className="trips-empty-state"><CalendarClock aria-hidden="true" /><div><strong>No queued assignments</strong><span>New trip assignments will appear here.</span></div></div>
+          ) : (
+            <div className="trips-card-list">
+              {assignmentQueue.map((trip) => (
+                <button key={trip.id} className="trips-card-row" type="button" onClick={() => setSelectedTrip(trip)}>
+                  <div>
+                    <strong>{trip.trip_title || "Trip Assignment"}</strong>
+                    <span>{vehicleLabelMap[trip.vehicle_id] || "Vehicle"} • {driverLabelMap[trip.driver_id || ""] || "Driver"}</span>
+                  </div>
+                  <span>{trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "Not scheduled"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card trips-panel">
+          <div className="trips-panel__header">
+            <div>
+              <span className="trips-panel__eyebrow">Recent completions</span>
+              <h3>Completed Work</h3>
+              <p>Latest trips closed by drivers with distance and duration.</p>
+            </div>
+            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("history")}>View History</button>
+          </div>
+          {recentCompletions.length === 0 ? (
+            <div className="trips-empty-state"><CheckCircle2 aria-hidden="true" /><div><strong>No completed trips yet</strong><span>Completed journeys will be listed here.</span></div></div>
+          ) : (
+            <div className="trips-card-list">
+              {recentCompletions.map((trip) => (
+                <button key={trip.id} className="trips-card-row" type="button" onClick={() => setSelectedTrip(trip)}>
+                  <div>
+                    <strong>{trip.trip_title || "Completed Trip"}</strong>
+                    <span>{vehicleLabelMap[trip.vehicle_id] || "Vehicle"} • {driverLabelMap[trip.driver_id || ""] || "Driver"}</span>
+                  </div>
+                  <span>{trip.distance_km ? `${trip.distance_km.toFixed(1)} km` : "--"} • {formatDuration(trip.duration_min)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
       )}
 
       {activeTab === "workflow" && (
@@ -1310,6 +1314,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               </button>
             </div>
             <form id="trip-assignment-form" className="form form--two-col form--scroll" onSubmit={handleSubmitAssignment}>
+              <div className="form-section-title form__field--full">
+                <Route aria-hidden="true" />
+                <div>
+                  <h4>Assignment</h4>
+                  <p>Select the vehicle, driver, title, and dispatch time.</p>
+                </div>
+              </div>
               <label>
                 Vehicle
                 <select value={tripVehicle} onChange={(e) => setTripVehicle(e.target.value)} required>
@@ -1364,6 +1375,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                   <input value={tripTitle} onChange={(e) => setTripTitle(e.target.value)} placeholder="Enter trip title" />
                 </label>
               ) : null}
+              <div className="form-section-title form__field--full">
+                <MapPin aria-hidden="true" />
+                <div>
+                  <h4>Route</h4>
+                  <p>Use saved places so drivers receive clear pickup and destination details.</p>
+                </div>
+              </div>
               <label>
                 Origin Place
                 <select value={originPlaceId} onChange={(e) => assignOriginFromPlace(e.target.value)}>
@@ -1402,6 +1420,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                   />
                 </div>
               ) : null}
+              <div className="form-section-title form__field--full">
+                <Activity aria-hidden="true" />
+                <div>
+                  <h4>Contact</h4>
+                  <p>Add the person drivers should call during pickup or delivery.</p>
+                </div>
+              </div>
               <label>
                 Contact Person
                 <input value={tripContactName} onChange={(e) => setTripContactName(e.target.value)} placeholder="Dispatch contact" />
@@ -1410,6 +1435,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                 Contact Phone
                 <input value={tripContactPhone} onChange={(e) => setTripContactPhone(e.target.value)} placeholder="+94..." />
               </label>
+              <div className="form-section-title form__field--full">
+                <CalendarClock aria-hidden="true" />
+                <div>
+                  <h4>Priority & Notes</h4>
+                  <p>Set urgency and include instructions that should travel with the assignment.</p>
+                </div>
+              </div>
               <label>
                 Priority
                 <select value={tripPriority} onChange={(e) => setTripPriority(e.target.value)}>
@@ -1449,6 +1481,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               </button>
             </div>
             <form id="saved-place-form" className="form form--two-col form--scroll" onSubmit={handleSavePlace}>
+              <div className="form-section-title form__field--full">
+                <MapPin aria-hidden="true" />
+                <div>
+                  <h4>Location</h4>
+                  <p>Name the place and pin its coordinates for route previews.</p>
+                </div>
+              </div>
               <label>
                 Place Name
                 <input value={placeName} onChange={(e) => setPlaceName(e.target.value)} placeholder="Airport Terminal 1" required />
@@ -1465,6 +1504,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                 Longitude
                 <input value={placeLon} onChange={(e) => setPlaceLon(e.target.value)} placeholder="79.8841" required />
               </label>
+              <div className="form-section-title form__field--full">
+                <Activity aria-hidden="true" />
+                <div>
+                  <h4>Contact</h4>
+                  <p>Store a contact when the place has a regular receiver or dispatcher.</p>
+                </div>
+              </div>
               <label>
                 Contact Person
                 <input value={placeContactName} onChange={(e) => setPlaceContactName(e.target.value)} placeholder="Optional contact" />
@@ -1473,6 +1519,13 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
                 Contact Phone
                 <input value={placeContactPhone} onChange={(e) => setPlaceContactPhone(e.target.value)} placeholder="+94..." />
               </label>
+              <div className="form-section-title form__field--full">
+                <ClipboardList aria-hidden="true" />
+                <div>
+                  <h4>Notes</h4>
+                  <p>Add access instructions or delivery notes used by dispatch.</p>
+                </div>
+              </div>
               <label className="form__field--full">
                 Notes
                 <textarea rows={3} value={placeNotes} onChange={(e) => setPlaceNotes(e.target.value)} placeholder="Optional place notes" />

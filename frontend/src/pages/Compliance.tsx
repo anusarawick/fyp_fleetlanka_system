@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CalendarClock, ClipboardCheck, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarClock, ClipboardCheck, FileWarning, ShieldCheck, Wrench } from "lucide-react";
 
 type Document = {
   id: string;
@@ -44,10 +44,20 @@ type AlertRow = {
   id: string;
   category: "documents" | "fleet" | "approvals";
   severity: "danger" | "warning" | "info";
+  priorityLabel: string;
   title: string;
   meta: string;
   actionLabel: string;
   actionTo: string;
+};
+
+type CompliancePanelRow = {
+  id: string;
+  title: string;
+  meta: string;
+  tone: AlertRow["severity"];
+  label: string;
+  to: string;
 };
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -57,10 +67,24 @@ function toneClass(tone: AlertRow["severity"]) {
 }
 
 function vehicleLabel(vehicle?: Vehicle) {
-  if (!vehicle) return "Vehicle";
+  if (!vehicle) return "Vehicle not found";
   const makeModel = [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim();
   if (makeModel && vehicle.plate_no) return `${makeModel} • ${vehicle.plate_no}`;
-  return makeModel || vehicle.plate_no || "Vehicle";
+  return makeModel || vehicle.plate_no || "Vehicle not found";
+}
+
+function formatDate(value?: string) {
+  return value || "Date not recorded";
+}
+
+function documentOwnerLabel(doc: Document) {
+  return doc.driver_id ? "Driver document" : doc.vehicle_id ? "Vehicle document" : "Owner not recorded";
+}
+
+function categoryLabel(category: AlertRow["category"]) {
+  if (category === "documents") return "Documents";
+  if (category === "fleet") return "Fleet";
+  return "Approvals";
 }
 
 export default function Compliance(props: ComplianceProps) {
@@ -117,14 +141,16 @@ export default function Compliance(props: ComplianceProps) {
 
   const vehicleDocumentCount = props.documents.filter((doc) => !!doc.vehicle_id).length;
   const driverDocumentCount = props.documents.filter((doc) => !!doc.driver_id).length;
+  const totalOpenActions = expiredDocuments.length + expiringSoonDocuments.length + vehiclesInMaintenance.length + pendingApprovals.length;
 
   const alertRows = useMemo<AlertRow[]>(() => {
     const expiredDocAlerts = expiredDocuments.map((doc) => ({
       id: `doc-expired-${doc.id}`,
       category: "documents" as const,
       severity: "danger" as const,
+      priorityLabel: "Urgent",
       title: `${doc.doc_type} expired`,
-      meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
+      meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
       actionLabel: "Review",
       actionTo: "/documents",
     }));
@@ -133,8 +159,9 @@ export default function Compliance(props: ComplianceProps) {
       id: `doc-soon-${doc.id}`,
       category: "documents" as const,
       severity: "warning" as const,
+      priorityLabel: "Due Soon",
       title: `${doc.doc_type} expiring soon`,
-      meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
+      meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
       actionLabel: "Review",
       actionTo: "/documents",
     }));
@@ -143,6 +170,7 @@ export default function Compliance(props: ComplianceProps) {
       id: `vehicle-maint-${vehicle.id}`,
       category: "fleet" as const,
       severity: "info" as const,
+      priorityLabel: "Monitor",
       title: `${vehicleLabel(vehicle)} in maintenance`,
       meta: "Vehicle currently unavailable for fleet operations",
       actionLabel: "Review",
@@ -153,8 +181,9 @@ export default function Compliance(props: ComplianceProps) {
       id: `approval-${booking.id}`,
       category: "approvals" as const,
       severity: "warning" as const,
+      priorityLabel: "Review",
       title: `${vehicleLabel(vehicleMap[booking.vehicle_id || ""])} awaiting approval`,
-      meta: `${booking.requested_date} • Completed booking pending manager verification`,
+      meta: `${formatDate(booking.requested_date)} • Completed booking pending manager verification`,
       actionLabel: "Review",
       actionTo: "/maintenance",
     }));
@@ -186,84 +215,88 @@ export default function Compliance(props: ComplianceProps) {
     [props.maintenance]
   );
 
-  const expiringLists = [
+  const compliancePanels = [
     {
-      title: "Expired Documents",
-      empty: "No expired documents.",
-      rows: expiredDocuments.slice(0, 5).map((doc) => ({
+      title: "Document Risk",
+      subtitle: "Expired and near-expiry records that should be handled before dispatch.",
+      empty: "No renewal action needed.",
+      icon: FileWarning,
+      rows: [
+        ...expiredDocuments.slice(0, 5).map((doc): CompliancePanelRow => ({
         id: doc.id,
         title: doc.doc_type,
-        meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
-        tone: "danger" as const,
+        meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
+        tone: "danger",
         label: "Expired",
         to: "/documents",
       })),
-    },
-    {
-      title: "Expiring Soon",
-      empty: "No documents expiring within 30 days.",
-      rows: expiringSoonDocuments.slice(0, 5).map((doc) => ({
+        ...expiringSoonDocuments.slice(0, 5).map((doc): CompliancePanelRow => ({
         id: doc.id,
         title: doc.doc_type,
-        meta: `${doc.expiry_date || "--"} • ${doc.driver_id ? "Driver document" : "Vehicle document"}`,
-        tone: "warning" as const,
-        label: "Expiring Soon",
+        meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
+        tone: "warning",
+        label: "Due Soon",
         to: "/documents",
+      })),
+      ].slice(0, 5),
+    },
+    {
+      title: "Service Review",
+      subtitle: "Completed workshop jobs that still need manager verification.",
+      empty: "No service approvals waiting.",
+      icon: ClipboardCheck,
+      rows: pendingApprovals.slice(0, 5).map((booking): CompliancePanelRow => ({
+        id: booking.id,
+        title: vehicleLabel(vehicleMap[booking.vehicle_id || ""]),
+        meta: `${formatDate(booking.requested_date)} • Completion review waiting`,
+        tone: "warning",
+        label: "Review",
+        to: "/maintenance",
       })),
     },
     {
-      title: "Vehicles in Maintenance",
-      empty: "No vehicles currently in maintenance.",
-      rows: vehiclesInMaintenance.slice(0, 5).map((vehicle) => ({
+      title: "Fleet Availability",
+      subtitle: "Vehicles currently unavailable because their status is set to maintenance.",
+      empty: "No maintenance holds on fleet availability.",
+      icon: Wrench,
+      rows: vehiclesInMaintenance.slice(0, 5).map((vehicle): CompliancePanelRow => ({
         id: vehicle.id,
         title: vehicleLabel(vehicle),
         meta: "Vehicle status is currently set to maintenance",
-        tone: "info" as const,
+        tone: "info",
         label: "Maintenance",
         to: "/management",
-      })),
-    },
-    {
-      title: "Pending Service Approvals",
-      empty: "No completed bookings waiting for approval.",
-      rows: pendingApprovals.slice(0, 5).map((booking) => ({
-        id: booking.id,
-        title: vehicleLabel(vehicleMap[booking.vehicle_id || ""]),
-        meta: `${booking.requested_date} • Completed booking waiting for manager verification`,
-        tone: "warning" as const,
-        label: "Approval Needed",
-        to: "/maintenance",
       })),
     },
   ];
 
   return (
     <section className="section">
-      <section className="admin-page compliance-page">
+      <section className="admin-page compliance-page people-page people-page--compliance">
       <div className="stats compliance-stats admin-stats">
         <div className="stat-card stat-card--amber">
           <div className="stat-icon"><AlertTriangle aria-hidden="true" /></div>
           <div className="stat-value">{expiredDocuments.length}</div>
-          <div className="stat-label">Expired Documents</div>
-          <div className="stat-sub">Requires immediate action</div>
+          <div className="stat-label">Renewal Risk</div>
+          <div className="stat-sub">Expired documents blocking readiness</div>
         </div>
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><CalendarClock aria-hidden="true" /></div>
           <div className="stat-value">{expiringSoonDocuments.length}</div>
-          <div className="stat-label">Expiring in 30 Days</div>
-          <div className="stat-sub">Renewal watch</div>
+          <div className="stat-label">Upcoming Renewals</div>
+          <div className="stat-sub">Due within the next 30 days</div>
         </div>
         <div className="stat-card stat-card--amber">
           <div className="stat-icon"><Wrench aria-hidden="true" /></div>
           <div className="stat-value">{vehiclesInMaintenance.length}</div>
-          <div className="stat-label">Vehicles in Maintenance</div>
-          <div className="stat-sub">Currently unavailable</div>
+          <div className="stat-label">Unavailable Vehicles</div>
+          <div className="stat-sub">Held in maintenance state</div>
         </div>
         <div className="stat-card stat-card--green">
           <div className="stat-icon"><ClipboardCheck aria-hidden="true" /></div>
           <div className="stat-value">{pendingApprovals.length}</div>
-          <div className="stat-label">Pending Approvals</div>
-          <div className="stat-sub">Completed services awaiting review</div>
+          <div className="stat-label">Approval Queue</div>
+          <div className="stat-sub">Completed jobs awaiting review</div>
         </div>
       </div>
 
@@ -286,28 +319,50 @@ export default function Compliance(props: ComplianceProps) {
 
       {activeTab === "overview" && (
       <>
-      <div className="grid compliance-meta-grid admin-panel">
-        <section className="card admin-card--summary">
+      <div className="compliance-command-grid">
+        <section className="card compliance-command-card compliance-action-summary">
           <div className="card__header">
-            <h3>Document Ownership</h3>
+            <div>
+              <h3>Action Summary</h3>
+              <p className="muted admin-card__subtitle">Open compliance items grouped by urgency and destination.</p>
+            </div>
           </div>
           <div className="compliance-summary">
             <div className="compliance-summary__item">
-              <span>Vehicle Documents</span>
-              <strong>{vehicleDocumentCount}</strong>
+              <span>Open Actions</span>
+              <strong>{totalOpenActions}</strong>
             </div>
             <div className="compliance-summary__item">
-              <span>Driver Documents</span>
-              <strong>{driverDocumentCount}</strong>
+              <span>Urgent</span>
+              <strong>{expiredDocuments.length}</strong>
             </div>
           </div>
+          <ul className="people-signal-list compliance-signal-list">
+            <li>
+              <span className="people-signal-list__icon people-signal-list__icon--info"><ShieldCheck aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Document coverage</div>
+                <div className="list__meta">{vehicleDocumentCount} vehicle records, {driverDocumentCount} driver records</div>
+              </div>
+            </li>
+            <li>
+              <span className="people-signal-list__icon people-signal-list__icon--warning"><CalendarClock aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Next renewal window</div>
+                <div className="list__meta">{expiringSoonDocuments.length} documents due within 30 days</div>
+              </div>
+            </li>
+          </ul>
         </section>
-        <section className="card admin-card--summary">
+        <section className="card compliance-command-card compliance-service-card">
           <div className="card__header">
-            <h3>Maintenance Snapshot</h3>
+            <div>
+              <h3>Recent Service Signals</h3>
+              <p className="muted admin-card__subtitle">Latest maintenance activity that may affect availability or follow-up work.</p>
+            </div>
           </div>
           {recentMaintenance.length === 0 ? (
-            <p className="empty">No maintenance records yet.</p>
+            <p className="empty">No recent service activity to review.</p>
           ) : (
             <ul className="list compliance-list">
               {recentMaintenance.map((record) => (
@@ -315,7 +370,7 @@ export default function Compliance(props: ComplianceProps) {
                   <div>
                     <div className="list__title">{record.service_type || "Service"}</div>
                     <div className="list__meta">
-                      {record.service_date}
+                      {formatDate(record.service_date)}
                       {record.vehicle_id ? ` • ${vehicleLabel(vehicleMap[record.vehicle_id])}` : ""}
                     </div>
                   </div>
@@ -329,11 +384,19 @@ export default function Compliance(props: ComplianceProps) {
         </section>
       </div>
 
-      <div className="grid compliance-alert-grid admin-panel">
-        {expiringLists.map((section) => (
-          <section className="card admin-card--summary" key={section.title}>
+      <div className="compliance-alert-grid">
+        {compliancePanels.map((section) => {
+          const PanelIcon = section.icon;
+          return (
+          <section className="card compliance-alert-card" key={section.title}>
             <div className="card__header">
-              <h3>{section.title}</h3>
+              <div className="compliance-card-title">
+                <span className="people-signal-list__icon people-signal-list__icon--info"><PanelIcon aria-hidden="true" /></span>
+                <div>
+                  <h3>{section.title}</h3>
+                  <p className="muted admin-card__subtitle">{section.subtitle}</p>
+                </div>
+              </div>
             </div>
             {section.rows.length === 0 ? (
               <p className="empty">{section.empty}</p>
@@ -356,7 +419,8 @@ export default function Compliance(props: ComplianceProps) {
               </ul>
             )}
           </section>
-        ))}
+          );
+        })}
       </div>
       </>
       )}
@@ -366,7 +430,7 @@ export default function Compliance(props: ComplianceProps) {
         <div className="card__header">
           <div>
             <h3>Compliance Register</h3>
-            <p className="muted admin-card__subtitle">Search and review the current document, fleet, and approval alert stream in one operational register.</p>
+            <p className="muted admin-card__subtitle">Search and route document renewals, fleet holds, and service approvals from one queue.</p>
           </div>
         </div>
         <div className="table-controls">
@@ -443,21 +507,21 @@ export default function Compliance(props: ComplianceProps) {
             <div className="table__head compliance-table__head">
               <span>Category</span>
               <span>Alert</span>
-              <span>Status</span>
+              <span>Priority</span>
               <span>Action</span>
             </div>
             {visibleAlerts.map((row) => (
               <div className="table__row compliance-table__row" key={row.id}>
                 <span data-label="Category">
-                  <span className="pill pill--info">{row.category.charAt(0).toUpperCase() + row.category.slice(1)}</span>
+                  <span className="pill pill--info">{categoryLabel(row.category)}</span>
                 </span>
                 <span data-label="Alert">
                   <strong>{row.title}</strong>
                   <small className="muted compliance-table__meta">{row.meta}</small>
                 </span>
-                <span data-label="Status">
+                <span data-label="Priority">
                   <span className={toneClass(row.severity)}>
-                    {row.severity === "danger" ? "Urgent" : row.severity === "warning" ? "Action Soon" : "Monitor"}
+                    {row.priorityLabel}
                   </span>
                 </span>
                 <span className="table__actions compliance-table__actions" data-label="Action">

@@ -59,46 +59,46 @@ export default function Analytics(props: AnalyticsProps) {
 
   return (
     <section className="section">
-      <section className="analytics-page analytics-page--summary">
+      <section className="analytics-page analytics-page--summary insights-page insights-page--analytics">
       <section className="stats stats--five analytics-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><AnalyticsIcon name="fuel" /></div>
           <div className="stat-value">{props.fuelCostTotal.toFixed(0)}</div>
-          <div className="stat-label">Fuel Cost (LKR)</div>
-          <div className="stat-sub">Total logged</div>
+          <div className="stat-label">Fuel Spend</div>
+          <div className="stat-sub">Logged operating cost</div>
         </div>
         <div className="stat-card stat-card--green">
           <div className="stat-icon"><AnalyticsIcon name="average" /></div>
           <div className="stat-value">{props.avgFuelPerVehicle.toFixed(1)}</div>
           <div className="stat-label">Avg Fuel / Vehicle</div>
-          <div className="stat-sub">Liters</div>
+          <div className="stat-sub">Consumption baseline</div>
         </div>
         <div className="stat-card stat-card--purple">
           <div className="stat-icon"><AnalyticsIcon name="projection" /></div>
           <div className="stat-value">{props.projectedFuelDemand.toFixed(1)}</div>
-          <div className="stat-label">Projected Fuel (7d)</div>
-          <div className="stat-sub">Liters</div>
+          <div className="stat-label">Projected Fuel</div>
+          <div className="stat-sub">Next 7 days</div>
         </div>
         <div className="stat-card stat-card--amber">
           <div className="stat-icon"><AnalyticsIcon name="maintenance" /></div>
           <div className="stat-value">{upcomingMaintenance.length}</div>
-          <div className="stat-label">Maintenance Tracked</div>
-          <div className="stat-sub">By next due km</div>
+          <div className="stat-label">Service Thresholds</div>
+          <div className="stat-sub">Known next-due records</div>
         </div>
         <div className="stat-card">
           <div className="stat-icon"><AnalyticsIcon name="drivers" /></div>
           <div className="stat-value">{props.driverCount}</div>
           <div className="stat-label">Drivers</div>
-          <div className="stat-sub">Registered</div>
+          <div className="stat-sub">Roster size</div>
         </div>
       </section>
 
-      <div className="grid analytics-summary-grid">
-        <section className="card analytics-card--summary">
+      <div className="insights-grid">
+        <section className="card insights-panel insights-panel--primary">
           <div className="card__header">
             <div>
-              <h3>Maintenance Thresholds</h3>
-              <p className="muted analytics-card__subtitle">Maintenance records carrying explicit next-due odometer thresholds.</p>
+              <h3>Maintenance Outlook</h3>
+              <p className="muted analytics-card__subtitle">Vehicles with recorded next-due odometer thresholds, ordered by urgency.</p>
             </div>
             <div className="analytics-card__actions">
               <button
@@ -123,11 +123,11 @@ export default function Analytics(props: AnalyticsProps) {
           )}
         </section>
 
-        <section className="card analytics-card--summary">
+        <section className="card insights-panel">
           <div className="card__header">
             <div>
-              <h3>Fleet Summary</h3>
-              <p className="muted analytics-card__subtitle">Current fleet and trip coverage across the portal.</p>
+              <h3>Operating Snapshot</h3>
+              <p className="muted analytics-card__subtitle">Fleet size, driver coverage, and live dispatch load.</p>
             </div>
           </div>
           <ul className="list">
@@ -146,11 +146,11 @@ export default function Analytics(props: AnalyticsProps) {
           </ul>
         </section>
 
-        <section className="card analytics-card--wide analytics-card--summary">
+        <section className="card insights-panel insights-panel--wide">
           <div className="card__header">
             <div>
-              <h3>Top Performing Drivers</h3>
-              <p className="muted analytics-card__subtitle">Latest top-scoring drivers from current performance snapshots.</p>
+              <h3>Driver Readiness</h3>
+              <p className="muted analytics-card__subtitle">Highest current driver scores available for dispatch review.</p>
             </div>
           </div>
           {props.topPerformers.length === 0 ? (

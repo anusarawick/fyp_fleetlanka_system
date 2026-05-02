@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Car, FileText, TimerReset, Eye, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Car, Eye, FileText, Pencil, TimerReset, Trash2, Users } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -100,21 +100,46 @@ export default function Documents(props: DocumentsProps) {
     setUseCustomDocumentType(isCustomDocumentType);
   }, [isCustomDocumentType, props.docOwnerType]);
 
-  const expiringSoonCount = props.documents.filter((doc) => {
-    if (!doc.expiry_date) return false;
-    const expiry = new Date(doc.expiry_date).getTime();
-    const now = Date.now();
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    return expiry <= now + thirtyDays;
-  }).length;
+  const now = Date.now();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
   function getExpiryStatus(expiryDate?: string) {
-    if (!expiryDate) return null;
+    if (!expiryDate) return { label: "No Expiry", tone: "neutral" as const };
     const expiry = new Date(expiryDate).getTime();
-    const now = Date.now();
     if (expiry < now) return { label: "Expired", tone: "danger" as const };
-    return { label: "Expiring Soon", tone: "warning" as const };
+    if (expiry <= now + thirtyDays) return { label: "Due Soon", tone: "warning" as const };
+    return { label: "Current", tone: "success" as const };
   }
+
+  function getDocumentOwner(doc: Document) {
+    if (doc.vehicle_id) {
+      return {
+        type: "Vehicle",
+        label: vehicleLabelMap[doc.vehicle_id] || "Vehicle not found",
+      };
+    }
+    if (doc.driver_id) {
+      return {
+        type: "Driver",
+        label: driverLabelMap[doc.driver_id] || "Driver not found",
+      };
+    }
+    return {
+      type: "Unassigned",
+      label: "Owner not recorded",
+    };
+  }
+
+  const expiredCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).label === "Expired").length;
+  const dueSoonCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).label === "Due Soon").length;
+  const currentCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).label === "Current").length;
+  const noExpiryCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).label === "No Expiry").length;
+  const vehicleDocumentCount = props.documents.filter((doc) => !!doc.vehicle_id).length;
+  const driverDocumentCount = props.documents.filter((doc) => !!doc.driver_id).length;
+  const renewalQueue = props.documents
+    .filter((doc) => !!doc.expiry_date)
+    .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)))
+    .slice(0, 5);
 
   const filteredDocuments = props.documents.filter((doc) => {
     const query = documentSearch.trim().toLowerCase();
@@ -166,25 +191,25 @@ export default function Documents(props: DocumentsProps) {
 
   return (
     <section className="section">
-      <section className="admin-page">
+      <section className="admin-page people-page people-page--documents">
       <section className="stats stats--three admin-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><FileText aria-hidden="true" /></div>
           <div className="stat-value">{props.documents.length}</div>
-          <div className="stat-label">Documents</div>
-          <div className="stat-sub">Tracked vehicle and driver documents</div>
+          <div className="stat-label">Total Records</div>
+          <div className="stat-sub">Vehicle and driver documents on file</div>
         </div>
         <div className="stat-card stat-card--amber">
           <div className="stat-icon"><TimerReset aria-hidden="true" /></div>
-          <div className="stat-value">{expiringSoonCount}</div>
-          <div className="stat-label">Expiring Soon</div>
-          <div className="stat-sub">Documents with expiry dates inside the next 30 days</div>
+          <div className="stat-value">{expiredCount + dueSoonCount}</div>
+          <div className="stat-label">Renewal Attention</div>
+          <div className="stat-sub">{expiredCount} expired, {dueSoonCount} due within 30 days</div>
         </div>
         <div className="stat-card stat-card--purple">
-          <div className="stat-icon"><Car aria-hidden="true" /></div>
-          <div className="stat-value">{props.vehicles.length}</div>
-          <div className="stat-label">Fleet Vehicles</div>
-          <div className="stat-sub">Available vehicle owners for document registration</div>
+          <div className="stat-icon"><Users aria-hidden="true" /></div>
+          <div className="stat-value">{vehicleDocumentCount + driverDocumentCount}</div>
+          <div className="stat-label">Owner Coverage</div>
+          <div className="stat-sub">{vehicleDocumentCount} vehicle, {driverDocumentCount} driver records</div>
         </div>
       </section>
 
@@ -206,12 +231,22 @@ export default function Documents(props: DocumentsProps) {
       </nav>
 
       {activeTab === "overview" && (
-      <div className="grid admin-summary-grid admin-summary-grid--balanced admin-panel">
-        <section className="card admin-card--action">
+      <div className="people-overview-grid">
+        <section className="card people-command-card documents-command-card">
           <div className="card__header">
             <div>
-              <h3>Document Actions</h3>
-              <p className="muted admin-card__subtitle">Register new compliance documents and keep expiry tracking visible from the same workspace.</p>
+              <h3>Register Document</h3>
+              <p className="muted admin-card__subtitle">Add licenses, insurance, permits, and certificates against the right owner.</p>
+            </div>
+          </div>
+          <div className="documents-command-summary" aria-label="Document status summary">
+            <div>
+              <span>Current</span>
+              <strong>{currentCount}</strong>
+            </div>
+            <div>
+              <span>Needs renewal</span>
+              <strong>{expiredCount + dueSoonCount}</strong>
             </div>
           </div>
           <div className="admin-action-buttons">
@@ -229,35 +264,31 @@ export default function Documents(props: DocumentsProps) {
           </div>
         </section>
 
-        <section className="card admin-card--summary">
+        <section className="card people-card documents-renewal-card">
           <div className="card__header">
             <div>
-              <h3>Renewal Watch</h3>
-              <p className="muted admin-card__subtitle">Next document renewals ordered by expiry date.</p>
+              <h3>Renewal Queue</h3>
+              <p className="muted admin-card__subtitle">Earliest expiry dates that need review before vehicles or drivers fall out of compliance.</p>
             </div>
           </div>
-          {props.documents.length === 0 ? (
-            <p className="empty">No documents tracked yet.</p>
+          {renewalQueue.length === 0 ? (
+            <p className="empty">No dated renewals are waiting.</p>
           ) : (
-            <ul className="list">
-              {props.documents
-                .filter((doc) => !!doc.expiry_date)
-                .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)))
-                .slice(0, 4)
-                .map((doc) => {
+            <ul className="documents-renewal-list">
+              {renewalQueue.map((doc) => {
                   const expiryStatus = getExpiryStatus(doc.expiry_date);
+                  const owner = getDocumentOwner(doc);
                   return (
                     <li key={doc.id}>
-                      <div className="list__title">
-                        {doc.doc_type} • {doc.vehicle_id ? vehicleLabelMap[doc.vehicle_id || ""] || "Vehicle" : driverLabelMap[doc.driver_id || ""] || "Driver"}
+                      <div>
+                        <div className="list__title">{doc.doc_type}</div>
+                        <div className="list__meta">{owner.type} • {owner.label}</div>
                       </div>
-                      <div className="list__meta">
-                        {doc.expiry_date || "No expiry date"}{" "}
-                        {expiryStatus && (
-                          <span className={`pill pill--${expiryStatus.tone}`}>
-                            {expiryStatus.label}
-                          </span>
-                        )}
+                      <div className="documents-renewal-list__status">
+                        <span>{doc.expiry_date}</span>
+                        <span className={`pill pill--${expiryStatus.tone}`}>
+                          {expiryStatus.label}
+                        </span>
                       </div>
                     </li>
                   );
@@ -266,21 +297,34 @@ export default function Documents(props: DocumentsProps) {
           )}
         </section>
 
-        <section className="card admin-card--summary">
+        <section className="card people-card documents-coverage-card">
           <div className="card__header">
             <div>
-              <h3>Ownership Mix</h3>
-              <p className="muted admin-card__subtitle">Current balance between vehicle and driver-owned documents.</p>
+              <h3>Coverage Summary</h3>
+              <p className="muted admin-card__subtitle">How the document register is distributed across fleet assets and driver accounts.</p>
             </div>
           </div>
-          <ul className="list">
+          <ul className="people-signal-list">
             <li>
-              <div className="list__title">Vehicle Documents</div>
-              <div className="list__meta">{props.documents.filter((doc) => !!doc.vehicle_id).length} records linked to fleet assets</div>
+              <span className="people-signal-list__icon people-signal-list__icon--info"><Car aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Vehicle documents</div>
+                <div className="list__meta">{vehicleDocumentCount} records linked to fleet assets</div>
+              </div>
             </li>
             <li>
-              <div className="list__title">Driver Documents</div>
-              <div className="list__meta">{props.documents.filter((doc) => !!doc.driver_id).length} records linked to people profiles</div>
+              <span className="people-signal-list__icon people-signal-list__icon--success"><Users aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Driver documents</div>
+                <div className="list__meta">{driverDocumentCount} records linked to driver accounts</div>
+              </div>
+            </li>
+            <li>
+              <span className="people-signal-list__icon people-signal-list__icon--warning"><AlertTriangle aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Missing expiry dates</div>
+                <div className="list__meta">{noExpiryCount} records need a renewal date when applicable</div>
+              </div>
             </li>
           </ul>
         </section>
@@ -288,15 +332,15 @@ export default function Documents(props: DocumentsProps) {
       )}
 
       {activeTab === "register" && (
-      <section className="card admin-table-section admin-panel">
+      <section className="card admin-table-section people-register">
         <div className="card__header">
           <div>
             <h3>Document Register</h3>
-            <p className="muted admin-card__subtitle">Search, review, and maintain tracked documents without changing the underlying registration workflow.</p>
+            <p className="muted admin-card__subtitle">Review ownership, expiry status, and reference numbers for every tracked document.</p>
           </div>
         </div>
         {props.documents.length === 0 ? (
-          <p className="empty">No documents yet.</p>
+          <p className="empty">No documents have been registered yet.</p>
         ) : (
           <>
             <div className="table-controls">
@@ -357,14 +401,18 @@ export default function Documents(props: DocumentsProps) {
                 </div>
                 {paginatedDocuments.map((doc) => (
                   <div className="table__row documents-table__row" key={doc.id}>
-                    <span data-label="Owner">
-                      {doc.vehicle_id
-                        ? `Vehicle • ${vehicleLabelMap[doc.vehicle_id || ""] || "--"}`
-                        : `Driver • ${driverLabelMap[doc.driver_id || ""] || "--"}`}
+                    <span className="documents-table__owner" data-label="Owner">
+                      <strong>{getDocumentOwner(doc).label}</strong>
+                      <small>{getDocumentOwner(doc).type}</small>
                     </span>
                     <span data-label="Type">{doc.doc_type}</span>
-                    <span data-label="Number">{doc.doc_number || "--"}</span>
-                    <span data-label="Expiry">{doc.expiry_date || "--"}</span>
+                    <span data-label="Number">{doc.doc_number || "Not recorded"}</span>
+                    <span className="documents-table__expiry" data-label="Expiry">
+                      <span>{doc.expiry_date || "Not dated"}</span>
+                      <span className={`pill pill--${getExpiryStatus(doc.expiry_date).tone}`}>
+                        {getExpiryStatus(doc.expiry_date).label}
+                      </span>
+                    </span>
                     <span className="table__actions documents-table__actions" data-label="Actions">
                       <button
                         className="icon-action"
@@ -415,8 +463,8 @@ export default function Documents(props: DocumentsProps) {
                 <h3>{props.editingDocumentId ? "Edit Document" : "Add Document"}</h3>
                 <p className="modal__subtle">
                   {props.editingDocumentId
-                    ? "Update the selected document and its ownership details."
-                    : "Register a fleet document and its renewal date."}
+                    ? "Update the owner, document details, or renewal date."
+                    : "Create a document record for a vehicle or driver."}
                 </p>
               </div>
               <button className="modal__close" type="button" onClick={closeDocumentModal} aria-label="Close document form">
@@ -424,6 +472,12 @@ export default function Documents(props: DocumentsProps) {
               </button>
             </div>
             <form id="document-form" className="form form--scroll" onSubmit={props.onAddDocument}>
+              <div className="form-section-title">
+                <div>
+                  <h4>Owner</h4>
+                  <p>Attach this document to the vehicle or driver responsible for renewal.</p>
+                </div>
+              </div>
               <label>
                 Document Owner
                 <select
@@ -475,6 +529,12 @@ export default function Documents(props: DocumentsProps) {
                 </select>
               </label>
               )}
+              <div className="form-section-title">
+                <div>
+                  <h4>Document</h4>
+                  <p>Capture the document type and reference number used during checks.</p>
+                </div>
+              </div>
               <label>
                 Document Type
                 <select
@@ -518,6 +578,12 @@ export default function Documents(props: DocumentsProps) {
                   onChange={(e) => props.setDocNumber(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <div>
+                  <h4>Expiry</h4>
+                  <p>Add a renewal date when this document needs expiry tracking.</p>
+                </div>
+              </div>
               <label>
                 Expiry Date
                 <input
@@ -545,7 +611,7 @@ export default function Documents(props: DocumentsProps) {
             <div className="modal__header">
               <div>
                 <h3>Document Details</h3>
-                <p className="modal__subtle">Read-only view of the selected document.</p>
+                <p className="modal__subtle">Document owner, reference details, and renewal status.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedDocument(null)} aria-label="Close document details">
                 ✕
@@ -554,16 +620,24 @@ export default function Documents(props: DocumentsProps) {
             <div className="details-grid">
               <div className="detail-item">
                 <span>Owner</span>
-                <strong>
-                  {selectedDocument.vehicle_id
-                    ? `Vehicle • ${vehicleLabelMap[selectedDocument.vehicle_id || ""] || "--"}`
-                    : `Driver • ${driverLabelMap[selectedDocument.driver_id || ""] || "--"}`}
-                </strong>
+                <strong>{getDocumentOwner(selectedDocument).label}</strong>
+              </div>
+              <div className="detail-item">
+                <span>Owner Type</span>
+                <strong>{getDocumentOwner(selectedDocument).type}</strong>
               </div>
               <div className="detail-item"><span>Type</span><strong>{selectedDocument.doc_type}</strong></div>
-              <div className="detail-item"><span>Number</span><strong>{selectedDocument.doc_number || "--"}</strong></div>
-              <div className="detail-item"><span>Expiry</span><strong>{selectedDocument.expiry_date || "--"}</strong></div>
-              <div className="detail-item detail-item--full"><span>File URL</span><strong>{selectedDocument.file_url || "--"}</strong></div>
+              <div className="detail-item"><span>Number</span><strong>{selectedDocument.doc_number || "Not recorded"}</strong></div>
+              <div className="detail-item"><span>Expiry</span><strong>{selectedDocument.expiry_date || "Not dated"}</strong></div>
+              <div className="detail-item">
+                <span>Status</span>
+                <strong>
+                  <span className={`pill pill--${getExpiryStatus(selectedDocument.expiry_date).tone}`}>
+                    {getExpiryStatus(selectedDocument.expiry_date).label}
+                  </span>
+                </strong>
+              </div>
+              <div className="detail-item detail-item--full"><span>File Link</span><strong>{selectedDocument.file_url || "No file link recorded"}</strong></div>
             </div>
           </div>
         </div>

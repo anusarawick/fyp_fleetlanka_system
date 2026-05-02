@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, ClipboardCheck, Clock3, Eye, Pencil, RotateCcw, Wrench } from "lucide-react";
 import { apiGet, apiPatch } from "../services/api";
 
 type ServicePortalProps = {
@@ -88,34 +89,14 @@ function resolveWorkTypeSelection(value?: string) {
 type ServicePortalIconName = "pending" | "confirmed" | "completedToday" | "completedTotal";
 
 function ServicePortalIcon({ name }: { name: ServicePortalIconName }) {
-  switch (name) {
-    case "pending":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 7v5l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "confirmed":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m5 13 4 4L19 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "completedToday":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 3h8l3 3v12a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6l3-3Zm2 7h4m-4 4h4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case "completedTotal":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m5 13 4 4L19 7M5 4h14M5 20h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    default:
-      return null;
-  }
+  const icons = {
+    pending: Clock3,
+    confirmed: ClipboardCheck,
+    completedToday: CheckCircle2,
+    completedTotal: Wrench,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
 }
 
 export default function ServicePortal({ token, initialTab = "dashboard" }: ServicePortalProps) {
@@ -359,7 +340,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         </div>
       )}
 
-      <section className="service-portal-page admin-page">
+      <section className="service-portal-page admin-page service-workspace">
       {isOverviewTab ? (
         <>
           <div className="stats service-portal-stats admin-stats">
@@ -394,7 +375,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="card__header">
                 <div>
                   <h3>Center Overview</h3>
-                  <p className="muted admin-card__subtitle">Current center identity, contact coverage, and immediate next action.</p>
+                  <p className="muted admin-card__subtitle">Center details, assigned workload, and the next service action.</p>
                 </div>
               </div>
               <div className="service-portal-summary__grid">
@@ -425,7 +406,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="card__header">
                 <div>
                   <h3>Workload Snapshot</h3>
-                  <p className="muted admin-card__subtitle">Current queue posture across pending, confirmed, and completed work.</p>
+                  <p className="muted admin-card__subtitle">Pending decisions, active jobs, and completed work waiting for manager review.</p>
                 </div>
               </div>
               <ul className="list service-portal-list">
@@ -454,7 +435,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="card__header">
                 <div>
                   <h3>Attention Now</h3>
-                  <p className="muted admin-card__subtitle">The nearest pending or confirmed jobs that need immediate operational attention.</p>
+                  <p className="muted admin-card__subtitle">Nearest pending or confirmed jobs that need action from the workshop team.</p>
                 </div>
               </div>
               {upcomingQueue.length === 0 ? (
@@ -477,7 +458,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="card__header">
                 <div>
                   <h3>Recently Closed Jobs</h3>
-                  <p className="muted admin-card__subtitle">Recently completed work with manager review state still visible to the center team.</p>
+                  <p className="muted admin-card__subtitle">Recently completed jobs and their manager review status.</p>
                 </div>
               </div>
               {latestCompleted.length === 0 ? (
@@ -521,12 +502,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
             <div className="card__header">
               <div>
                 <h3>Service Bookings</h3>
-                <p className="muted admin-card__subtitle">Confirm, cancel, complete, and review assigned bookings from the active service queue.</p>
+                <p className="muted admin-card__subtitle">Confirm, cancel, complete, and update assigned service jobs.</p>
               </div>
             </div>
-            <p className="muted service-portal-register-subtitle">
-              Use this register to manage status transitions, service notes, and final pricing for assigned jobs.
-            </p>
 
             <div className="table-controls">
               <div className="table-controls__filters">
@@ -619,25 +597,16 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                     <span className="table__actions service-portal-table__actions" data-label="Actions">
                       <span className="service-portal-table__icon-group">
                         <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label="View booking">
-                          <svg className="icon-action__svg icon-action__svg--view" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12 18 18.75 12 18.75 2.25 12 2.25 12Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.75" />
-                          </svg>
+                          <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                         </button>
                         {(booking.status === "confirmed" || (booking.status === "completed" && booking.completion_review_status !== "approved")) && (
                           <button className="icon-action" type="button" onClick={() => openDetailsModal(booking)} title="Edit details" aria-label="Edit details">
-                            <svg className="icon-action__svg icon-action__svg--edit" viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="M4 20h4l10.5-10.5a2.121 2.121 0 1 0-3-3L5 17v3Z" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="m13.5 6.5 4 4" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                            <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
                           </button>
                         )}
                         {booking.status === "confirmed" && (
                           <button className="icon-action" type="button" onClick={() => openActionModal(booking, "pending")} title="Mark pending" aria-label="Mark pending">
-                            <svg className="icon-action__svg icon-action__svg--undo" viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="M8.25 9.25H4.5v-3.75" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d="M4.8 9.2A8 8 0 1 1 7.1 17.8" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                            <RotateCcw className="icon-action__svg icon-action__svg--undo" aria-hidden="true" />
                           </button>
                         )}
                       </span>
@@ -681,7 +650,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
             <div className="modal__header">
               <div>
                 <h3>Booking Details</h3>
-                <p className="modal__subtle">Read-only view of the selected assigned booking.</p>
+                <p className="modal__subtle">Vehicle, booking notes, service outcome, and manager review status.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedBooking(null)} aria-label="Close booking details">
                 ✕

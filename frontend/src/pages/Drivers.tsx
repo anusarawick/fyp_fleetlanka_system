@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Eye, MailCheck, Pencil, Trash2, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
+import { AlertCircle, Eye, MailCheck, Pencil, ShieldCheck, Trash2, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 
 type Driver = {
   id: string;
@@ -79,6 +79,13 @@ export default function Drivers(props: DriversProps) {
   const activeDrivers = props.drivers.filter((driver) => (driver.status || "active") === "active");
   const inactiveDrivers = props.drivers.filter((driver) => (driver.status || "active") !== "active");
   const completeProfiles = props.drivers.filter((driver) => Boolean(driver.email) && Boolean(driver.phone));
+  const incompleteProfiles = props.drivers.filter((driver) => !driver.email || !driver.phone);
+  const contactCoverage = props.drivers.length
+    ? Math.round((completeProfiles.length / props.drivers.length) * 100)
+    : 0;
+  const attentionDrivers = [...incompleteProfiles, ...inactiveDrivers]
+    .filter((driver, index, list) => list.findIndex((item) => item.id === driver.id) === index)
+    .slice(0, 5);
 
   useEffect(() => {
     if (!props.editingDriverId && !props.loading) {
@@ -125,8 +132,8 @@ export default function Drivers(props: DriversProps) {
 
   return (
     <section className="section">
-      <section className="admin-page">
-      <section className="stats stats--four admin-stats">
+      <section className="admin-page people-page people-page--drivers">
+      <section className="stats stats--four admin-stats people-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><DriversIcon name="drivers" /></div>
           <div className="stat-value">{props.drivers.length}</div>
@@ -148,8 +155,8 @@ export default function Drivers(props: DriversProps) {
         <div className="stat-card stat-card--purple">
           <div className="stat-icon"><DriversIcon name="coverage" /></div>
           <div className="stat-value">{completeProfiles.length}</div>
-          <div className="stat-label">Profile Coverage</div>
-          <div className="stat-sub">Accounts with email and phone details</div>
+          <div className="stat-label">Contact Coverage</div>
+          <div className="stat-sub">{contactCoverage}% with email and phone</div>
         </div>
       </section>
 
@@ -171,12 +178,22 @@ export default function Drivers(props: DriversProps) {
       </nav>
 
       {activeTab === "overview" && (
-      <div className="grid admin-summary-grid admin-summary-grid--balanced">
-        <section className="card admin-card--action">
+      <div className="drivers-overview-grid">
+        <section className="card people-command-card">
           <div className="card__header">
             <div>
-              <h3>Driver Actions</h3>
-              <p className="muted admin-card__subtitle">Create driver accounts and manage mobile-access roster records from one place.</p>
+              <h3>Roster Control</h3>
+              <p className="muted admin-card__subtitle">Create mobile access and keep driver records ready for dispatch.</p>
+            </div>
+          </div>
+          <div className="driver-command-summary">
+            <div>
+              <span>Ready accounts</span>
+              <strong>{activeDrivers.length}</strong>
+            </div>
+            <div>
+              <span>Need attention</span>
+              <strong>{attentionDrivers.length}</strong>
             </div>
           </div>
           <div className="admin-action-buttons">
@@ -186,37 +203,80 @@ export default function Drivers(props: DriversProps) {
           </div>
         </section>
 
-        <section className="card admin-card--summary">
+        <section className="card people-card">
           <div className="card__header">
             <div>
-              <h3>Roster Status</h3>
-              <p className="muted admin-card__subtitle">Operational view of the driver pool and current account readiness.</p>
+              <h3>Roster Readiness</h3>
+              <p className="muted admin-card__subtitle">Availability and contact coverage for day-to-day assignments.</p>
             </div>
           </div>
-          <ul className="list">
+          <ul className="people-signal-list">
             <li>
-              <div className="list__title">Active Roster</div>
-              <div className="list__meta">{activeDrivers.length} drivers currently available for assignment</div>
+              <span className="people-signal-list__icon people-signal-list__icon--success"><UserCheck aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Active Roster</div>
+                <div className="list__meta">{activeDrivers.length} drivers currently enabled for assignments</div>
+              </div>
             </li>
             <li>
-              <div className="list__title">Inactive Accounts</div>
-              <div className="list__meta">{inactiveDrivers.length} drivers currently withheld from access</div>
+              <span className="people-signal-list__icon people-signal-list__icon--warning"><UserX aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Inactive Accounts</div>
+                <div className="list__meta">{inactiveDrivers.length} drivers currently withheld from access</div>
+              </div>
             </li>
             <li>
-              <div className="list__title">Contact Completeness</div>
-              <div className="list__meta">{completeProfiles.length} driver profiles have both email and phone on record</div>
+              <span className="people-signal-list__icon people-signal-list__icon--info"><ShieldCheck aria-hidden="true" /></span>
+              <div>
+                <div className="list__title">Contact Coverage</div>
+                <div className="list__meta">{completeProfiles.length} profiles have both email and phone on record</div>
+              </div>
             </li>
           </ul>
+        </section>
+
+        <section className="card people-card drivers-attention-card">
+          <div className="card__header">
+            <div>
+              <h3>Needs Attention</h3>
+              <p className="muted admin-card__subtitle">Drivers with missing contact details or disabled access.</p>
+            </div>
+          </div>
+          {attentionDrivers.length === 0 ? (
+            <p className="empty">All driver accounts are active with complete contact details.</p>
+          ) : (
+            <ul className="driver-attention-list">
+              {attentionDrivers.map((driver) => {
+                const issues = [
+                  !driver.email ? "missing email" : "",
+                  !driver.phone ? "missing phone" : "",
+                  (driver.status || "active") !== "active" ? "inactive" : "",
+                ].filter(Boolean);
+                return (
+                  <li key={driver.id}>
+                    <span className="driver-attention-list__icon"><AlertCircle aria-hidden="true" /></span>
+                    <div>
+                      <div className="list__title">{driver.full_name || driver.email || "Driver account"}</div>
+                      <div className="list__meta">{issues.join(" • ")}</div>
+                    </div>
+                    <button className="btn btn--secondary btn--compact" type="button" onClick={() => openEditModal(driver)}>
+                      Update
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
       )}
 
       {activeTab === "register" && (
-      <section className="card admin-table-section">
+        <section className="card admin-table-section people-register drivers-register">
         <div className="card__header">
           <div>
             <h3>Driver Register</h3>
-            <p className="muted admin-card__subtitle">Search, filter, review, and manage current driver accounts without leaving the roster view.</p>
+            <p className="muted admin-card__subtitle">Search the roster, update access, and keep dispatch contact details current.</p>
           </div>
           <div className="button-row">
             <button className="btn btn--compact" type="button" onClick={openCreateModal}>
@@ -294,9 +354,12 @@ export default function Drivers(props: DriversProps) {
               </div>
               {paginatedDrivers.map((d) => (
                 <div className="table__row drivers-table__row" key={d.id}>
-                  <span className="drivers-table__cell" data-label="Name">{d.full_name || "Driver"}</span>
-                  <span className="drivers-table__cell" data-label="Email">{d.email || "--"}</span>
-                  <span className="drivers-table__cell" data-label="Phone">{d.phone || "--"}</span>
+                  <span className="drivers-table__cell drivers-table__cell--name" data-label="Name">
+                    <strong>{d.full_name || "Driver"}</strong>
+                    <small>{(d.status || "active") === "active" ? "Ready for dispatch" : "Access disabled"}</small>
+                  </span>
+                  <span className="drivers-table__cell" data-label="Email">{d.email || "Not recorded"}</span>
+                  <span className="drivers-table__cell" data-label="Phone">{d.phone || "Not recorded"}</span>
                   <span className="drivers-table__cell drivers-table__cell--status" data-label="Status">
                     <span className={`risk-pill ${(d.status || "active") === "active" ? "risk-pill--low" : "risk-pill--high"}`}>
                       {formatStatus(d.status || "active")}
@@ -348,7 +411,7 @@ export default function Drivers(props: DriversProps) {
               <div>
                 <h3>{props.editingDriverId ? "Edit Driver" : "Add Driver"}</h3>
                 <p className="modal__subtle">
-                  {props.editingDriverId ? "Update the existing driver profile." : "Create a driver account for mobile access."}
+                  {props.editingDriverId ? "Update contact details and mobile access." : "Create a mobile account for a driver."}
                 </p>
               </div>
               <button className="modal__close" type="button" onClick={closeDriverModal} aria-label="Close driver form">
@@ -356,6 +419,12 @@ export default function Drivers(props: DriversProps) {
               </button>
             </div>
             <form id="driver-form" className="form form--scroll" onSubmit={handleDriverSubmit}>
+              <div className="form-section-title">
+                <div>
+                  <h4>Account</h4>
+                  <p>Name and sign-in email used by the mobile driver app.</p>
+                </div>
+              </div>
               <label>
                 Full Name
                 <input
@@ -374,6 +443,12 @@ export default function Drivers(props: DriversProps) {
                   required
                 />
               </label>
+              <div className="form-section-title">
+                <div>
+                  <h4>Contact</h4>
+                  <p>Phone details used by dispatch and manager follow-up.</p>
+                </div>
+              </div>
               <label>
                 Phone Number
                 <input
@@ -382,6 +457,12 @@ export default function Drivers(props: DriversProps) {
                   onChange={(e) => props.setDriverPhone(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <div>
+                  <h4>Access</h4>
+                  <p>Choose whether this driver can sign in and receive assignments.</p>
+                </div>
+              </div>
               <div className="form-toggle-row">
                 <label className="toggle-switch">
                   <span className="toggle-switch__label">
@@ -458,7 +539,7 @@ export default function Drivers(props: DriversProps) {
             <div className="modal__header">
               <div>
                 <h3>Driver Details</h3>
-                <p className="modal__subtle">Summary of the current driver record.</p>
+                <p className="modal__subtle">Contact details and account availability.</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setViewTarget(null)} aria-label="Close driver details">
                 ✕
@@ -469,7 +550,7 @@ export default function Drivers(props: DriversProps) {
               <div className="detail-item"><span>Email</span><strong>{viewTarget.email || "--"}</strong></div>
               <div className="detail-item"><span>Phone</span><strong>{viewTarget.phone || "--"}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{formatStatus(viewTarget.status || "active")}</strong></div>
-              <div className="detail-item"><span>Driver ID</span><strong>{viewTarget.id}</strong></div>
+              <div className="detail-item"><span>Access</span><strong>{(viewTarget.status || "active") === "active" ? "Can use driver app" : "Disabled"}</strong></div>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BarChart3, CircleDollarSign, ClipboardList, Eye, Fuel as FuelIconGlyph, Pencil, Trash2, TrendingUp, type LucideIcon } from "lucide-react";
+import { BarChart3, CalendarDays, CircleDollarSign, ClipboardList, Eye, Fuel as FuelIconGlyph, Gauge, Pencil, Trash2, TrendingUp, type LucideIcon } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -152,6 +152,15 @@ export default function Fuel(props: FuelProps) {
     .sort((a, b) => b.forecast_liters_7d - a.forecast_liters_7d)
     .slice(0, 8);
   const topDemandVehicle = vehicleFuelDemand[0] || null;
+  const recentFuelLogs = [...props.fuelLogs]
+    .sort((a, b) => new Date(b.fuel_date).getTime() - new Date(a.fuel_date).getTime())
+    .slice(0, 5);
+  const latestFuelLog = recentFuelLogs[0] || null;
+  const highDemandVehicles = vehicleFuelDemand.slice(0, 5);
+  const costPerLiter =
+    selectedFuelLog?.cost_lkr && selectedFuelLog.liters > 0
+      ? selectedFuelLog.cost_lkr / selectedFuelLog.liters
+      : null;
 
   function closeFuelModal() {
     setShowFuelModal(false);
@@ -168,7 +177,7 @@ export default function Fuel(props: FuelProps) {
 
   return (
     <section className="section">
-      <section className="analytics-page">
+      <section className="analytics-page fuel-page">
       <div className="stats stats--three analytics-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><FuelIcon name="logs" /></div>
@@ -215,83 +224,123 @@ export default function Fuel(props: FuelProps) {
       </nav>
 
       {activeTab === "overview" && (
-      <div className="grid analytics-grid">
-        <section className="card analytics-card--support">
-          <div className="card__header">
+      <div className="fuel-workspace">
+        <section className="card fuel-panel fuel-panel--spend">
+          <div className="fuel-panel__header">
             <div>
-              <h3>Fuel Actions</h3>
-              <p className="muted analytics-card__subtitle">Log and manage operational fuel entries from one place.</p>
+              <span className="fuel-panel__eyebrow">Fuel spend</span>
+              <h3>Cost and Consumption</h3>
+              <p>Review the fleet’s fuel spend, total liters, and latest station entry in one place.</p>
             </div>
-          </div>
-          <div className="admin-action-buttons">
             <button
-              className="btn"
+              className="btn btn--secondary btn--compact"
               type="button"
-              onClick={() => {
-                props.onCancelFuelEdit();
-                setShowFuelModal(true);
-              }}
+              onClick={() => setActiveTab("register")}
             >
-              + Add Fuel Log
+              View Register
             </button>
           </div>
+          <div className="fuel-metric-grid">
+            <div><span>Total Spend</span><strong>Rs.{totalCost.toLocaleString()}</strong></div>
+            <div><span>Total Liters</span><strong>{totalLiters.toFixed(1)} L</strong></div>
+            <div><span>Avg Cost / Liter</span><strong>{avgCostPerLiter > 0 ? `Rs.${avgCostPerLiter.toFixed(0)}` : "--"}</strong></div>
+            <div><span>Latest Entry</span><strong>{latestFuelLog ? `${vehicleLabelMap[latestFuelLog.vehicle_id] || "Vehicle"} • ${latestFuelLog.fuel_date}` : "No logs"}</strong></div>
+          </div>
         </section>
 
-        <section className="card analytics-card--support">
-          <div className="card__header">
-            <div>
-              <h3>Demand Summary</h3>
-              <p className="muted analytics-card__subtitle">Current 7-day fuel outlook across the fleet.</p>
-            </div>
-          </div>
-          <ul className="list">
-            <li>
-              <div className="list__title">Projected Total</div>
-              <div className="list__meta">{projectedFuelDemand.toFixed(1)} L forecast for the next 7 days</div>
-            </li>
-            <li>
-              <div className="list__title">Highest Demand Vehicle</div>
-              <div className="list__meta">
-                {topDemandVehicle
-                  ? `${topDemandVehicle.plate_no} • ${topDemandVehicle.forecast_liters_7d.toFixed(1)} L`
-                  : "No forecast available yet"}
+        <div className="fuel-side-stack">
+          <section className="card fuel-panel">
+            <div className="fuel-panel__header fuel-panel__header--compact">
+              <div>
+                <span className="fuel-panel__eyebrow">Fuel logging</span>
+                <h3>Record Purchase</h3>
               </div>
-            </li>
-          </ul>
-        </section>
+            </div>
+            <p className="fuel-panel__note">Capture vehicle, liters, cost, odometer, and station details as soon as receipts are received.</p>
+            <div className="fuel-action-stack">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  props.onCancelFuelEdit();
+                  setShowFuelModal(true);
+                }}
+              >
+                Add Fuel Log
+              </button>
+              <button className="btn btn--secondary" type="button" onClick={props.onExportFuel}>
+                Export CSV
+              </button>
+            </div>
+          </section>
 
-        <section className="card analytics-card--support">
-          <div className="card__header">
-            <div>
-              <h3>Register Snapshot</h3>
-              <p className="muted analytics-card__subtitle">Recent logging activity and register readiness.</p>
-            </div>
-          </div>
-          <ul className="list">
-            <li>
-              <div className="list__title">Filtered Register</div>
-              <div className="list__meta">{filteredFuelLogs.length} logs currently available in the active register dataset</div>
-            </li>
-            <li>
-              <div className="list__title">Most Recent Entry</div>
-              <div className="list__meta">
-                {props.fuelLogs[0]
-                  ? `${vehicleLabelMap[props.fuelLogs[0].vehicle_id] || "Vehicle"} • ${props.fuelLogs[0].fuel_date}`
-                  : "No fuel logs recorded yet"}
+          <section className="card fuel-panel">
+            <div className="fuel-panel__header fuel-panel__header--compact">
+              <div>
+                <span className="fuel-panel__eyebrow">Consumption watch</span>
+                <h3>Highest Demand</h3>
               </div>
-            </li>
-          </ul>
+            </div>
+            {highDemandVehicles.length === 0 ? (
+              <div className="fuel-empty-state">
+                <TrendingUp aria-hidden="true" />
+                <div><strong>No forecast yet</strong><span>Vehicle demand will appear after forecasts run.</span></div>
+              </div>
+            ) : (
+              <div className="fuel-card-list">
+                {highDemandVehicles.map((forecast) => (
+                  <div className="fuel-card-row" key={forecast.vehicle_id}>
+                    <div>
+                      <strong>{forecast.plate_no}</strong>
+                      <span>Next 7 days</span>
+                    </div>
+                    <span>{forecast.forecast_liters_7d.toFixed(1)} L</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="card fuel-panel fuel-panel--wide">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Recent fuel activity</span>
+              <h3>Latest Logs</h3>
+              <p>Recent purchases with vehicle, station, liters, cost, and odometer context.</p>
+            </div>
+            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("register")}>Open Register</button>
+          </div>
+          {recentFuelLogs.length === 0 ? (
+            <div className="fuel-empty-state">
+              <FuelIconGlyph aria-hidden="true" />
+              <div><strong>No fuel logs recorded</strong><span>Add the first fuel purchase from the logging panel.</span></div>
+            </div>
+          ) : (
+            <div className="fuel-card-list">
+              {recentFuelLogs.map((log) => (
+                <button key={log.id} className="fuel-card-row fuel-card-row--button" type="button" onClick={() => setSelectedFuelLog(log)}>
+                  <div>
+                    <strong>{vehicleLabelMap[log.vehicle_id] || "Vehicle"} • {log.fuel_date}</strong>
+                    <span>{log.vendor || "Station not recorded"} • {log.odometer_km ? `${log.odometer_km.toLocaleString()} km` : "Odometer not recorded"}</span>
+                  </div>
+                  <span>{log.liters} L • {log.cost_lkr ? `Rs.${log.cost_lkr.toLocaleString()}` : "Cost pending"}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       </div>
       )}
 
       {activeTab === "forecast" && (
-      <div className="grid analytics-grid">
-        <section className="card analytics-card--wide">
-          <div className="card__header">
+      <div className="fuel-forecast-grid">
+        <section className="card fuel-panel fuel-panel--chart">
+          <div className="fuel-panel__header">
             <div>
+              <span className="fuel-panel__eyebrow">Recent trend</span>
               <h3>Fuel Trend (last 7 days)</h3>
-              <p className="muted analytics-card__subtitle">Daily fuel usage across the fleet over the last 7 days.</p>
+              <p>Daily logged fuel usage across the fleet.</p>
             </div>
           </div>
           {fuelSeries.length === 0 ? (
@@ -316,11 +365,12 @@ export default function Fuel(props: FuelProps) {
           )}
         </section>
 
-        <section className="card analytics-card--wide">
-          <div className="card__header">
+        <section className="card fuel-panel fuel-panel--chart">
+          <div className="fuel-panel__header">
             <div>
+              <span className="fuel-panel__eyebrow">Demand outlook</span>
               <h3>Projected Fuel Demand (next 7 days)</h3>
-              <p className="muted analytics-card__subtitle">Projected day-by-day fuel demand based on the current weekly forecast.</p>
+              <p>Projected day-by-day fuel requirement from the current weekly forecast.</p>
             </div>
           </div>
           {props.fuelForecasts.length === 0 ? (
@@ -345,68 +395,72 @@ export default function Fuel(props: FuelProps) {
           )}
         </section>
 
-        <section className="card analytics-card--support">
-          <div className="card__header">
+        <section className="card fuel-panel fuel-panel--ranking">
+          <div className="fuel-panel__header">
             <div>
-              <h3>Vehicle-wise Fuel Demand</h3>
-              <p className="muted analytics-card__subtitle">Highest predicted vehicle demand over the next 7 days.</p>
+              <span className="fuel-panel__eyebrow">Vehicle ranking</span>
+              <h3>Highest Demand Vehicles</h3>
+              <p>Vehicles expected to need the most fuel in the next week.</p>
             </div>
           </div>
           {vehicleFuelDemand.length === 0 ? (
-            <p className="empty">No vehicle fuel forecast available yet.</p>
+            <div className="fuel-empty-state">
+              <BarChart3 aria-hidden="true" />
+              <div><strong>No forecast available</strong><span>Vehicle demand rankings will appear after forecasts are available.</span></div>
+            </div>
           ) : (
-            <ul className="list">
+            <div className="fuel-card-list">
               {vehicleFuelDemand.map((forecast) => (
-                <li key={forecast.vehicle_id}>
-                  <div className="list__title">{forecast.plate_no}</div>
-                  <div className="list__meta">
-                    {forecast.forecast_liters_7d.toFixed(1)} L next 7 days
+                <div className="fuel-card-row" key={forecast.vehicle_id}>
+                  <div>
+                    <strong>{forecast.plate_no}</strong>
+                    <span>Forecast demand</span>
                   </div>
-                </li>
+                  <span>{forecast.forecast_liters_7d.toFixed(1)} L</span>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       </div>
       )}
 
       {activeTab === "register" && (
-      <div className="grid analytics-grid">
-        <section className="card analytics-card--support">
-          <div className="card__header">
+      <div className="fuel-register-grid">
+        <section className="card fuel-panel">
+          <div className="fuel-panel__header">
             <div>
+              <span className="fuel-panel__eyebrow">Register activity</span>
               <h3>Recent Activity</h3>
-              <p className="muted analytics-card__subtitle">Latest recorded fuel logs for quick review.</p>
+              <p>Latest fuel entries available for quick review.</p>
             </div>
-            <div className="analytics-card__actions">
-              <button className="btn btn--secondary" onClick={props.onExportFuel}>
-                Export CSV
-              </button>
-            </div>
+            <button className="btn btn--secondary btn--compact" onClick={props.onExportFuel}>
+              Export CSV
+            </button>
           </div>
           {props.fuelLogs.length === 0 ? (
-            <p className="empty">No fuel logs recorded yet.</p>
+            <div className="fuel-empty-state"><FuelIconGlyph aria-hidden="true" /><div><strong>No fuel logs recorded</strong><span>New entries will appear here after logging.</span></div></div>
           ) : (
-            <ul className="list">
+            <div className="fuel-card-list">
               {props.fuelLogs.slice(0, 4).map((log) => (
-                <li key={log.id}>
-                  <div className="list__title">
-                    {vehicleLabelMap[log.vehicle_id] || "Vehicle"} • {log.fuel_date}
+                <button key={log.id} className="fuel-card-row fuel-card-row--button" type="button" onClick={() => setSelectedFuelLog(log)}>
+                  <div>
+                    <strong>{vehicleLabelMap[log.vehicle_id] || "Vehicle"} • {log.fuel_date}</strong>
+                    <span>{log.vendor || "Station not recorded"}</span>
                   </div>
-                  <div className="list__meta">
-                    {log.liters}L • {log.cost_lkr ? `Rs.${log.cost_lkr.toLocaleString()}` : "Cost not recorded"}
-                  </div>
-                </li>
+                  <span>{log.liters} L</span>
+                </button>
               ))}
-            </ul>
+            </div>
           )}
         </section>
 
-      <section className="card analytics-register analytics-card--wide">
-        <div className="card__header">
+      <section className="card analytics-register fuel-panel fuel-panel--register">
+        <div className="fuel-panel__header">
           <div>
+            <span className="fuel-panel__eyebrow">Fuel register</span>
             <h3>Fuel Register</h3>
-            <p className="muted analytics-card__subtitle">Search, review, edit, and export the full fuel log history.</p>
+            <p>Search, review, edit, and export the complete fuel log history.</p>
           </div>
         </div>
         {props.fuelLogs.length === 0 ? (
@@ -538,6 +592,13 @@ export default function Fuel(props: FuelProps) {
               </button>
             </div>
             <form id="fuel-form" className="form form--two-col form--scroll" onSubmit={props.onAddFuel}>
+              <div className="form-section-title form__field--full">
+                <CalendarDays aria-hidden="true" />
+                <div>
+                  <h4>Vehicle & Date</h4>
+                  <p>Select the vehicle and the purchase date from the fuel receipt.</p>
+                </div>
+              </div>
               <label>
                 Vehicle
                 <select
@@ -562,6 +623,13 @@ export default function Fuel(props: FuelProps) {
                   required
                 />
               </label>
+              <div className="form-section-title form__field--full">
+                <FuelIconGlyph aria-hidden="true" />
+                <div>
+                  <h4>Fuel Quantity</h4>
+                  <p>Record the number of liters added to the vehicle.</p>
+                </div>
+              </div>
               <label>
                 Liters
                 <input
@@ -572,6 +640,13 @@ export default function Fuel(props: FuelProps) {
                   required
                 />
               </label>
+              <div className="form-section-title form__field--full">
+                <CircleDollarSign aria-hidden="true" />
+                <div>
+                  <h4>Cost & Station</h4>
+                  <p>Add payment amount and station/vendor details for audit trails.</p>
+                </div>
+              </div>
               <label>
                 Cost (LKR)
                 <input
@@ -582,20 +657,27 @@ export default function Fuel(props: FuelProps) {
                 />
               </label>
               <label>
+                Vendor / Station
+                <input
+                  placeholder="e.g., Lanka IOC, Colombo"
+                  value={props.fuelVendor}
+                  onChange={(e) => props.setFuelVendor(e.target.value)}
+                />
+              </label>
+              <div className="form-section-title form__field--full">
+                <Gauge aria-hidden="true" />
+                <div>
+                  <h4>Odometer</h4>
+                  <p>Use the current vehicle reading when available.</p>
+                </div>
+              </div>
+              <label className="form__field--full">
                 Odometer (km)
                 <input
                   type="number"
                   placeholder="Current reading"
                   value={props.fuelOdometer}
                   onChange={(e) => props.setFuelOdometer(e.target.value)}
-                />
-              </label>
-              <label>
-                Vendor / Station
-                <input
-                  placeholder="e.g., Lanka IOC, Colombo"
-                  value={props.fuelVendor}
-                  onChange={(e) => props.setFuelVendor(e.target.value)}
                 />
               </label>
             </form>
@@ -617,7 +699,9 @@ export default function Fuel(props: FuelProps) {
             <div className="modal__header">
               <div>
                 <h3>Fuel Log Details</h3>
-                <p className="modal__subtle">Read-only view of the selected fuel entry.</p>
+                <p className="modal__subtle">
+                  {vehicleLabelMap[selectedFuelLog.vehicle_id] || "Vehicle"} • {selectedFuelLog.fuel_date}
+                </p>
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedFuelLog(null)} aria-label="Close fuel details">
                 ✕
@@ -628,6 +712,7 @@ export default function Fuel(props: FuelProps) {
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedFuelLog.vehicle_id] || "--"}</strong></div>
               <div className="detail-item"><span>Liters</span><strong>{selectedFuelLog.liters}L</strong></div>
               <div className="detail-item"><span>Cost</span><strong>{selectedFuelLog.cost_lkr ? `Rs.${selectedFuelLog.cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Cost / Liter</span><strong>{costPerLiter ? `Rs.${costPerLiter.toFixed(0)}` : "--"}</strong></div>
               <div className="detail-item"><span>Odometer</span><strong>{selectedFuelLog.odometer_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Vendor</span><strong>{selectedFuelLog.vendor || "--"}</strong></div>
             </div>

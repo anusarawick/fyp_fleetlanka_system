@@ -440,25 +440,25 @@ export default function Reports(props: ReportProps) {
 
   return (
     <section className="section">
-      <section className="admin-page reports-page">
+      <section className="admin-page reports-page insights-page insights-page--reports">
       <section className="stats stats--three reports-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><Database aria-hidden="true" /></div>
           <div className="stat-value">{REPORT_TABS.length}</div>
-          <div className="stat-label">Report Datasets</div>
-          <div className="stat-sub">Vehicles, drivers, trips, fuel, maintenance, and documents</div>
+          <div className="stat-label">Report Areas</div>
+          <div className="stat-sub">Operational datasets ready to export</div>
         </div>
         <div className="stat-card stat-card--green">
           <div className="stat-icon"><Filter aria-hidden="true" /></div>
           <div className="stat-value">{activeDataset.length}</div>
           <div className="stat-label">Filtered Rows</div>
-          <div className="stat-sub">Current result set for the active report tab</div>
+          <div className="stat-sub">Current export result</div>
         </div>
         <div className="stat-card stat-card--purple">
           <div className="stat-icon"><Rows3 aria-hidden="true" /></div>
           <div className="stat-value">{totalRowsAcrossDatasets}</div>
-          <div className="stat-label">Indexed Records</div>
-          <div className="stat-sub">Available reportable records across the manager portal</div>
+          <div className="stat-label">Available Records</div>
+          <div className="stat-sub">Rows across all report areas</div>
         </div>
       </section>
 
@@ -475,12 +475,12 @@ export default function Reports(props: ReportProps) {
         ))}
       </nav>
 
-      <div className="grid reports-summary-grid reports-summary-grid--single admin-panel">
-        <section className="card admin-card--summary">
+      <div className="reports-workspace-summary">
+        <section className="card insights-panel">
           <div className="card__header">
             <div>
-              <h3>Current Dataset</h3>
-              <p className="muted admin-card__subtitle">The active tab controls filters, preview rows, and export output.</p>
+              <h3>Export Workspace</h3>
+              <p className="muted admin-card__subtitle">Choose a report area, narrow the records, preview the output, then export the current view.</p>
             </div>
           </div>
           <div className="reports-summary">
@@ -500,11 +500,11 @@ export default function Reports(props: ReportProps) {
         </section>
       </div>
 
-      <section className="card admin-table-section reports-builder-card">
+      <section className="card admin-table-section reports-builder-card insights-panel">
         <div className="card__header">
           <div>
             <h3>Report Builder</h3>
-            <p className="muted admin-card__subtitle">Apply dataset filters, preview the result, and export the current report view.</p>
+            <p className="muted admin-card__subtitle">Use the filters below to prepare a clean operational export.</p>
           </div>
         </div>
         <div className="reports-builder">
@@ -609,7 +609,7 @@ export default function Reports(props: ReportProps) {
           <div className="reports-preview__header">
             <div>
               <h4>Preview</h4>
-              <p className="muted">Current filtered result set for export.</p>
+              <p className="muted">Preview of the records that will be exported.</p>
             </div>
           </div>
           {activeDataset.length === 0 ? <p className="empty">No rows match the current report filters.</p> : previewTable()}

@@ -1,5 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
-import { AlertTriangle, Car, Eye, Pencil, Route, Trash2, Wrench, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CalendarCheck,
+  Car,
+  CheckCircle2,
+  Eye,
+  Gauge,
+  Pencil,
+  Settings2,
+  Trash2,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -16,6 +29,7 @@ type Vehicle = {
   engine_size_cc?: number;
   accident_history_count?: number;
   fuel_efficiency?: number;
+  next_service_due_km?: number;
   maintenance_history?: string;
   reported_issues_count?: number;
   tire_condition?: string;
@@ -45,6 +59,8 @@ type MaintenancePrediction = {
   vehicle_id: string;
   probability: number;
   risk_level: "low" | "medium" | "high";
+  predicted_at?: string;
+  input_features?: Record<string, unknown>;
 };
 
 type ManagementProps = {
@@ -131,13 +147,13 @@ type ManagementProps = {
 
 type ManagementTab = "overview" | "register";
 
-type ManagementIconName = "fleet" | "trips" | "service" | "risk";
+type ManagementIconName = "fleet" | "due" | "serviced" | "risk";
 
 function ManagementIcon({ name }: { name: ManagementIconName }) {
   const icons: Record<ManagementIconName, LucideIcon> = {
     fleet: Car,
-    trips: Route,
-    service: Wrench,
+    due: Gauge,
+    serviced: CalendarCheck,
     risk: AlertTriangle,
   };
   const Icon = icons[name];
@@ -182,6 +198,25 @@ export default function Management(props: ManagementProps) {
   const flaggedVehicles = Object.values(props.maintenancePredictionMap).filter(
     (prediction) => prediction.risk_level === "medium" || prediction.risk_level === "high"
   );
+  const highRiskPredictions = Object.values(props.maintenancePredictionMap).filter(
+    (prediction) => prediction.risk_level === "high"
+  );
+  const dueSoonVehicles = props.vehicles.filter((vehicle) => isDueSoon(props.maintenancePredictionMap[vehicle.id], vehicle));
+  const recentlyServicedVehicles = props.vehicles.filter((vehicle) => getFeatureNumber(props.maintenancePredictionMap[vehicle.id], "days_since_last_maintenance") <= 30);
+  const priorityVehicles = Object.values(props.maintenancePredictionMap)
+    .filter((prediction) => prediction.risk_level === "medium" || prediction.risk_level === "high")
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, 6)
+    .map((prediction) => ({
+      prediction,
+      vehicle: props.vehicles.find((item) => item.id === prediction.vehicle_id),
+    }))
+    .filter((item): item is { prediction: MaintenancePrediction; vehicle: Vehicle } => Boolean(item.vehicle));
+  const componentDueQueue = props.vehicles
+    .map((vehicle) => ({ vehicle, prediction: props.maintenancePredictionMap[vehicle.id] }))
+    .filter(({ prediction, vehicle }) => isDueSoon(prediction, vehicle))
+    .sort((a, b) => highestDueRatio(b.prediction, b.vehicle) - highestDueRatio(a.prediction, a.vehicle))
+    .slice(0, 5);
 
   useEffect(() => {
     if (!props.editingVehicleId && !props.loading) {
@@ -207,6 +242,10 @@ export default function Management(props: ManagementProps) {
   function openEditModal(vehicle: Vehicle) {
     props.onEditVehicle(vehicle);
     setShowVehicleModal(true);
+  }
+
+  function openRegister() {
+    setActiveTab("register");
   }
 
   async function handleVehicleSubmit(e: FormEvent) {
@@ -253,7 +292,7 @@ export default function Management(props: ManagementProps) {
   }
 
   function formatRiskLabel(level?: "low" | "medium" | "high") {
-    if (!level) return "No result";
+    if (!level) return "Needs check";
     return `${level.charAt(0).toUpperCase()}${level.slice(1)} risk`;
   }
 
@@ -262,33 +301,138 @@ export default function Management(props: ManagementProps) {
     return parts.length ? parts.join(" ") : "--";
   }
 
+  function formatNumber(value?: number | string) {
+    if (value === undefined || value === null || value === "") return "--";
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return "--";
+    return parsed.toLocaleString();
+  }
+
+  function formatReadable(value?: string) {
+    if (!value) return "Not recorded";
+    return value
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function getFeatureNumber(prediction: MaintenancePrediction | undefined, key: string, fallback = 0) {
+    const raw = prediction?.input_features?.[key];
+    const parsed = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function highestDueRatio(prediction: MaintenancePrediction | undefined, vehicle?: Vehicle) {
+    const ratios = [
+      getFeatureNumber(prediction, "service_due_ratio", ratioFromVehicle(vehicle?.odometer_km, vehicle?.last_service_odometer_km, vehicle?.service_interval_km)),
+      getFeatureNumber(prediction, "oil_due_ratio", ratioFromVehicle(vehicle?.odometer_km, vehicle?.last_oil_change_odometer_km, vehicle?.oil_interval_km)),
+      getFeatureNumber(prediction, "tyre_wear_ratio", ratioFromVehicle(vehicle?.odometer_km, vehicle?.last_tyre_change_odometer_km, vehicle?.tyre_life_km)),
+      getFeatureNumber(prediction, "brake_wear_ratio", ratioFromVehicle(vehicle?.odometer_km, vehicle?.last_brake_service_odometer_km, vehicle?.brake_life_km)),
+      getFeatureNumber(prediction, "fuel_filter_due_ratio", ratioFromVehicle(vehicle?.odometer_km, vehicle?.last_fuel_filter_change_odometer_km, vehicle?.fuel_filter_interval_km)),
+    ];
+    return Math.max(...ratios.filter(Number.isFinite), 0);
+  }
+
+  function ratioFromVehicle(current?: number, last?: number, interval?: number) {
+    if (!current || !last || !interval) return 0;
+    return Math.max(0, (Number(current) - Number(last)) / Number(interval));
+  }
+
+  function isDueSoon(prediction: MaintenancePrediction | undefined, vehicle?: Vehicle) {
+    if (highestDueRatio(prediction, vehicle) >= 0.85) return true;
+    if (vehicle?.next_service_due_km && vehicle?.odometer_km) {
+      return Number(vehicle.next_service_due_km) - Number(vehicle.odometer_km) <= 1200;
+    }
+    return false;
+  }
+
+  function riskTone(level?: "low" | "medium" | "high") {
+    return level ? `risk-pill--${level}` : "risk-pill--neutral";
+  }
+
+  function formatShortDate(value?: string) {
+    if (!value) return "Not recorded";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Not recorded";
+    return parsed.toLocaleDateString();
+  }
+
+  function predictionFor(vehicle?: Vehicle | null) {
+    if (!vehicle) return undefined;
+    return props.maintenancePredictionMap[vehicle.id];
+  }
+
+  function getRiskReason(vehicle: Vehicle, prediction?: MaintenancePrediction) {
+    const componentSignals = componentRows(vehicle, prediction)
+      .sort((a, b) => b.ratio - a.ratio);
+    const strongest = componentSignals[0];
+    if (strongest && strongest.ratio >= 1) {
+      return `${strongest.label} is past its service limit`;
+    }
+    if (strongest && strongest.ratio >= 0.85) {
+      return `${strongest.label} is close to its service limit`;
+    }
+    const recentRepairs = getFeatureNumber(prediction, "repair_events_last_24w");
+    if (recentRepairs > 0) {
+      return `${formatNumber(recentRepairs)} repair event${recentRepairs === 1 ? "" : "s"} in recent history`;
+    }
+    const stress = getFeatureNumber(prediction, "vehicle_stress_score");
+    if (stress >= 0.7) {
+      return "Heavy usage pattern needs closer review";
+    }
+    return "Review service history and usage profile";
+  }
+
+  function getRiskSummary(vehicle: Vehicle, prediction?: MaintenancePrediction) {
+    if (!prediction) return "No maintenance risk result is available yet for this vehicle.";
+    const reason = getRiskReason(vehicle, prediction);
+    const probability = Math.round(prediction.probability * 100);
+    return `${probability}% maintenance risk. ${reason}.`;
+  }
+
+  function componentRows(vehicle: Vehicle, prediction?: MaintenancePrediction) {
+    return [
+      ["Service", "service_due_ratio", vehicle.last_service_odometer_km, vehicle.service_interval_km],
+      ["Oil", "oil_due_ratio", vehicle.last_oil_change_odometer_km, vehicle.oil_interval_km],
+      ["Tyres", "tyre_wear_ratio", vehicle.last_tyre_change_odometer_km, vehicle.tyre_life_km],
+      ["Brakes", "brake_wear_ratio", vehicle.last_brake_service_odometer_km, vehicle.brake_life_km],
+      ["Fuel filter", "fuel_filter_due_ratio", vehicle.last_fuel_filter_change_odometer_km, vehicle.fuel_filter_interval_km],
+    ].map(([label, featureKey, lastOdometer, interval]) => {
+      const ratio = getFeatureNumber(
+        prediction,
+        featureKey as string,
+        ratioFromVehicle(vehicle.odometer_km, lastOdometer as number | undefined, interval as number | undefined)
+      );
+      return { label: label as string, ratio, lastOdometer, interval };
+    });
+  }
+
   return (
     <section className="section">
-      <section className="admin-page">
+      <section className="admin-page fleet-page">
       <section className="stats stats--four admin-stats">
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><ManagementIcon name="fleet" /></div>
           <div className="stat-value">{props.vehicles.length}</div>
-          <div className="stat-label">Fleet Vehicles</div>
-          <div className="stat-sub">Registered assets</div>
-        </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-icon"><ManagementIcon name="trips" /></div>
-          <div className="stat-value">{props.activeTrips}</div>
-          <div className="stat-label">Active Trips</div>
-          <div className="stat-sub">Vehicles currently dispatched</div>
+          <div className="stat-label">Fleet Size</div>
+          <div className="stat-sub">{activeVehicles.length} active in the working fleet</div>
         </div>
         <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><ManagementIcon name="service" /></div>
-          <div className="stat-value">{maintenanceVehicles.length}</div>
-          <div className="stat-label">In Maintenance</div>
-          <div className="stat-sub">Service-state vehicles</div>
-        </div>
-        <div className="stat-card stat-card--purple">
           <div className="stat-icon"><ManagementIcon name="risk" /></div>
-          <div className="stat-value">{flaggedVehicles.length}</div>
-          <div className="stat-label">Flagged Risk</div>
-          <div className="stat-sub">Medium or high prediction results</div>
+          <div className="stat-value">{highRiskPredictions.length}</div>
+          <div className="stat-label">Needs Review</div>
+          <div className="stat-sub">High-risk vehicles to inspect first</div>
+        </div>
+        <div className="stat-card stat-card--amber">
+          <div className="stat-icon"><ManagementIcon name="due" /></div>
+          <div className="stat-value">{dueSoonVehicles.length}</div>
+          <div className="stat-label">Due Soon</div>
+          <div className="stat-sub">Near service or component limits</div>
+        </div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><ManagementIcon name="serviced" /></div>
+          <div className="stat-value">{recentlyServicedVehicles.length}</div>
+          <div className="stat-label">Recently Serviced</div>
+          <div className="stat-sub">Maintenance activity in 30 days</div>
         </div>
       </section>
 
@@ -310,63 +454,139 @@ export default function Management(props: ManagementProps) {
       </nav>
 
       {activeTab === "overview" && (
-      <div className="grid admin-summary-grid admin-summary-grid--balanced">
-        <section className="card admin-card--action">
-          <div className="card__header">
+      <div className="fleet-workspace">
+        <section className="card fleet-panel fleet-panel--priority">
+          <div className="fleet-panel__header">
             <div>
-              <h3>Fleet Actions</h3>
-              <p className="muted admin-card__subtitle">Create or update vehicle records from one place.</p>
+              <span className="fleet-panel__eyebrow">Service attention</span>
+              <h3>Priority Vehicles</h3>
+              <p>Vehicles that should be checked first, with the strongest service reason shown on each row.</p>
             </div>
-          </div>
-          <div className="admin-action-buttons">
-            <button className="btn" type="button" onClick={openCreateModal}>
-              Add Vehicle
+            <button className="btn btn--secondary btn--compact" type="button" onClick={openRegister}>
+              View Register
             </button>
           </div>
-        </section>
-
-        <section className="card admin-card--summary">
-          <div className="card__header">
-            <div>
-              <h3>Fleet Status</h3>
-              <p className="muted admin-card__subtitle">Current balance between active and maintenance availability.</p>
+          {priorityVehicles.length === 0 ? (
+            <div className="fleet-empty-state">
+              <CheckCircle2 aria-hidden="true" />
+              <div>
+                <strong>No urgent maintenance reviews</strong>
+                <span>Current vehicles are not showing medium or high maintenance risk.</span>
+              </div>
             </div>
-          </div>
-          <ul className="list">
-            <li>
-              <div className="list__title">Active Vehicles</div>
-              <div className="list__meta">{activeVehicles.length} vehicles currently available</div>
-            </li>
-            <li>
-              <div className="list__title">Maintenance State</div>
-              <div className="list__meta">{maintenanceVehicles.length} vehicles currently under service attention</div>
-            </li>
-          </ul>
-        </section>
-
-        <section className="card admin-card--summary">
-          <div className="card__header">
-            <div>
-              <h3>Maintenance Watch</h3>
-              <p className="muted admin-card__subtitle">Latest model-driven attention list for the fleet register.</p>
-            </div>
-          </div>
-          {flaggedVehicles.length === 0 ? (
-            <p className="empty">No medium or high maintenance-risk vehicles yet.</p>
           ) : (
-            <ul className="list">
-              {flaggedVehicles.slice(0, 3).map((prediction) => {
-                const vehicle = props.vehicles.find((item) => item.id === prediction.vehicle_id);
+            <div className="fleet-priority-list">
+              {priorityVehicles.map(({ prediction, vehicle }) => (
+                <button
+                  key={vehicle.id}
+                  className="fleet-priority-item"
+                  type="button"
+                  onClick={() => setViewTarget(vehicle)}
+                >
+                  <div className="fleet-priority-item__main">
+                    <strong>{vehicle.plate_no}</strong>
+                    <span>{formatMakeModel(vehicle)} • {vehicle.vehicle_type || "Vehicle"} • {formatNumber(vehicle.odometer_km)} km</span>
+                  </div>
+                  <div className="fleet-priority-item__reason">
+                    {getRiskReason(vehicle, prediction)}
+                  </div>
+                  <span className={`risk-pill ${riskTone(prediction.risk_level)}`}>
+                    {formatRiskLabel(prediction.risk_level)}
+                    <strong>{Math.round(prediction.probability * 100)}%</strong>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <aside className="fleet-side-stack">
+          <section className="card fleet-panel">
+            <div className="fleet-panel__header fleet-panel__header--compact">
+              <div>
+                <span className="fleet-panel__eyebrow">Actions</span>
+                <h3>Manage Fleet</h3>
+              </div>
+            </div>
+            <div className="fleet-action-stack">
+              <button className="btn" type="button" onClick={openCreateModal}>
+                Add Vehicle
+              </button>
+              <button className="btn btn--secondary" type="button" onClick={openRegister}>
+                View Register
+              </button>
+            </div>
+            <p className="fleet-panel__note">
+              Update service readings after workshop visits so future maintenance reviews stay accurate.
+            </p>
+          </section>
+
+          <section className="card fleet-panel">
+            <div className="fleet-panel__header fleet-panel__header--compact">
+              <div>
+                <span className="fleet-panel__eyebrow">Availability</span>
+                <h3>Fleet Readiness</h3>
+              </div>
+            </div>
+            <div className="fleet-readiness-grid">
+              <div>
+                <span>Active</span>
+                <strong>{activeVehicles.length}</strong>
+              </div>
+              <div>
+                <span>In Service</span>
+                <strong>{maintenanceVehicles.length}</strong>
+              </div>
+              <div>
+                <span>Active Trips</span>
+                <strong>{props.activeTrips}</strong>
+              </div>
+              <div>
+                <span>Flagged</span>
+                <strong>{flaggedVehicles.length}</strong>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <section className="card fleet-panel fleet-panel--signals">
+          <div className="fleet-panel__header">
+            <div>
+              <span className="fleet-panel__eyebrow">Service signals</span>
+              <h3>Due Soon</h3>
+              <p>Vehicles closest to service, oil, brake, tyre, or fuel-filter limits.</p>
+            </div>
+          </div>
+          {componentDueQueue.length === 0 ? (
+            <div className="fleet-empty-state">
+              <CheckCircle2 aria-hidden="true" />
+              <div>
+                <strong>No due items right now</strong>
+                <span>Component readings are within the expected service range.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="fleet-signal-grid">
+              {componentDueQueue.map(({ vehicle, prediction }) => {
+                const ratio = highestDueRatio(prediction, vehicle);
                 return (
-                  <li key={prediction.vehicle_id}>
-                    <div className="list__title">{vehicle?.plate_no || "Vehicle"}</div>
-                    <div className="list__meta">
-                      {formatRiskLabel(prediction.risk_level)} • {Math.round(prediction.probability * 100)}%
+                  <button
+                    className="fleet-signal-card"
+                    type="button"
+                    key={vehicle.id}
+                    onClick={() => setViewTarget(vehicle)}
+                  >
+                    <div>
+                      <strong>{vehicle.plate_no}</strong>
+                      <span>{formatMakeModel(vehicle)}</span>
                     </div>
-                  </li>
+                    <span className={`risk-pill ${ratio >= 1 ? "risk-pill--high" : "risk-pill--medium"}`}>
+                      {Math.round(ratio * 100)}% due
+                    </span>
+                  </button>
                 );
               })}
-            </ul>
+            </div>
           )}
         </section>
       </div>
@@ -377,7 +597,7 @@ export default function Management(props: ManagementProps) {
         <div className="card__header">
           <div>
             <h3>Vehicle Register</h3>
-            <p className="muted admin-card__subtitle">Search, filter, review, and maintain the current fleet record.</p>
+            <p className="muted admin-card__subtitle">Search vehicles, inspect risk, and update fleet records from one place.</p>
           </div>
           <div className="button-row">
             <button className="btn btn--compact" type="button" onClick={openCreateModal}>
@@ -480,7 +700,7 @@ export default function Management(props: ManagementProps) {
                         <strong>{Math.round(latestPrediction.probability * 100)}%</strong>
                       </span>
                     ) : (
-                      <span className="muted">Not run</span>
+                      <span className="risk-pill risk-pill--neutral">Needs check</span>
                     )}
                   </span>
                   <span className="management-table__cell management-table__cell--status" data-label="Status">
@@ -548,7 +768,14 @@ export default function Management(props: ManagementProps) {
                 ✕
               </button>
             </div>
-            <form id="vehicle-form" className="form form--two-col form--scroll" onSubmit={handleVehicleSubmit}>
+            <form id="vehicle-form" className="form form--two-col form--scroll vehicle-form" onSubmit={handleVehicleSubmit}>
+              <div className="form-section-title">
+                <Car aria-hidden="true" />
+                <div>
+                  <h4>Vehicle Details</h4>
+                  <p>Core record used across trips, documents, fuel, and maintenance workflows.</p>
+                </div>
+              </div>
               <label>
                 Plate Number
                 <input
@@ -587,6 +814,7 @@ export default function Management(props: ManagementProps) {
                   <option value="Bus">Bus</option>
                   <option value="Motorcycle">Motorcycle</option>
                   <option value="Van">Van</option>
+                  <option value="Pickup">Pickup</option>
                 </select>
               </label>
               <label>
@@ -635,6 +863,70 @@ export default function Management(props: ManagementProps) {
                   onChange={(e) => props.setEngineSizeCc(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <Activity aria-hidden="true" />
+                <div>
+                  <h4>Usage Profile</h4>
+                  <p>How this vehicle is normally used: work type, roads, load, and expected efficiency.</p>
+                </div>
+              </div>
+              <label>
+                Fuel Type
+                <select value={props.fuelType} onChange={(e) => props.setFuelType(e.target.value)}>
+                  <option value="">Select fuel type</option>
+                  <option value="petrol">Petrol</option>
+                  <option value="diesel">Diesel</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="hybrid_petrol">Hybrid Petrol</option>
+                  <option value="electric">Electric</option>
+                </select>
+              </label>
+              <label>
+                Business Type
+                <select value={props.businessType} onChange={(e) => props.setBusinessType(e.target.value)}>
+                  <option value="">Select business type</option>
+                  <option value="delivery">Delivery</option>
+                  <option value="staff_transport">Staff Transport</option>
+                  <option value="field_service">Field Service</option>
+                  <option value="passenger_transport">Passenger Transport</option>
+                  <option value="mixed_operations">Mixed Operations</option>
+                </select>
+              </label>
+              <label>
+                Road Condition
+                <select value={props.roadConditionPrimary} onChange={(e) => props.setRoadConditionPrimary(e.target.value)}>
+                  <option value="">Select condition</option>
+                  <option value="urban">Urban</option>
+                  <option value="highway">Highway</option>
+                  <option value="rural">Rural</option>
+                  <option value="estate_roads">Estate Roads</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+              </label>
+              <label>
+                Driver Behavior
+                <select value={props.driverBehaviorProfile} onChange={(e) => props.setDriverBehaviorProfile(e.target.value)}>
+                  <option value="">Select behavior</option>
+                  <option value="safe">Safe</option>
+                  <option value="normal">Normal</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+              </label>
+              <label>
+                Expected km/l
+                <input type="number" step="0.1" value={props.expectedKmpl} onChange={(e) => props.setExpectedKmpl(e.target.value)} />
+              </label>
+              <label>
+                Typical Load Factor
+                <input type="number" step="0.01" placeholder="e.g., 1.0" value={props.typicalLoadFactor} onChange={(e) => props.setTypicalLoadFactor(e.target.value)} />
+              </label>
+              <div className="form-section-title">
+                <CheckCircle2 aria-hidden="true" />
+                <div>
+                  <h4>Optional Condition Notes</h4>
+                  <p>Useful workshop notes when a full service interval record is not yet available.</p>
+                </div>
+              </div>
               <label>
                 Accident History Count
                 <input
@@ -698,55 +990,13 @@ export default function Management(props: ManagementProps) {
                   <option value="Weak">Weak</option>
                 </select>
               </label>
-              <label>
-                Fuel Type
-                <select value={props.fuelType} onChange={(e) => props.setFuelType(e.target.value)}>
-                  <option value="">Select fuel type</option>
-                  <option value="petrol">Petrol</option>
-                  <option value="diesel">Diesel</option>
-                  <option value="hybrid">Hybrid</option>
-                  <option value="electric">Electric</option>
-                </select>
-              </label>
-              <label>
-                Business Type
-                <select value={props.businessType} onChange={(e) => props.setBusinessType(e.target.value)}>
-                  <option value="">Select business type</option>
-                  <option value="delivery">Delivery</option>
-                  <option value="staff_transport">Staff Transport</option>
-                  <option value="field_service">Field Service</option>
-                  <option value="passenger_transport">Passenger Transport</option>
-                  <option value="mixed_operations">Mixed Operations</option>
-                </select>
-              </label>
-              <label>
-                Road Condition
-                <select value={props.roadConditionPrimary} onChange={(e) => props.setRoadConditionPrimary(e.target.value)}>
-                  <option value="">Select condition</option>
-                  <option value="urban">Urban</option>
-                  <option value="highway">Highway</option>
-                  <option value="rural">Rural</option>
-                  <option value="estate_roads">Estate Roads</option>
-                  <option value="mixed">Mixed</option>
-                </select>
-              </label>
-              <label>
-                Driver Behavior
-                <select value={props.driverBehaviorProfile} onChange={(e) => props.setDriverBehaviorProfile(e.target.value)}>
-                  <option value="">Select behavior</option>
-                  <option value="safe">Safe</option>
-                  <option value="normal">Normal</option>
-                  <option value="aggressive">Aggressive</option>
-                </select>
-              </label>
-              <label>
-                Expected km/l
-                <input type="number" step="0.1" value={props.expectedKmpl} onChange={(e) => props.setExpectedKmpl(e.target.value)} />
-              </label>
-              <label>
-                Typical Load Factor
-                <input type="number" step="0.01" placeholder="e.g., 1.0" value={props.typicalLoadFactor} onChange={(e) => props.setTypicalLoadFactor(e.target.value)} />
-              </label>
+              <div className="form-section-title">
+                <Wrench aria-hidden="true" />
+                <div>
+                  <h4>Service Intervals</h4>
+                  <p>Intervals and last-service readings used to judge upcoming maintenance needs.</p>
+                </div>
+              </div>
               <label>
                 Service Interval (km)
                 <input type="number" value={props.serviceIntervalKm} onChange={(e) => props.setServiceIntervalKm(e.target.value)} />
@@ -795,6 +1045,13 @@ export default function Management(props: ManagementProps) {
                 Battery Installed
                 <input type="date" value={props.batteryInstalledAt} onChange={(e) => props.setBatteryInstalledAt(e.target.value)} />
               </label>
+              <div className="form-section-title">
+                <Settings2 aria-hidden="true" />
+                <div>
+                  <h4>Availability</h4>
+                  <p>Control whether this vehicle can be assigned to work or held for service.</p>
+                </div>
+              </div>
               <div className="form-toggle-row form-toggle-row--full">
                 <label className="toggle-switch">
                   <span className="toggle-switch__label">Active</span>
@@ -837,33 +1094,109 @@ export default function Management(props: ManagementProps) {
 
       {viewTarget && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Vehicle details">
+          <div className="modal modal--wide modal--details fleet-detail-modal" role="dialog" aria-modal="true" aria-label="Vehicle details">
             <div className="modal__header">
               <div>
-                <h3>Vehicle Details</h3>
-                <p className="modal__subtle">Full vehicle record from the current fleet table.</p>
+                <h3>{viewTarget.plate_no}</h3>
+                <p className="modal__subtle">{formatMakeModel(viewTarget)} • {viewTarget.vehicle_type || "Vehicle"} • {viewTarget.year || "--"}</p>
               </div>
               <button className="modal__close" type="button" onClick={() => setViewTarget(null)} aria-label="Close vehicle details">
                 ✕
               </button>
             </div>
-            <div className="details-grid details-grid--scroll">
-              <div className="detail-item"><span>Plate</span><strong>{viewTarget.plate_no}</strong></div>
-              <div className="detail-item"><span>Make / Model</span><strong>{formatMakeModel(viewTarget)}</strong></div>
-              <div className="detail-item"><span>Vehicle Type</span><strong>{viewTarget.vehicle_type || "--"}</strong></div>
-              <div className="detail-item"><span>Year</span><strong>{viewTarget.year || "--"}</strong></div>
-              <div className="detail-item"><span>Status</span><strong>{viewTarget.status || "--"}</strong></div>
-              <div className="detail-item"><span>Mileage (km)</span><strong>{viewTarget.mileage ?? "--"}</strong></div>
-              <div className="detail-item"><span>Odometer (km)</span><strong>{viewTarget.odometer_km ?? "--"}</strong></div>
-              <div className="detail-item"><span>Transmission</span><strong>{viewTarget.transmission_type || "--"}</strong></div>
-              <div className="detail-item"><span>Engine Size (cc)</span><strong>{viewTarget.engine_size_cc ?? "--"}</strong></div>
-              <div className="detail-item"><span>Accident History</span><strong>{viewTarget.accident_history_count ?? "--"}</strong></div>
-              <div className="detail-item"><span>Fuel Efficiency</span><strong>{viewTarget.fuel_efficiency ?? "--"}</strong></div>
-              <div className="detail-item"><span>Maintenance History</span><strong>{viewTarget.maintenance_history || "--"}</strong></div>
-              <div className="detail-item"><span>Reported Issues</span><strong>{viewTarget.reported_issues_count ?? "--"}</strong></div>
-              <div className="detail-item"><span>Tire Condition</span><strong>{viewTarget.tire_condition || "--"}</strong></div>
-              <div className="detail-item"><span>Brake Condition</span><strong>{viewTarget.brake_condition || "--"}</strong></div>
-              <div className="detail-item"><span>Battery Status</span><strong>{viewTarget.battery_status || "--"}</strong></div>
+            <div className="fleet-detail-body details-grid--scroll">
+              {(() => {
+                const prediction = predictionFor(viewTarget);
+                const probability = prediction ? Math.round(prediction.probability * 100) : null;
+                const components = componentRows(viewTarget, prediction);
+                return (
+                  <>
+                    <section className={`fleet-risk-hero fleet-risk-hero--${prediction?.risk_level || "neutral"}`}>
+                      <div>
+                        <span className="fleet-panel__eyebrow">Maintenance risk</span>
+                        <h4>{prediction ? formatRiskLabel(prediction.risk_level) : "No maintenance check yet"}</h4>
+                        <p>
+                          {prediction
+                            ? getRiskSummary(viewTarget, prediction)
+                            : "Run a maintenance check before using this vehicle for service planning."}
+                        </p>
+                      </div>
+                      <div className="fleet-risk-hero__score">
+                        <strong>{probability ?? "--"}{probability !== null ? "%" : ""}</strong>
+                        <span>{prediction?.predicted_at ? formatShortDate(prediction.predicted_at) : "Latest check"}</span>
+                      </div>
+                    </section>
+
+                    <section className="fleet-detail-section">
+                      <div className="fleet-detail-section__header">
+                        <Car aria-hidden="true" />
+                        <h4>Vehicle Details</h4>
+                      </div>
+                      <div className="details-grid">
+                        <div className="detail-item"><span>Plate</span><strong>{viewTarget.plate_no}</strong></div>
+                        <div className="detail-item"><span>Make / Model</span><strong>{formatMakeModel(viewTarget)}</strong></div>
+                        <div className="detail-item"><span>Type / Year</span><strong>{viewTarget.vehicle_type || "Not recorded"} • {viewTarget.year || "Not recorded"}</strong></div>
+                        <div className="detail-item"><span>Status</span><strong>{formatReadable(viewTarget.status)}</strong></div>
+                        <div className="detail-item"><span>Odometer</span><strong>{formatNumber(viewTarget.odometer_km)} km</strong></div>
+                        <div className="detail-item"><span>Engine / Transmission</span><strong>{formatNumber(viewTarget.engine_size_cc)} cc • {viewTarget.transmission_type || "Not recorded"}</strong></div>
+                      </div>
+                    </section>
+
+                    <section className="fleet-detail-section">
+                      <div className="fleet-detail-section__header">
+                        <Activity aria-hidden="true" />
+                        <h4>Usage Profile</h4>
+                      </div>
+                      <div className="details-grid">
+                        <div className="detail-item"><span>Fuel Type</span><strong>{formatReadable(viewTarget.fuel_type)}</strong></div>
+                        <div className="detail-item"><span>Business Type</span><strong>{formatReadable(viewTarget.business_type)}</strong></div>
+                        <div className="detail-item"><span>Road Condition</span><strong>{formatReadable(viewTarget.road_condition_primary)}</strong></div>
+                        <div className="detail-item"><span>Driver Behavior</span><strong>{formatReadable(viewTarget.driver_behavior_profile)}</strong></div>
+                        <div className="detail-item"><span>Expected km/l</span><strong>{viewTarget.expected_kmpl ?? viewTarget.fuel_efficiency ?? "Not recorded"}</strong></div>
+                        <div className="detail-item"><span>Load Factor</span><strong>{viewTarget.typical_load_factor ?? "Not recorded"}</strong></div>
+                      </div>
+                    </section>
+
+                    <section className="fleet-detail-section">
+                      <div className="fleet-detail-section__header">
+                        <Wrench aria-hidden="true" />
+                        <h4>Service Intervals</h4>
+                      </div>
+                      <div className="fleet-component-list">
+                        {components.map((component) => (
+                          <div className="fleet-component-row" key={component.label}>
+                            <div>
+                              <strong>{component.label}</strong>
+                              <span>Last {formatNumber(component.lastOdometer as number | undefined)} km • interval {formatNumber(component.interval as number | undefined)} km</span>
+                            </div>
+                            <div className="fleet-component-meter" aria-label={`${component.label} ${Math.round(component.ratio * 100)} percent due`}>
+                              <span style={{ width: `${Math.min(100, Math.max(4, component.ratio * 100))}%` }} />
+                            </div>
+                            <span className={`risk-pill ${component.ratio >= 1 ? "risk-pill--high" : component.ratio >= 0.85 ? "risk-pill--medium" : "risk-pill--low"}`}>
+                              {Math.round(component.ratio * 100)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    <section className="fleet-detail-section">
+                      <div className="fleet-detail-section__header">
+                        <Gauge aria-hidden="true" />
+                        <h4>Service Signals</h4>
+                      </div>
+                      <div className="details-grid">
+                        <div className="detail-item"><span>Vehicle Stress</span><strong>{getFeatureNumber(prediction, "vehicle_stress_score").toFixed(2)}</strong></div>
+                        <div className="detail-item"><span>Wear Score</span><strong>{getFeatureNumber(prediction, "component_wear_score").toFixed(2)}</strong></div>
+                        <div className="detail-item"><span>Recent Events</span><strong>{formatNumber(getFeatureNumber(prediction, "maintenance_events_last_12w"))} in 12 weeks</strong></div>
+                        <div className="detail-item"><span>Recent Repairs</span><strong>{formatNumber(getFeatureNumber(prediction, "repair_events_last_24w"))} in 24 weeks</strong></div>
+                        <div className="detail-item"><span>Days Since Maintenance</span><strong>{formatNumber(getFeatureNumber(prediction, "days_since_last_maintenance"))}</strong></div>
+                        <div className="detail-item"><span>Accidents</span><strong>{formatNumber(viewTarget.accident_history_count)}</strong></div>
+                      </div>
+                    </section>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

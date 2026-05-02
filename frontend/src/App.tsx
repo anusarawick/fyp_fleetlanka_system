@@ -405,7 +405,7 @@ function ManagerRoutes() {
         path="/trips"
         element={
           <>
-            <Topbar title="Trips" subtitle="Trip history and live session details" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Trips" subtitle="Dispatch, route monitoring, and saved locations" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <TripsPage
               trips={data.trips}
               vehicles={data.vehicles}
@@ -423,7 +423,7 @@ function ManagerRoutes() {
         path="/management"
         element={
           <>
-            <Topbar title="Fleet Management" subtitle="Create and manage data" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Fleet Management" subtitle="Vehicles, service readiness, and maintenance risk" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Management
               vehicles={data.vehicles}
               maintenancePredictionMap={data.maintenancePredictionMap}
@@ -512,7 +512,7 @@ function ManagerRoutes() {
         path="/drivers"
         element={
           <>
-            <Topbar title="Drivers" subtitle="Manage driver accounts" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Drivers" subtitle="Roster readiness and driver access" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Drivers
               drivers={data.drivers}
               loading={loading}
@@ -539,7 +539,7 @@ function ManagerRoutes() {
         path="/fuel"
         element={
           <>
-            <Topbar title="Fuel Analytics" subtitle="Track fuel usage" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Fuel" subtitle="Spend, consumption, and fuel log control" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Fuel
               vehicles={data.vehicles}
               fuelLogs={data.fuelLogs}
@@ -641,7 +641,7 @@ function ManagerRoutes() {
         path="/documents"
         element={
           <>
-            <Topbar title="Documents" subtitle="Compliance tracking" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Documents" subtitle="Renewals, ownership, and coverage" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Documents
               vehicles={data.vehicles}
               drivers={data.drivers}
@@ -674,7 +674,7 @@ function ManagerRoutes() {
         path="/analytics"
         element={
           <>
-            <Topbar title="Analytics" subtitle="Trends and exports" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Analytics" subtitle="Fleet performance and operating insight" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Analytics
               maintenance={data.maintenance}
               fuelCostTotal={data.fuelCostTotal}
@@ -701,7 +701,7 @@ function ManagerRoutes() {
         path="/ml"
         element={
           <>
-            <Topbar title="ML Predictions" subtitle="Run model inference" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="ML Predictions" subtitle="Maintenance risk checks and history" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <MLPredictions
               vehicles={data.vehicles}
               mlVehicleId={data.mlVehicleId}
@@ -718,7 +718,7 @@ function ManagerRoutes() {
         path="/reports"
         element={
           <>
-            <Topbar title="Reports" subtitle="Exports and summaries" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Reports" subtitle="Filtered exports and operational records" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Reports
               vehicles={data.vehicles}
               drivers={data.drivers}
@@ -736,7 +736,7 @@ function ManagerRoutes() {
         path="/compliance"
         element={
           <>
-            <Topbar title="Compliance" subtitle="Renewals and upcoming actions" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Compliance" subtitle="Priority alerts and renewal actions" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Compliance
               documents={data.documents}
               maintenance={data.maintenance}
@@ -795,7 +795,7 @@ function ServiceRoutes() {
           <>
             <Topbar
               title="Service Center Dashboard"
-              subtitle="Assigned service work"
+              subtitle="Booking queue and workshop workload"
               userName={userName}
               userRole={userRole}
               onSignOut={handleSignOut}
@@ -810,7 +810,7 @@ function ServiceRoutes() {
           <>
             <Topbar
               title="Service Bookings"
-              subtitle="Manage assigned bookings"
+              subtitle="Accept, complete, and update service jobs"
               userName={userName}
               userRole={userRole}
               onSignOut={handleSignOut}

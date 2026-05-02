@@ -95,25 +95,25 @@ export default function MLPredictions(props: MLPredictionsProps) {
 
   return (
     <section className="section">
-      <section className="admin-page">
+      <section className="admin-page ml-page insights-page insights-page--ml">
         <section className="stats stats--three admin-stats">
           <div className="stat-card stat-card--blue">
             <div className="stat-icon"><Car aria-hidden="true" /></div>
             <div className="stat-value">{props.vehicles.length}</div>
             <div className="stat-label">Tracked Vehicles</div>
-            <div className="stat-sub">Vehicles available for maintenance model checks</div>
+            <div className="stat-sub">Ready for maintenance checks</div>
           </div>
           <div className="stat-card stat-card--green">
             <div className="stat-icon"><BrainCircuit aria-hidden="true" /></div>
             <div className="stat-value">{props.maintenancePredictions.length}</div>
             <div className="stat-label">Prediction Runs</div>
-            <div className="stat-sub">Stored prediction snapshots across the fleet</div>
+            <div className="stat-sub">Stored risk snapshots</div>
           </div>
           <div className="stat-card stat-card--purple">
             <div className="stat-icon"><History aria-hidden="true" /></div>
             <div className="stat-value">{selectedVehicleHistory.length}</div>
             <div className="stat-label">Selected History</div>
-            <div className="stat-sub">Runs currently available for the chosen vehicle</div>
+            <div className="stat-sub">Previous checks for this vehicle</div>
           </div>
         </section>
 
@@ -135,12 +135,12 @@ export default function MLPredictions(props: MLPredictionsProps) {
         </nav>
 
         {activeTab === "run" && (
-          <div className="grid admin-summary-grid admin-summary-grid--two admin-panel">
-            <section className="card admin-card--action">
+          <div className="ml-workspace-grid">
+            <section className="card ml-run-panel">
               <div className="card__header">
                 <div>
                   <h3>Vehicle Maintenance Check</h3>
-                  <p className="muted admin-card__subtitle">Run the current maintenance model against a selected vehicle and review the latest result immediately.</p>
+                  <p className="muted admin-card__subtitle">Select a vehicle, run a maintenance risk check, and review the result immediately.</p>
                 </div>
               </div>
               <div className="form">
@@ -169,18 +169,18 @@ export default function MLPredictions(props: MLPredictionsProps) {
               </div>
             </section>
 
-            <section className="card admin-card--summary">
+            <section className="card ml-result-panel">
               <div className="card__header">
                 <div>
                   <h3>Latest Result</h3>
-                  <p className="muted admin-card__subtitle">Current prediction snapshot for the selected vehicle.</p>
+              <p className="muted admin-card__subtitle">Latest saved risk level and probability for the selected vehicle.</p>
                 </div>
               </div>
               {selectedVehiclePrediction ? (
                 <div className="prediction-summary">
-                  <div className="result">
-                    Latest result: {selectedVehiclePrediction.risk_level.toUpperCase()}{" "}
-                    ({(selectedVehiclePrediction.probability * 100).toFixed(0)}%)
+                  <div className={`ml-risk-result ml-risk-result--${selectedVehiclePrediction.risk_level}`}>
+                    <span>{formatRiskLabel(selectedVehiclePrediction.risk_level)}</span>
+                    <strong>{(selectedVehiclePrediction.probability * 100).toFixed(0)}%</strong>
                   </div>
                   {latestPrediction ? (
                     <div className="prediction-audit__meta">
@@ -203,12 +203,12 @@ export default function MLPredictions(props: MLPredictionsProps) {
         )}
 
         {activeTab === "audit" && (
-          <div className="grid admin-summary-grid admin-summary-grid--two admin-panel">
-            <section className="card admin-card--summary">
+          <div className="ml-workspace-grid">
+            <section className="card insights-panel">
               <div className="card__header">
                 <div>
                   <h3>Prediction History</h3>
-                  <p className="muted admin-card__subtitle">Recent stored runs for the selected vehicle, newest first.</p>
+                  <p className="muted admin-card__subtitle">Recent saved checks for the selected vehicle, newest first.</p>
                 </div>
               </div>
               {selectedVehicleHistory.length === 0 ? (
@@ -227,11 +227,11 @@ export default function MLPredictions(props: MLPredictionsProps) {
               )}
             </section>
 
-            <section className="card admin-card--summary">
+            <section className="card insights-panel">
               <div className="card__header">
                 <div>
-                  <h3>What Changed</h3>
-                  <p className="muted admin-card__subtitle">Diff view between the latest run and the previous prediction snapshot.</p>
+                  <h3>Risk Movement</h3>
+                  <p className="muted admin-card__subtitle">Changes between the latest check and the previous saved result.</p>
                 </div>
               </div>
               {latestPrediction ? (
