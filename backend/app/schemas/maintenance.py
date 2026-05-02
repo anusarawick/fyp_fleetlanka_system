@@ -11,6 +11,9 @@ class MaintenanceCreate(BaseModel):
     service_booking_id: Optional[str] = None
     service_date: str
     service_type: Optional[str] = None
+    event_type: Optional[str] = None
+    event_category: Optional[str] = None
+    severity: Optional[str] = None
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None
@@ -25,6 +28,9 @@ class MaintenanceOut(BaseModel):
     service_booking_id: Optional[str] = None
     service_date: str
     service_type: Optional[str] = None
+    event_type: Optional[str] = None
+    event_category: Optional[str] = None
+    severity: Optional[str] = None
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None
@@ -36,6 +42,9 @@ class MaintenanceUpdate(BaseModel):
     service_booking_id: Optional[str] = None
     service_date: Optional[str] = None
     service_type: Optional[str] = None
+    event_type: Optional[str] = None
+    event_category: Optional[str] = None
+    severity: Optional[str] = None
     cost_lkr: Optional[float] = None
     odometer_km: Optional[float] = None
     next_service_due_km: Optional[float] = None

@@ -26,6 +26,24 @@ export type Vehicle = {
   recent_trip_count_30d?: number;
   recent_fuel_efficiency_avg?: number;
   service_center_visits_12m?: number;
+  fuel_type?: string;
+  business_type?: string;
+  road_condition_primary?: string;
+  driver_behavior_profile?: string;
+  expected_kmpl?: number;
+  typical_load_factor?: number;
+  service_interval_km?: number;
+  oil_interval_km?: number;
+  tyre_life_km?: number;
+  brake_life_km?: number;
+  battery_life_months?: number;
+  fuel_filter_interval_km?: number;
+  last_service_odometer_km?: number;
+  last_oil_change_odometer_km?: number;
+  last_tyre_change_odometer_km?: number;
+  last_brake_service_odometer_km?: number;
+  last_fuel_filter_change_odometer_km?: number;
+  battery_installed_at?: string;
 };
 
 export type Driver = {
@@ -124,6 +142,9 @@ export type Maintenance = {
   service_booking_id?: string;
   service_date: string;
   service_type?: string;
+  event_type?: string;
+  event_category?: string;
+  severity?: string;
   cost_lkr?: number;
   odometer_km?: number;
   next_service_due_km?: number;

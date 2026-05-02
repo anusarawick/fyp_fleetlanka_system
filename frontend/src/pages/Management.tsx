@@ -21,6 +21,24 @@ type Vehicle = {
   tire_condition?: string;
   brake_condition?: string;
   battery_status?: string;
+  fuel_type?: string;
+  business_type?: string;
+  road_condition_primary?: string;
+  driver_behavior_profile?: string;
+  expected_kmpl?: number;
+  typical_load_factor?: number;
+  service_interval_km?: number;
+  oil_interval_km?: number;
+  tyre_life_km?: number;
+  brake_life_km?: number;
+  battery_life_months?: number;
+  fuel_filter_interval_km?: number;
+  last_service_odometer_km?: number;
+  last_oil_change_odometer_km?: number;
+  last_tyre_change_odometer_km?: number;
+  last_brake_service_odometer_km?: number;
+  last_fuel_filter_change_odometer_km?: number;
+  battery_installed_at?: string;
 };
 
 type MaintenancePrediction = {
@@ -67,6 +85,42 @@ type ManagementProps = {
   setBrakeCondition: (v: string) => void;
   batteryStatus: string;
   setBatteryStatus: (v: string) => void;
+  fuelType: string;
+  setFuelType: (v: string) => void;
+  businessType: string;
+  setBusinessType: (v: string) => void;
+  roadConditionPrimary: string;
+  setRoadConditionPrimary: (v: string) => void;
+  driverBehaviorProfile: string;
+  setDriverBehaviorProfile: (v: string) => void;
+  expectedKmpl: string;
+  setExpectedKmpl: (v: string) => void;
+  typicalLoadFactor: string;
+  setTypicalLoadFactor: (v: string) => void;
+  serviceIntervalKm: string;
+  setServiceIntervalKm: (v: string) => void;
+  oilIntervalKm: string;
+  setOilIntervalKm: (v: string) => void;
+  tyreLifeKm: string;
+  setTyreLifeKm: (v: string) => void;
+  brakeLifeKm: string;
+  setBrakeLifeKm: (v: string) => void;
+  batteryLifeMonths: string;
+  setBatteryLifeMonths: (v: string) => void;
+  fuelFilterIntervalKm: string;
+  setFuelFilterIntervalKm: (v: string) => void;
+  lastServiceOdometerKm: string;
+  setLastServiceOdometerKm: (v: string) => void;
+  lastOilChangeOdometerKm: string;
+  setLastOilChangeOdometerKm: (v: string) => void;
+  lastTyreChangeOdometerKm: string;
+  setLastTyreChangeOdometerKm: (v: string) => void;
+  lastBrakeServiceOdometerKm: string;
+  setLastBrakeServiceOdometerKm: (v: string) => void;
+  lastFuelFilterChangeOdometerKm: string;
+  setLastFuelFilterChangeOdometerKm: (v: string) => void;
+  batteryInstalledAt: string;
+  setBatteryInstalledAt: (v: string) => void;
   activeTrips: number;
   editingVehicleId: string | null;
   onSaveVehicle: (e: FormEvent) => void;
@@ -643,6 +697,103 @@ export default function Management(props: ManagementProps) {
                   <option value="Good">Good</option>
                   <option value="Weak">Weak</option>
                 </select>
+              </label>
+              <label>
+                Fuel Type
+                <select value={props.fuelType} onChange={(e) => props.setFuelType(e.target.value)}>
+                  <option value="">Select fuel type</option>
+                  <option value="petrol">Petrol</option>
+                  <option value="diesel">Diesel</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="electric">Electric</option>
+                </select>
+              </label>
+              <label>
+                Business Type
+                <select value={props.businessType} onChange={(e) => props.setBusinessType(e.target.value)}>
+                  <option value="">Select business type</option>
+                  <option value="delivery">Delivery</option>
+                  <option value="staff_transport">Staff Transport</option>
+                  <option value="field_service">Field Service</option>
+                  <option value="passenger_transport">Passenger Transport</option>
+                  <option value="mixed_operations">Mixed Operations</option>
+                </select>
+              </label>
+              <label>
+                Road Condition
+                <select value={props.roadConditionPrimary} onChange={(e) => props.setRoadConditionPrimary(e.target.value)}>
+                  <option value="">Select condition</option>
+                  <option value="urban">Urban</option>
+                  <option value="highway">Highway</option>
+                  <option value="rural">Rural</option>
+                  <option value="estate_roads">Estate Roads</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+              </label>
+              <label>
+                Driver Behavior
+                <select value={props.driverBehaviorProfile} onChange={(e) => props.setDriverBehaviorProfile(e.target.value)}>
+                  <option value="">Select behavior</option>
+                  <option value="safe">Safe</option>
+                  <option value="normal">Normal</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+              </label>
+              <label>
+                Expected km/l
+                <input type="number" step="0.1" value={props.expectedKmpl} onChange={(e) => props.setExpectedKmpl(e.target.value)} />
+              </label>
+              <label>
+                Typical Load Factor
+                <input type="number" step="0.01" placeholder="e.g., 1.0" value={props.typicalLoadFactor} onChange={(e) => props.setTypicalLoadFactor(e.target.value)} />
+              </label>
+              <label>
+                Service Interval (km)
+                <input type="number" value={props.serviceIntervalKm} onChange={(e) => props.setServiceIntervalKm(e.target.value)} />
+              </label>
+              <label>
+                Oil Interval (km)
+                <input type="number" value={props.oilIntervalKm} onChange={(e) => props.setOilIntervalKm(e.target.value)} />
+              </label>
+              <label>
+                Tyre Life (km)
+                <input type="number" value={props.tyreLifeKm} onChange={(e) => props.setTyreLifeKm(e.target.value)} />
+              </label>
+              <label>
+                Brake Life (km)
+                <input type="number" value={props.brakeLifeKm} onChange={(e) => props.setBrakeLifeKm(e.target.value)} />
+              </label>
+              <label>
+                Battery Life (months)
+                <input type="number" value={props.batteryLifeMonths} onChange={(e) => props.setBatteryLifeMonths(e.target.value)} />
+              </label>
+              <label>
+                Fuel Filter Interval (km)
+                <input type="number" value={props.fuelFilterIntervalKm} onChange={(e) => props.setFuelFilterIntervalKm(e.target.value)} />
+              </label>
+              <label>
+                Last Service Odometer
+                <input type="number" value={props.lastServiceOdometerKm} onChange={(e) => props.setLastServiceOdometerKm(e.target.value)} />
+              </label>
+              <label>
+                Last Oil Change Odometer
+                <input type="number" value={props.lastOilChangeOdometerKm} onChange={(e) => props.setLastOilChangeOdometerKm(e.target.value)} />
+              </label>
+              <label>
+                Last Tyre Change Odometer
+                <input type="number" value={props.lastTyreChangeOdometerKm} onChange={(e) => props.setLastTyreChangeOdometerKm(e.target.value)} />
+              </label>
+              <label>
+                Last Brake Service Odometer
+                <input type="number" value={props.lastBrakeServiceOdometerKm} onChange={(e) => props.setLastBrakeServiceOdometerKm(e.target.value)} />
+              </label>
+              <label>
+                Last Fuel Filter Odometer
+                <input type="number" value={props.lastFuelFilterChangeOdometerKm} onChange={(e) => props.setLastFuelFilterChangeOdometerKm(e.target.value)} />
+              </label>
+              <label>
+                Battery Installed
+                <input type="date" value={props.batteryInstalledAt} onChange={(e) => props.setBatteryInstalledAt(e.target.value)} />
               </label>
               <div className="form-toggle-row form-toggle-row--full">
                 <label className="toggle-switch">

@@ -92,6 +92,42 @@ type DataContextType = {
     setBrakeCondition: (v: string) => void;
     batteryStatus: string;
     setBatteryStatus: (v: string) => void;
+    fuelType: string;
+    setFuelType: (v: string) => void;
+    businessType: string;
+    setBusinessType: (v: string) => void;
+    roadConditionPrimary: string;
+    setRoadConditionPrimary: (v: string) => void;
+    driverBehaviorProfile: string;
+    setDriverBehaviorProfile: (v: string) => void;
+    expectedKmpl: string;
+    setExpectedKmpl: (v: string) => void;
+    typicalLoadFactor: string;
+    setTypicalLoadFactor: (v: string) => void;
+    serviceIntervalKm: string;
+    setServiceIntervalKm: (v: string) => void;
+    oilIntervalKm: string;
+    setOilIntervalKm: (v: string) => void;
+    tyreLifeKm: string;
+    setTyreLifeKm: (v: string) => void;
+    brakeLifeKm: string;
+    setBrakeLifeKm: (v: string) => void;
+    batteryLifeMonths: string;
+    setBatteryLifeMonths: (v: string) => void;
+    fuelFilterIntervalKm: string;
+    setFuelFilterIntervalKm: (v: string) => void;
+    lastServiceOdometerKm: string;
+    setLastServiceOdometerKm: (v: string) => void;
+    lastOilChangeOdometerKm: string;
+    setLastOilChangeOdometerKm: (v: string) => void;
+    lastTyreChangeOdometerKm: string;
+    setLastTyreChangeOdometerKm: (v: string) => void;
+    lastBrakeServiceOdometerKm: string;
+    setLastBrakeServiceOdometerKm: (v: string) => void;
+    lastFuelFilterChangeOdometerKm: string;
+    setLastFuelFilterChangeOdometerKm: (v: string) => void;
+    batteryInstalledAt: string;
+    setBatteryInstalledAt: (v: string) => void;
     editingVehicleId: string | null;
 
     // Driver form state
@@ -140,6 +176,12 @@ type DataContextType = {
     setMaintDate: (v: string) => void;
     maintType: string;
     setMaintType: (v: string) => void;
+    maintEventType: string;
+    setMaintEventType: (v: string) => void;
+    maintEventCategory: string;
+    setMaintEventCategory: (v: string) => void;
+    maintSeverity: string;
+    setMaintSeverity: (v: string) => void;
     maintCost: string;
     setMaintCost: (v: string) => void;
     maintOdometer: string;
@@ -400,6 +442,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [tireCondition, setTireCondition] = useState("");
     const [brakeCondition, setBrakeCondition] = useState("");
     const [batteryStatus, setBatteryStatus] = useState("");
+    const [fuelType, setFuelType] = useState("");
+    const [businessType, setBusinessType] = useState("");
+    const [roadConditionPrimary, setRoadConditionPrimary] = useState("");
+    const [driverBehaviorProfile, setDriverBehaviorProfile] = useState("");
+    const [expectedKmpl, setExpectedKmpl] = useState("");
+    const [typicalLoadFactor, setTypicalLoadFactor] = useState("");
+    const [serviceIntervalKm, setServiceIntervalKm] = useState("");
+    const [oilIntervalKm, setOilIntervalKm] = useState("");
+    const [tyreLifeKm, setTyreLifeKm] = useState("");
+    const [brakeLifeKm, setBrakeLifeKm] = useState("");
+    const [batteryLifeMonths, setBatteryLifeMonths] = useState("");
+    const [fuelFilterIntervalKm, setFuelFilterIntervalKm] = useState("");
+    const [lastServiceOdometerKm, setLastServiceOdometerKm] = useState("");
+    const [lastOilChangeOdometerKm, setLastOilChangeOdometerKm] = useState("");
+    const [lastTyreChangeOdometerKm, setLastTyreChangeOdometerKm] = useState("");
+    const [lastBrakeServiceOdometerKm, setLastBrakeServiceOdometerKm] = useState("");
+    const [lastFuelFilterChangeOdometerKm, setLastFuelFilterChangeOdometerKm] = useState("");
+    const [batteryInstalledAt, setBatteryInstalledAt] = useState("");
     const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
 
     // Driver form
@@ -442,6 +502,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [maintVehicle, setMaintVehicle] = useState("");
     const [maintDate, setMaintDate] = useState("");
     const [maintType, setMaintType] = useState("");
+    const [maintEventType, setMaintEventType] = useState("");
+    const [maintEventCategory, setMaintEventCategory] = useState("");
+    const [maintSeverity, setMaintSeverity] = useState("");
     const [maintCost, setMaintCost] = useState("");
     const [maintOdometer, setMaintOdometer] = useState("");
     const [maintNextDue, setMaintNextDue] = useState("");
@@ -1104,6 +1167,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintVehicle("");
         setMaintDate("");
         setMaintType("");
+        setMaintEventType("");
+        setMaintEventCategory("");
+        setMaintSeverity("");
         setMaintCost("");
         setMaintOdometer("");
         setMaintNextDue("");
@@ -1135,6 +1201,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDocNumber("");
         setDocExpiry("");
         setEditingDocumentId(null);
+        resetVehicleMlFields();
     }
 
     // Handlers
@@ -1166,6 +1233,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    function resetVehicleMlFields() {
+        setFuelType("");
+        setBusinessType("");
+        setRoadConditionPrimary("");
+        setDriverBehaviorProfile("");
+        setExpectedKmpl("");
+        setTypicalLoadFactor("");
+        setServiceIntervalKm("");
+        setOilIntervalKm("");
+        setTyreLifeKm("");
+        setBrakeLifeKm("");
+        setBatteryLifeMonths("");
+        setFuelFilterIntervalKm("");
+        setLastServiceOdometerKm("");
+        setLastOilChangeOdometerKm("");
+        setLastTyreChangeOdometerKm("");
+        setLastBrakeServiceOdometerKm("");
+        setLastFuelFilterChangeOdometerKm("");
+        setBatteryInstalledAt("");
+    }
+
     async function handleSaveVehicle(e: FormEvent) {
         e.preventDefault();
         if (!token || !orgId) return;
@@ -1195,6 +1283,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 tire_condition: tireCondition || undefined,
                 brake_condition: brakeCondition || undefined,
                 battery_status: batteryStatus || undefined,
+                fuel_type: fuelType || undefined,
+                business_type: businessType || undefined,
+                road_condition_primary: roadConditionPrimary || undefined,
+                driver_behavior_profile: driverBehaviorProfile || undefined,
+                expected_kmpl: expectedKmpl ? Number(expectedKmpl) : undefined,
+                typical_load_factor: typicalLoadFactor ? Number(typicalLoadFactor) : undefined,
+                service_interval_km: serviceIntervalKm ? Number(serviceIntervalKm) : undefined,
+                oil_interval_km: oilIntervalKm ? Number(oilIntervalKm) : undefined,
+                tyre_life_km: tyreLifeKm ? Number(tyreLifeKm) : undefined,
+                brake_life_km: brakeLifeKm ? Number(brakeLifeKm) : undefined,
+                battery_life_months: batteryLifeMonths ? Number(batteryLifeMonths) : undefined,
+                fuel_filter_interval_km: fuelFilterIntervalKm ? Number(fuelFilterIntervalKm) : undefined,
+                last_service_odometer_km: lastServiceOdometerKm ? Number(lastServiceOdometerKm) : undefined,
+                last_oil_change_odometer_km: lastOilChangeOdometerKm ? Number(lastOilChangeOdometerKm) : undefined,
+                last_tyre_change_odometer_km: lastTyreChangeOdometerKm ? Number(lastTyreChangeOdometerKm) : undefined,
+                last_brake_service_odometer_km: lastBrakeServiceOdometerKm ? Number(lastBrakeServiceOdometerKm) : undefined,
+                last_fuel_filter_change_odometer_km: lastFuelFilterChangeOdometerKm ? Number(lastFuelFilterChangeOdometerKm) : undefined,
+                battery_installed_at: batteryInstalledAt || undefined,
             };
             let savedVehicleId: string;
             if (editingVehicleId) {
@@ -1224,6 +1330,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setTireCondition("");
             setBrakeCondition("");
             setBatteryStatus("");
+            resetVehicleMlFields();
             setEditingVehicleId(null);
         } catch (err: any) {
             setError(err.message || "Create failed");
@@ -1267,6 +1374,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setTireCondition(vehicle.tire_condition || "");
         setBrakeCondition(vehicle.brake_condition || "");
         setBatteryStatus(vehicle.battery_status || "");
+        setFuelType(vehicle.fuel_type || "");
+        setBusinessType(vehicle.business_type || "");
+        setRoadConditionPrimary(vehicle.road_condition_primary || "");
+        setDriverBehaviorProfile(vehicle.driver_behavior_profile || "");
+        setExpectedKmpl(vehicle.expected_kmpl !== undefined && vehicle.expected_kmpl !== null ? String(vehicle.expected_kmpl) : "");
+        setTypicalLoadFactor(vehicle.typical_load_factor !== undefined && vehicle.typical_load_factor !== null ? String(vehicle.typical_load_factor) : "");
+        setServiceIntervalKm(vehicle.service_interval_km !== undefined && vehicle.service_interval_km !== null ? String(vehicle.service_interval_km) : "");
+        setOilIntervalKm(vehicle.oil_interval_km !== undefined && vehicle.oil_interval_km !== null ? String(vehicle.oil_interval_km) : "");
+        setTyreLifeKm(vehicle.tyre_life_km !== undefined && vehicle.tyre_life_km !== null ? String(vehicle.tyre_life_km) : "");
+        setBrakeLifeKm(vehicle.brake_life_km !== undefined && vehicle.brake_life_km !== null ? String(vehicle.brake_life_km) : "");
+        setBatteryLifeMonths(vehicle.battery_life_months !== undefined && vehicle.battery_life_months !== null ? String(vehicle.battery_life_months) : "");
+        setFuelFilterIntervalKm(vehicle.fuel_filter_interval_km !== undefined && vehicle.fuel_filter_interval_km !== null ? String(vehicle.fuel_filter_interval_km) : "");
+        setLastServiceOdometerKm(vehicle.last_service_odometer_km !== undefined && vehicle.last_service_odometer_km !== null ? String(vehicle.last_service_odometer_km) : "");
+        setLastOilChangeOdometerKm(vehicle.last_oil_change_odometer_km !== undefined && vehicle.last_oil_change_odometer_km !== null ? String(vehicle.last_oil_change_odometer_km) : "");
+        setLastTyreChangeOdometerKm(vehicle.last_tyre_change_odometer_km !== undefined && vehicle.last_tyre_change_odometer_km !== null ? String(vehicle.last_tyre_change_odometer_km) : "");
+        setLastBrakeServiceOdometerKm(vehicle.last_brake_service_odometer_km !== undefined && vehicle.last_brake_service_odometer_km !== null ? String(vehicle.last_brake_service_odometer_km) : "");
+        setLastFuelFilterChangeOdometerKm(vehicle.last_fuel_filter_change_odometer_km !== undefined && vehicle.last_fuel_filter_change_odometer_km !== null ? String(vehicle.last_fuel_filter_change_odometer_km) : "");
+        setBatteryInstalledAt(vehicle.battery_installed_at || "");
     }
 
     function handleCancelVehicleEdit() {
@@ -1288,6 +1413,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setTireCondition("");
         setBrakeCondition("");
         setBatteryStatus("");
+        resetVehicleMlFields();
     }
 
     async function handleDeleteVehicle(vehicleId: string) {
@@ -1673,6 +1799,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 vehicle_id: maintVehicle,
                 service_date: maintDate,
                 service_type: maintType || undefined,
+                event_type: maintEventType || undefined,
+                event_category: maintEventCategory || undefined,
+                severity: maintSeverity || undefined,
                 cost_lkr: maintCost ? Number(maintCost) : undefined,
                 odometer_km: maintOdometer ? Number(maintOdometer) : undefined,
                 next_service_due_km: maintNextDue ? Number(maintNextDue) : undefined,
@@ -1688,6 +1817,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setMaintVehicle("");
             setMaintDate("");
             setMaintType("");
+            setMaintEventType("");
+            setMaintEventCategory("");
+            setMaintSeverity("");
             setMaintCost("");
             setMaintOdometer("");
             setMaintNextDue("");
@@ -1705,6 +1837,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintVehicle(record.vehicle_id || "");
         setMaintDate(record.service_date || "");
         setMaintType(record.service_type || "");
+        setMaintEventType(record.event_type || "");
+        setMaintEventCategory(record.event_category || "");
+        setMaintSeverity(record.severity || "");
         setMaintCost(typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "");
         setMaintOdometer(typeof record.odometer_km === "number" ? String(record.odometer_km) : "");
         setMaintNextDue(typeof record.next_service_due_km === "number" ? String(record.next_service_due_km) : "");
@@ -1716,6 +1851,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMaintVehicle("");
         setMaintDate("");
         setMaintType("");
+        setMaintEventType("");
+        setMaintEventCategory("");
+        setMaintSeverity("");
         setMaintCost("");
         setMaintOdometer("");
         setMaintNextDue("");
@@ -2143,6 +2281,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setBrakeCondition,
                 batteryStatus,
                 setBatteryStatus,
+                fuelType,
+                setFuelType,
+                businessType,
+                setBusinessType,
+                roadConditionPrimary,
+                setRoadConditionPrimary,
+                driverBehaviorProfile,
+                setDriverBehaviorProfile,
+                expectedKmpl,
+                setExpectedKmpl,
+                typicalLoadFactor,
+                setTypicalLoadFactor,
+                serviceIntervalKm,
+                setServiceIntervalKm,
+                oilIntervalKm,
+                setOilIntervalKm,
+                tyreLifeKm,
+                setTyreLifeKm,
+                brakeLifeKm,
+                setBrakeLifeKm,
+                batteryLifeMonths,
+                setBatteryLifeMonths,
+                fuelFilterIntervalKm,
+                setFuelFilterIntervalKm,
+                lastServiceOdometerKm,
+                setLastServiceOdometerKm,
+                lastOilChangeOdometerKm,
+                setLastOilChangeOdometerKm,
+                lastTyreChangeOdometerKm,
+                setLastTyreChangeOdometerKm,
+                lastBrakeServiceOdometerKm,
+                setLastBrakeServiceOdometerKm,
+                lastFuelFilterChangeOdometerKm,
+                setLastFuelFilterChangeOdometerKm,
+                batteryInstalledAt,
+                setBatteryInstalledAt,
                 editingVehicleId,
                 driverName,
                 setDriverName,
@@ -2183,6 +2357,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setMaintDate,
                 maintType,
                 setMaintType,
+                maintEventType,
+                setMaintEventType,
+                maintEventCategory,
+                setMaintEventCategory,
+                maintSeverity,
+                setMaintSeverity,
                 maintCost,
                 setMaintCost,
                 maintOdometer,

@@ -12,6 +12,7 @@ from app.ml.predict import FuelPredictor, MaintenancePredictor
 from app.ml.train_fuel import SELECTED_ENGINEERED_COLUMNS as FUEL_ENGINEERED_COLUMNS
 from app.ml.train_fuel import enrich_fuel_features
 from app.ml.train_maintenance_v2 import enrich_maintenance_features_v2
+from app.services.maintenance_v3_features import build_live_maintenance_v3_record
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/ml", tags=["ml"])
@@ -41,6 +42,8 @@ DEFAULTS = {
 }
 MAINTENANCE_V2_MODEL_PATH = "app/ml/models/maintenance_model_v2.pkl"
 MAINTENANCE_V2_META_PATH = "app/ml/models/maintenance_model_v2_meta.json"
+MAINTENANCE_V3_MODEL_PATH = "app/ml/models/maintenance_model_v3.pkl"
+MAINTENANCE_V3_META_PATH = "app/ml/models/maintenance_model_v3_meta.json"
 FUEL_MODEL_PATH = "app/ml/models/fuel_model.pkl"
 FUEL_META_PATH = "app/ml/models/fuel_model_meta.json"
 
@@ -272,13 +275,13 @@ def _compute_risk_levels(probs: list[float], threshold: float) -> list[str]:
 
 
 def _read_maintenance_model_version() -> str:
-    meta_path = Path(MAINTENANCE_V2_META_PATH)
+    meta_path = Path(MAINTENANCE_V3_META_PATH)
     if not meta_path.exists():
         return "maintenance_model_unknown"
     try:
         raw = json.loads(meta_path.read_text())
         if raw.get("target") == "Need_Maintenance_7d":
-            return "maintenance_v2_7d_rf"
+            return raw.get("model_version") or "maintenance_v3_weekly_rf"
         params = raw.get("selected_hyperparameters", {})
         threshold = raw.get("decision_threshold", "na")
         n_estimators = params.get("n_estimators", "na")
@@ -535,7 +538,10 @@ def predict_maintenance(
     profile: dict = Depends(require_manager_profile),
 ) -> dict:
     try:
-        predictor = MaintenancePredictor(MAINTENANCE_V2_MODEL_PATH, MAINTENANCE_V2_META_PATH)
+        if payload.records is not None:
+            predictor = MaintenancePredictor(MAINTENANCE_V3_MODEL_PATH, MAINTENANCE_V3_META_PATH)
+        else:
+            predictor = MaintenancePredictor(MAINTENANCE_V2_MODEL_PATH, MAINTENANCE_V2_META_PATH)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     try:
@@ -567,15 +573,14 @@ def predict_maintenance_by_vehicle(
     token = _require_token(token)
     supabase = get_supabase_client(token)
     try:
-        raw_record = _build_maintenance_record_for_vehicle(supabase, vehicle_id)
-        record = _build_maintenance_v2_feature_record(raw_record)
+        record = build_live_maintenance_v3_record(supabase, profile["org_id"], vehicle_id)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to build maintenance feature record: {exc}")
 
     try:
-        predictor = MaintenancePredictor(MAINTENANCE_V2_MODEL_PATH, MAINTENANCE_V2_META_PATH)
+        predictor = MaintenancePredictor(MAINTENANCE_V3_MODEL_PATH, MAINTENANCE_V3_META_PATH)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

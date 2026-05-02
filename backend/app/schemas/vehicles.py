@@ -29,6 +29,24 @@ class VehicleCreate(BaseModel):
     recent_trip_count_30d: Optional[int] = None
     recent_fuel_efficiency_avg: Optional[float] = None
     service_center_visits_12m: Optional[int] = None
+    fuel_type: Optional[str] = None
+    business_type: Optional[str] = None
+    road_condition_primary: Optional[str] = None
+    driver_behavior_profile: Optional[str] = None
+    expected_kmpl: Optional[float] = None
+    typical_load_factor: Optional[float] = None
+    service_interval_km: Optional[float] = None
+    oil_interval_km: Optional[float] = None
+    tyre_life_km: Optional[float] = None
+    brake_life_km: Optional[float] = None
+    battery_life_months: Optional[float] = None
+    fuel_filter_interval_km: Optional[float] = None
+    last_service_odometer_km: Optional[float] = None
+    last_oil_change_odometer_km: Optional[float] = None
+    last_tyre_change_odometer_km: Optional[float] = None
+    last_brake_service_odometer_km: Optional[float] = None
+    last_fuel_filter_change_odometer_km: Optional[float] = None
+    battery_installed_at: Optional[str] = None
 
 
 class VehicleUpdate(BaseModel):
@@ -55,6 +73,24 @@ class VehicleUpdate(BaseModel):
     recent_trip_count_30d: Optional[int] = None
     recent_fuel_efficiency_avg: Optional[float] = None
     service_center_visits_12m: Optional[int] = None
+    fuel_type: Optional[str] = None
+    business_type: Optional[str] = None
+    road_condition_primary: Optional[str] = None
+    driver_behavior_profile: Optional[str] = None
+    expected_kmpl: Optional[float] = None
+    typical_load_factor: Optional[float] = None
+    service_interval_km: Optional[float] = None
+    oil_interval_km: Optional[float] = None
+    tyre_life_km: Optional[float] = None
+    brake_life_km: Optional[float] = None
+    battery_life_months: Optional[float] = None
+    fuel_filter_interval_km: Optional[float] = None
+    last_service_odometer_km: Optional[float] = None
+    last_oil_change_odometer_km: Optional[float] = None
+    last_tyre_change_odometer_km: Optional[float] = None
+    last_brake_service_odometer_km: Optional[float] = None
+    last_fuel_filter_change_odometer_km: Optional[float] = None
+    battery_installed_at: Optional[str] = None
 
 
 class VehicleOut(BaseModel):
@@ -83,6 +119,24 @@ class VehicleOut(BaseModel):
     recent_trip_count_30d: Optional[int] = None
     recent_fuel_efficiency_avg: Optional[float] = None
     service_center_visits_12m: Optional[int] = None
+    fuel_type: Optional[str] = None
+    business_type: Optional[str] = None
+    road_condition_primary: Optional[str] = None
+    driver_behavior_profile: Optional[str] = None
+    expected_kmpl: Optional[float] = None
+    typical_load_factor: Optional[float] = None
+    service_interval_km: Optional[float] = None
+    oil_interval_km: Optional[float] = None
+    tyre_life_km: Optional[float] = None
+    brake_life_km: Optional[float] = None
+    battery_life_months: Optional[float] = None
+    fuel_filter_interval_km: Optional[float] = None
+    last_service_odometer_km: Optional[float] = None
+    last_oil_change_odometer_km: Optional[float] = None
+    last_tyre_change_odometer_km: Optional[float] = None
+    last_brake_service_odometer_km: Optional[float] = None
+    last_fuel_filter_change_odometer_km: Optional[float] = None
+    battery_installed_at: Optional[str] = None
 
 
 class VehicleOutMinimal(BaseModel):

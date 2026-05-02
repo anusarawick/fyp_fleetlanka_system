@@ -13,6 +13,9 @@ type MaintenanceRecord = {
   service_booking_id?: string;
   service_date: string;
   service_type?: string;
+  event_type?: string;
+  event_category?: string;
+  severity?: string;
   cost_lkr?: number;
   odometer_km?: number;
   next_service_due_km?: number;
@@ -60,6 +63,12 @@ type MaintenanceProps = {
   setMaintDate: (v: string) => void;
   maintType: string;
   setMaintType: (v: string) => void;
+  maintEventType: string;
+  setMaintEventType: (v: string) => void;
+  maintEventCategory: string;
+  setMaintEventCategory: (v: string) => void;
+  maintSeverity: string;
+  setMaintSeverity: (v: string) => void;
   maintCost: string;
   setMaintCost: (v: string) => void;
   maintOdometer: string;
@@ -953,11 +962,41 @@ export default function Maintenance(props: MaintenanceProps) {
               </label>
               <label>
                 Service Type
-                <input
-                  placeholder="e.g., Oil Change"
-                  value={props.maintType}
-                  onChange={(e) => props.setMaintType(e.target.value)}
-                />
+                <input placeholder="e.g., Oil Change" value={props.maintType} onChange={(e) => props.setMaintType(e.target.value)} />
+              </label>
+              <label>
+                Event Type
+                <select value={props.maintEventType} onChange={(e) => props.setMaintEventType(e.target.value)}>
+                  <option value="">Select event</option>
+                  <option value="regular_service">Regular Service</option>
+                  <option value="oil_change">Oil Change</option>
+                  <option value="tyre_change">Tyre Change</option>
+                  <option value="brake_service">Brake Service</option>
+                  <option value="battery_service">Battery Service</option>
+                  <option value="fuel_system_service">Fuel System Service</option>
+                  <option value="repair">Repair</option>
+                </select>
+              </label>
+              <label>
+                Event Category
+                <select value={props.maintEventCategory} onChange={(e) => props.setMaintEventCategory(e.target.value)}>
+                  <option value="">Select category</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="component">Component</option>
+                  <option value="repair">Repair</option>
+                  <option value="inspection">Inspection</option>
+                </select>
+              </label>
+              <label>
+                Severity
+                <select value={props.maintSeverity} onChange={(e) => props.setMaintSeverity(e.target.value)}>
+                  <option value="">Select severity</option>
+                  <option value="routine">Routine</option>
+                  <option value="minor">Minor</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="major">Major</option>
+                  <option value="critical">Critical</option>
+                </select>
               </label>
               <label>
                 Cost (LKR)

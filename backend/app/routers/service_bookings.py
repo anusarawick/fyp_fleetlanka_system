@@ -51,6 +51,9 @@ def _sync_maintenance_from_booking(supabase, booking: dict, center: dict) -> Non
         "service_booking_id": booking["id"],
         "service_date": service_date,
         "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
+        "event_type": "regular_service",
+        "event_category": "scheduled",
+        "severity": "routine",
         "cost_lkr": booking.get("final_cost_lkr"),
         "odometer_km": vehicle.get("odometer_km"),
         "next_service_due_km": booking.get("next_service_due_km"),
@@ -261,10 +264,10 @@ def approve_completed_booking(
             _sync_maintenance_from_booking(supabase, booking, center_resp.data)
         except Exception as exc:
             message = str(exc)
-            if "service_booking_id" in message or "service_center_id" in message:
+            if "service_booking_id" in message or "service_center_id" in message or "event_type" in message:
                 raise HTTPException(
                     status_code=500,
-                    detail="Maintenance approval sync failed. Run migrations 20260321_service_booking_maintenance_sync.sql and 20260321_service_completion_review.sql, then restart backend.",
+                    detail="Maintenance approval sync failed. Run migrations 20260321_service_booking_maintenance_sync.sql, 20260321_service_completion_review.sql, and 20260502_maintenance_v3_live_support.sql, then restart backend.",
                 ) from exc
             raise HTTPException(status_code=500, detail=f"Maintenance approval sync failed: {message}") from exc
 

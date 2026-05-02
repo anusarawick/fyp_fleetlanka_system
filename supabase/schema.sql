@@ -117,6 +117,42 @@ create table if not exists public.vehicles (
   unique (org_id, plate_no)
 );
 
+create table if not exists public.vehicle_operating_profiles (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  fuel_type text,
+  business_type text,
+  road_condition_primary text,
+  driver_behavior_profile text,
+  expected_kmpl numeric,
+  typical_load_factor numeric,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (vehicle_id)
+);
+
+create table if not exists public.vehicle_component_state (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  service_interval_km numeric,
+  oil_interval_km numeric,
+  tyre_life_km numeric,
+  brake_life_km numeric,
+  battery_life_months numeric,
+  fuel_filter_interval_km numeric,
+  last_service_odometer_km numeric,
+  last_oil_change_odometer_km numeric,
+  last_tyre_change_odometer_km numeric,
+  last_brake_service_odometer_km numeric,
+  last_fuel_filter_change_odometer_km numeric,
+  battery_installed_at date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (vehicle_id)
+);
+
 create table if not exists public.saved_places (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
@@ -195,6 +231,9 @@ create table if not exists public.maintenance (
   service_booking_id uuid unique references public.service_bookings(id) on delete set null,
   service_date date not null,
   service_type text,
+  event_type text,
+  event_category text,
+  severity text,
   cost_lkr numeric,
   odometer_km numeric,
   next_service_due_km numeric,
@@ -302,6 +341,8 @@ create index if not exists maint_pred_org_vehicle_time_idx
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
 alter table public.vehicles enable row level security;
+alter table public.vehicle_operating_profiles enable row level security;
+alter table public.vehicle_component_state enable row level security;
 alter table public.trips enable row level security;
 alter table public.gps_points enable row level security;
 alter table public.fuel_logs enable row level security;
@@ -330,6 +371,14 @@ create policy "profile_update" on public.profiles
 
 -- Generic org-based policies
 create policy "vehicles_org" on public.vehicles
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "vehicle_operating_profiles_org" on public.vehicle_operating_profiles
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "vehicle_component_state_org" on public.vehicle_component_state
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 
