@@ -236,6 +236,11 @@
   overflow: hidden;
 }
 
+.fleet-page .management-table {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 .fleet-page .management-table__head,
 .fleet-page .management-table__row {
   grid-template-columns:
@@ -251,6 +256,7 @@
 
 .fleet-page .management-table__row {
   min-height: 68px;
+  box-shadow: 0 8px 18px rgba(16, 33, 47, 0.03);
 }
 
 .fleet-page .management-table__cell--plate {
@@ -260,11 +266,38 @@
 
 .fleet-page .management-table__cell--odometer {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fleet-page .management-table__cell--year,
+.fleet-page .management-table__cell--status {
+  white-space: nowrap;
+}
+
+.fleet-page .management-table__cell--status,
+.fleet-page .management-table__cell--risk {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.fleet-page .management-table__cell--risk .risk-pill {
+  max-width: 100%;
+}
+
+.fleet-page .management-table__cell--risk .risk-pill strong {
+  white-space: nowrap;
 }
 
 .fleet-page .management-table__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fleet-page .management-table__head > span:last-child {
+  text-align: right;
 }
 
 .fleet-page .modal--form .form-section-title {
@@ -469,7 +502,46 @@
   }
 
   .fleet-page .management-table__row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
     min-height: 0;
+  }
+
+  .fleet-page .management-table__head {
+    display: none;
+  }
+
+  .fleet-page .management-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .fleet-page .management-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .fleet-page .management-table__row > .table__actions {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  .fleet-page .management-table__row > .table__actions::before {
+    content: none;
+  }
+
+  .fleet-page .management-table__row .btn {
+    flex: 1 1 120px;
   }
 
   .fleet-risk-hero {

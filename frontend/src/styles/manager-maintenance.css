@@ -192,6 +192,12 @@
   overflow: hidden;
 }
 
+.maintenance-page .maintenance-table,
+.maintenance-page .centers-table,
+.maintenance-page .bookings-table {
+  overflow-x: auto;
+}
+
 .maintenance-page .maintenance-table__head,
 .maintenance-page .maintenance-table__row {
   grid-template-columns:
@@ -224,6 +230,14 @@
 .maintenance-page .bookings-table__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.maintenance-page .maintenance-table__head > span:last-child,
+.maintenance-page .centers-table__head > span:last-child,
+.maintenance-page .bookings-table__head > span:last-child {
+  text-align: right;
 }
 
 .maintenance-page .maintenance-table__cell--service {
@@ -291,7 +305,52 @@
   .maintenance-page .maintenance-table__row,
   .maintenance-page .centers-table__row,
   .maintenance-page .bookings-table__row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
     min-height: 0;
+  }
+
+  .maintenance-page .maintenance-table__head,
+  .maintenance-page .centers-table__head,
+  .maintenance-page .bookings-table__head {
+    display: none;
+  }
+
+  .maintenance-page .maintenance-table__row > span,
+  .maintenance-page .centers-table__row > span,
+  .maintenance-page .bookings-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .maintenance-page .maintenance-table__row > span::before,
+  .maintenance-page .centers-table__row > span::before,
+  .maintenance-page .bookings-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .maintenance-page .maintenance-table__row > .table__actions,
+  .maintenance-page .centers-table__row > .table__actions,
+  .maintenance-page .bookings-table__row > .table__actions {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  .maintenance-page .maintenance-table__row > .table__actions::before,
+  .maintenance-page .centers-table__row > .table__actions::before,
+  .maintenance-page .bookings-table__row > .table__actions::before {
+    content: none;
   }
 
   .maintenance-snapshot-grid {

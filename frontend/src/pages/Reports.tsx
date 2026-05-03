@@ -32,11 +32,49 @@ const REPORT_TABS: Array<{ value: ReportCategory; label: string }> = [
   { value: "documents", label: "Documents" },
 ];
 
+const CATEGORY_PREVIEW_TITLES: Record<ReportCategory, string> = {
+  vehicles: "Vehicle Preview",
+  drivers: "Driver Preview",
+  trips: "Trip Preview",
+  fuel: "Fuel Preview",
+  maintenance: "Maintenance Preview",
+  documents: "Document Preview",
+};
+
 function withinDateRange(dateValue: string | undefined, fromDate: string, toDate: string) {
   if (!dateValue) return false;
   if (fromDate && dateValue < fromDate) return false;
   if (toDate && dateValue > toDate) return false;
   return true;
+}
+
+function displayText(value: unknown, fallback = "Not recorded") {
+  if (value === null || value === undefined || value === "") return fallback;
+  return String(value);
+}
+
+function formatNumber(value: unknown, fallback = "Not recorded") {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return number.toLocaleString();
+}
+
+function formatCurrency(value: unknown, fallback = "Not recorded") {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return `LKR ${number.toLocaleString()}`;
+}
+
+function formatDistance(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "No distance";
+  return `${number.toLocaleString(undefined, { maximumFractionDigits: 1 })} km`;
+}
+
+function formatDuration(value: unknown) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "No duration";
+  return `${number.toLocaleString(undefined, { maximumFractionDigits: 0 })} min`;
 }
 
 export default function Reports(props: ReportProps) {
@@ -227,6 +265,16 @@ export default function Reports(props: ReportProps) {
     category === "trips" || category === "fuel" || category === "maintenance" || category === "documents";
   const supportsVehicleFilter =
     category === "trips" || category === "fuel" || category === "maintenance" || category === "documents";
+  const activeFilterCount = [
+    search.trim(),
+    supportsDateRange && dateFrom,
+    supportsDateRange && dateTo,
+    supportsVehicleFilter && vehicleFilter !== "all",
+    category === "documents" && driverFilter !== "all",
+    category === "maintenance" && centerFilter !== "all",
+    statusFilter !== "all",
+  ].filter(Boolean).length;
+  const selectedCategoryLabel = REPORT_TABS.find((tab) => tab.value === category)?.label ?? "Report";
 
   function handleCategoryChange(nextCategory: ReportCategory) {
     setCategory(nextCategory);
@@ -313,9 +361,9 @@ export default function Reports(props: ReportProps) {
               return (
                 <div className="table__row reports-table__row" key={vehicle.id}>
                   <span data-label="Plate">{vehicle.plate_no}</span>
-                  <span data-label="Vehicle">{[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "--"}</span>
-                  <span data-label="Status">{vehicle.status || "--"}</span>
-                  <span data-label="Odometer">{vehicle.odometer_km ?? "--"}</span>
+                  <span data-label="Vehicle">{[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle details not recorded"}</span>
+                  <span data-label="Status">{displayText(vehicle.status, "No status")}</span>
+                  <span data-label="Odometer">{formatNumber(vehicle.odometer_km, "No odometer")}</span>
                 </div>
               );
             })}
@@ -334,10 +382,10 @@ export default function Reports(props: ReportProps) {
               const driver = row as Driver;
               return (
                 <div className="table__row reports-table__row" key={driver.id}>
-                  <span data-label="Name">{driver.full_name || "--"}</span>
-                  <span data-label="Email">{driver.email || "--"}</span>
-                  <span data-label="Phone">{driver.phone || "--"}</span>
-                  <span data-label="Status">{driver.status || "--"}</span>
+                  <span data-label="Name">{displayText(driver.full_name, "Driver name not recorded")}</span>
+                  <span data-label="Email">{displayText(driver.email, "Email not recorded")}</span>
+                  <span data-label="Phone">{displayText(driver.phone, "Phone not recorded")}</span>
+                  <span data-label="Status">{displayText(driver.status, "No status")}</span>
                 </div>
               );
             })}
@@ -356,10 +404,10 @@ export default function Reports(props: ReportProps) {
               const trip = row as Trip;
               return (
                 <div className="table__row reports-table__row" key={trip.id}>
-                  <span data-label="Start">{trip.start_time}</span>
-                  <span data-label="Vehicle">{vehicleLabelMap[trip.vehicle_id] || trip.vehicle_id}</span>
-                  <span data-label="Distance">{trip.distance_km ?? "--"}</span>
-                  <span data-label="Duration">{trip.duration_min ?? "--"}</span>
+                  <span data-label="Start">{displayText(trip.start_time, "Start not recorded")}</span>
+                  <span data-label="Vehicle">{vehicleLabelMap[trip.vehicle_id] || "Vehicle not found"}</span>
+                  <span data-label="Distance">{formatDistance(trip.distance_km)}</span>
+                  <span data-label="Duration">{formatDuration(trip.duration_min)}</span>
                 </div>
               );
             })}
@@ -379,11 +427,11 @@ export default function Reports(props: ReportProps) {
               const log = row as FuelLog;
               return (
                 <div className="table__row reports-table__row" key={log.id}>
-                  <span data-label="Date">{log.fuel_date}</span>
-                  <span data-label="Vehicle">{vehicleLabelMap[log.vehicle_id] || log.vehicle_id}</span>
-                  <span data-label="Liters">{log.liters}</span>
-                  <span data-label="Cost">{log.cost_lkr ?? "--"}</span>
-                  <span data-label="Vendor">{log.vendor || "--"}</span>
+                  <span data-label="Date">{displayText(log.fuel_date, "Date not recorded")}</span>
+                  <span data-label="Vehicle">{vehicleLabelMap[log.vehicle_id] || "Vehicle not found"}</span>
+                  <span data-label="Liters">{formatNumber(log.liters, "Liters not recorded")}</span>
+                  <span data-label="Cost">{formatCurrency(log.cost_lkr)}</span>
+                  <span data-label="Vendor">{displayText(log.vendor, "No vendor")}</span>
                 </div>
               );
             })}
@@ -403,11 +451,11 @@ export default function Reports(props: ReportProps) {
               const record = row as Maintenance;
               return (
                 <div className="table__row reports-table__row" key={record.id}>
-                  <span data-label="Date">{record.service_date}</span>
-                  <span data-label="Vehicle">{vehicleLabelMap[record.vehicle_id] || record.vehicle_id}</span>
-                  <span data-label="Service">{record.service_type || "--"}</span>
+                  <span data-label="Date">{displayText(record.service_date, "Date not recorded")}</span>
+                  <span data-label="Vehicle">{vehicleLabelMap[record.vehicle_id] || "Vehicle not found"}</span>
+                  <span data-label="Service">{displayText(record.service_type, "Service not recorded")}</span>
                   <span data-label="Source">{record.service_booking_id ? "Service Booking" : "Manual"}</span>
-                  <span data-label="Cost">{record.cost_lkr ?? "--"}</span>
+                  <span data-label="Cost">{formatCurrency(record.cost_lkr)}</span>
                 </div>
               );
             })}
@@ -426,10 +474,10 @@ export default function Reports(props: ReportProps) {
               const doc = row as Document;
               return (
                 <div className="table__row reports-table__row" key={doc.id}>
-                  <span data-label="Type">{doc.doc_type}</span>
+                  <span data-label="Type">{displayText(doc.doc_type, "Document type not recorded")}</span>
                   <span data-label="Owner">{doc.driver_id ? "Driver" : "Vehicle"}</span>
-                  <span data-label="Number">{doc.doc_number || "--"}</span>
-                  <span data-label="Expiry">{doc.expiry_date || "--"}</span>
+                  <span data-label="Number">{displayText(doc.doc_number, "Number not recorded")}</span>
+                  <span data-label="Expiry">{displayText(doc.expiry_date, "No expiry")}</span>
                 </div>
               );
             })}
@@ -445,19 +493,19 @@ export default function Reports(props: ReportProps) {
         <div className="stat-card stat-card--blue">
           <div className="stat-icon"><Database aria-hidden="true" /></div>
           <div className="stat-value">{REPORT_TABS.length}</div>
-          <div className="stat-label">Report Areas</div>
-          <div className="stat-sub">Operational datasets ready to export</div>
+          <div className="stat-label">Export Areas</div>
+          <div className="stat-sub">Fleet records available for manager reports</div>
         </div>
         <div className="stat-card stat-card--green">
           <div className="stat-icon"><Filter aria-hidden="true" /></div>
           <div className="stat-value">{activeDataset.length}</div>
-          <div className="stat-label">Filtered Rows</div>
-          <div className="stat-sub">Current export result</div>
+          <div className="stat-label">Rows in Current View</div>
+          <div className="stat-sub">{selectedCategoryLabel} records after filters</div>
         </div>
         <div className="stat-card stat-card--purple">
           <div className="stat-icon"><Rows3 aria-hidden="true" /></div>
           <div className="stat-value">{totalRowsAcrossDatasets}</div>
-          <div className="stat-label">Available Records</div>
+          <div className="stat-label">Total Records</div>
           <div className="stat-sub">Rows across all report areas</div>
         </div>
       </section>
@@ -479,14 +527,14 @@ export default function Reports(props: ReportProps) {
         <section className="card insights-panel">
           <div className="card__header">
             <div>
-              <h3>Export Workspace</h3>
-              <p className="muted admin-card__subtitle">Choose a report area, narrow the records, preview the output, then export the current view.</p>
+              <h3>Report Setup</h3>
+              <p className="muted admin-card__subtitle">Select the report area, narrow the records, review the preview, and export the current result.</p>
             </div>
           </div>
           <div className="reports-summary">
             <div className="reports-summary__item">
-              <span>Dataset</span>
-              <strong>{REPORT_TABS.find((tab) => tab.value === category)?.label}</strong>
+              <span>Selected Report</span>
+              <strong>{selectedCategoryLabel}</strong>
             </div>
             <div className="reports-summary__item">
               <span>Rows Ready</span>
@@ -496,6 +544,10 @@ export default function Reports(props: ReportProps) {
               <span>Pages</span>
               <strong>{totalPages}</strong>
             </div>
+            <div className="reports-summary__item">
+              <span>Active Filters</span>
+              <strong>{activeFilterCount}</strong>
+            </div>
           </div>
         </section>
       </div>
@@ -504,10 +556,11 @@ export default function Reports(props: ReportProps) {
         <div className="card__header">
           <div>
             <h3>Report Builder</h3>
-            <p className="muted admin-card__subtitle">Use the filters below to prepare a clean operational export.</p>
+            <p className="muted admin-card__subtitle">Prepare an export with the same filters shown in the preview below.</p>
           </div>
         </div>
         <div className="reports-builder">
+          <div className="reports-builder__section-label">Search & category</div>
           <div className="reports-builder__row">
             <div className="reports-builder__group reports-builder__group--primary">
               <label className="table-controls__label table-controls__label--search reports-builder__search">
@@ -537,11 +590,12 @@ export default function Reports(props: ReportProps) {
                 Next
               </button>
               <button className="btn" type="button" onClick={exportCurrent}>
-                Export
+                Export Current View
               </button>
             </div>
           </div>
 
+          <div className="reports-builder__section-label">Filters & output</div>
           <div className="reports-builder__row reports-builder__row--filters">
             {supportsDateRange && (
               <>
@@ -608,8 +662,8 @@ export default function Reports(props: ReportProps) {
         <div className="reports-preview">
           <div className="reports-preview__header">
             <div>
-              <h4>Preview</h4>
-              <p className="muted">Preview of the records that will be exported.</p>
+              <h4>{CATEGORY_PREVIEW_TITLES[category]}</h4>
+              <p className="muted">These are the rows that will be included in the export.</p>
             </div>
           </div>
           {activeDataset.length === 0 ? <p className="empty">No rows match the current report filters.</p> : previewTable()}

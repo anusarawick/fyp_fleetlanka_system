@@ -226,6 +226,10 @@
   min-height: 280px;
 }
 
+.fuel-page .fuel-table {
+  overflow-x: auto;
+}
+
 .fuel-page .fuel-table__head,
 .fuel-page .fuel-table__row {
   grid-template-columns:
@@ -239,6 +243,15 @@
 
 .fuel-page .fuel-table__row {
   min-height: 68px;
+}
+
+.fuel-page .fuel-table__actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fuel-page .fuel-table__head > span:last-child {
+  text-align: right;
 }
 
 .fuel-page .modal--form .form-section-title {
@@ -301,6 +314,44 @@
 
   .fuel-metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fuel-page .fuel-table__head {
+    display: none;
+  }
+
+  .fuel-page .fuel-table__row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .fuel-page .fuel-table__row > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .fuel-page .fuel-table__row > span::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .fuel-page .fuel-table__row > .table__actions {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+  }
+
+  .fuel-page .fuel-table__row > .table__actions::before {
+    content: none;
   }
 
   .fuel-card-row > span {
