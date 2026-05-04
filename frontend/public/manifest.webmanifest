@@ -1,0 +1,25 @@
+{
+  "name": "FleetLanka Driver",
+  "short_name": "FleetLanka",
+  "description": "Driver PWA for FleetLanka trips, fuel logs, and profile updates.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#edf4f8",
+  "theme_color": "#0f3f7c",
+  "icons": [
+    {
+      "src": "/icons/fleetlanka-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/fleetlanka-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

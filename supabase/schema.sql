@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   org_id uuid not null references public.organizations(id),
   role text not null check (role in ('owner','manager','driver','service')),
+  status text not null default 'active' check (status in ('active','inactive')),
   full_name text,
   phone text,
   created_at timestamptz not null default now()
@@ -63,8 +64,8 @@ begin
     returning id into v_org_id;
   end if;
 
-  insert into public.profiles (id, org_id, role, full_name, phone)
-  values (new.id, v_org_id, v_role, v_full_name, v_phone)
+  insert into public.profiles (id, org_id, role, status, full_name, phone)
+  values (new.id, v_org_id, v_role, 'active', v_full_name, v_phone)
   on conflict (id) do nothing;
 
   return new;
@@ -92,11 +93,77 @@ create table if not exists public.vehicles (
   plate_no text not null,
   make text,
   model text,
+  vehicle_type text,
   year int,
   status text default 'active',
+  mileage numeric,
   odometer_km numeric,
+  transmission_type text,
+  engine_size_cc int,
+  accident_history_count int default 0,
+  fuel_efficiency numeric,
+  maintenance_history text,
+  reported_issues_count int default 0,
+  tire_condition text,
+  brake_condition text,
+  battery_status text,
+  last_service_cost_lkr numeric,
+  next_service_due_km numeric,
+  avg_monthly_km numeric,
+  recent_trip_count_30d int default 0,
+  recent_fuel_efficiency_avg numeric,
+  service_center_visits_12m int default 0,
   created_at timestamptz not null default now(),
   unique (org_id, plate_no)
+);
+
+create table if not exists public.vehicle_operating_profiles (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  fuel_type text,
+  business_type text,
+  road_condition_primary text,
+  driver_behavior_profile text,
+  expected_kmpl numeric,
+  typical_load_factor numeric,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (vehicle_id)
+);
+
+create table if not exists public.vehicle_component_state (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  service_interval_km numeric,
+  oil_interval_km numeric,
+  tyre_life_km numeric,
+  brake_life_km numeric,
+  battery_life_months numeric,
+  fuel_filter_interval_km numeric,
+  last_service_odometer_km numeric,
+  last_oil_change_odometer_km numeric,
+  last_tyre_change_odometer_km numeric,
+  last_brake_service_odometer_km numeric,
+  last_fuel_filter_change_odometer_km numeric,
+  battery_installed_at date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (vehicle_id)
+);
+
+create table if not exists public.saved_places (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  name text not null,
+  label text not null,
+  lat numeric not null,
+  lon numeric not null,
+  contact_name text,
+  contact_phone text,
+  notes text,
+  created_at timestamptz not null default now()
 );
 
 -- Trips (summary)
@@ -105,7 +172,20 @@ create table if not exists public.trips (
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid not null references public.vehicles(id) on delete cascade,
   driver_id uuid references public.profiles(id),
-  start_time timestamptz not null,
+  status text not null default 'assigned' check (status in ('assigned', 'in_progress', 'completed', 'cancelled')),
+  trip_title text,
+  scheduled_start timestamptz,
+  origin_label text,
+  destination_label text,
+  origin_lat numeric,
+  origin_lon numeric,
+  destination_lat numeric,
+  destination_lon numeric,
+  contact_name text,
+  contact_phone text,
+  priority text check (priority in ('low', 'normal', 'high', 'urgent')),
+  notes text,
+  start_time timestamptz,
   end_time timestamptz,
   start_lat numeric,
   start_lon numeric,
@@ -147,12 +227,16 @@ create table if not exists public.maintenance (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  service_center_id uuid references public.service_centers(id) on delete set null,
+  service_booking_id uuid unique references public.service_bookings(id) on delete set null,
   service_date date not null,
   service_type text,
+  event_type text,
+  event_category text,
+  severity text,
   cost_lkr numeric,
   odometer_km numeric,
   next_service_due_km numeric,
-  predicted_due_date date,
   notes text,
   created_at timestamptz not null default now()
 );
@@ -162,11 +246,16 @@ create table if not exists public.documents (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
   vehicle_id uuid references public.vehicles(id) on delete cascade,
+  driver_id uuid references public.profiles(id) on delete cascade,
   doc_type text not null,
   doc_number text,
   expiry_date date,
   file_url text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint documents_owner_check check (
+    (vehicle_id is not null and driver_id is null)
+    or (vehicle_id is null and driver_id is not null)
+  )
 );
 
 -- Alerts
@@ -186,6 +275,7 @@ create table if not exists public.alerts (
 create table if not exists public.service_centers (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
+  profile_id uuid references public.profiles(id) on delete set null,
   name text not null,
   phone text,
   address text,
@@ -201,13 +291,58 @@ create table if not exists public.service_bookings (
   requested_date date not null,
   status text default 'pending',
   notes text,
+  work_type text,
+  service_notes text,
+  proposed_tire_condition text,
+  proposed_brake_condition text,
+  proposed_battery_status text,
+  completion_review_status text,
+  completion_review_notes text,
+  completion_reviewed_at timestamptz,
+  completion_reviewed_by uuid references public.profiles(id) on delete set null,
+  completed_at timestamptz,
+  final_cost_lkr numeric,
+  next_service_due_km numeric,
   created_at timestamptz not null default now()
 );
+
+-- Driver score snapshots
+create table if not exists public.driver_scores (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  driver_id uuid not null references public.profiles(id) on delete cascade,
+  driver_name text,
+  overall_score int not null check (overall_score between 0 and 100),
+  speed_score numeric,
+  idle_score numeric,
+  distance_score numeric,
+  consistency_score numeric,
+  computed_at timestamptz not null default now()
+);
+
+-- Maintenance prediction snapshots
+create table if not exists public.maintenance_predictions (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  vehicle_id uuid not null references public.vehicles(id) on delete cascade,
+  prediction int not null check (prediction in (0, 1)),
+  probability numeric not null check (probability >= 0 and probability <= 1),
+  risk_level text not null check (risk_level in ('low', 'medium', 'high')),
+  threshold_used numeric,
+  model_version text,
+  input_features jsonb,
+  predicted_at timestamptz not null default now()
+);
+
+create index if not exists maint_pred_org_vehicle_time_idx
+  on public.maintenance_predictions (org_id, vehicle_id, predicted_at desc);
 
 -- Enable RLS
 alter table public.organizations enable row level security;
 alter table public.profiles enable row level security;
 alter table public.vehicles enable row level security;
+alter table public.vehicle_operating_profiles enable row level security;
+alter table public.vehicle_component_state enable row level security;
 alter table public.trips enable row level security;
 alter table public.gps_points enable row level security;
 alter table public.fuel_logs enable row level security;
@@ -216,6 +351,9 @@ alter table public.documents enable row level security;
 alter table public.alerts enable row level security;
 alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
+alter table public.driver_scores enable row level security;
+alter table public.maintenance_predictions enable row level security;
+alter table public.saved_places enable row level security;
 
 -- Organizations policies
 create policy "org_select" on public.organizations
@@ -233,6 +371,14 @@ create policy "profile_update" on public.profiles
 
 -- Generic org-based policies
 create policy "vehicles_org" on public.vehicles
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "vehicle_operating_profiles_org" on public.vehicle_operating_profiles
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "vehicle_component_state_org" on public.vehicle_component_state
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 
@@ -261,6 +407,18 @@ create policy "centers_org" on public.service_centers
   with check (org_id = public.current_org_id());
 
 create policy "bookings_org" on public.service_bookings
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "driver_scores_org" on public.driver_scores
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "maintenance_predictions_org" on public.maintenance_predictions
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "saved_places_org" on public.saved_places
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 

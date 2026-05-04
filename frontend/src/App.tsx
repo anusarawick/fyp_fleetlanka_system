@@ -1,14 +1,6 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { DataProvider, useData } from "./context/DataContext";
-import {
-  exportFuel,
-  exportMaintenance,
-  exportVehicles,
-  exportDrivers,
-  exportTrips,
-  exportDocuments,
-} from "./utils/export";
 import AppLayout from "./layout/AppLayout";
 import Topbar from "./components/Topbar";
 import Dashboard from "./pages/Dashboard";
@@ -23,53 +15,18 @@ import Management from "./pages/Management";
 import Maintenance from "./pages/Maintenance";
 import ProfileSettings from "./pages/ProfileSettings";
 import Drivers from "./pages/Drivers";
+import ServicePortal from "./pages/ServicePortal";
+import TripsPage from "./pages/Trips";
+import PublicHomePage from "./pages/PublicHomePage";
+import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
 
-// ===== ROLE SELECTION PAGE =====
-function RoleSelection({ onSelectRole }: { onSelectRole: (role: "manager" | "driver") => void }) {
-  return (
-    <section className="auth auth--role-select">
-      <div className="role-select">
-        <div className="role-select__header">
-          <span className="role-select__logo">🚐</span>
-          <h1>FleetLanka</h1>
-          <p className="muted">Choose how you want to sign in</p>
-        </div>
+const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
 
-        <div className="role-select__options">
-          <button
-            className="role-card role-card--manager"
-            onClick={() => onSelectRole("manager")}
-          >
-            <div className="role-card__icon">💼</div>
-            <div className="role-card__content">
-              <h3>Fleet Manager</h3>
-              <p>Access dashboard, analytics, and fleet management tools</p>
-            </div>
-            <span className="role-card__badge">Web Portal</span>
-          </button>
-
-          <button
-            className="role-card role-card--driver"
-            onClick={() => onSelectRole("driver")}
-          >
-            <div className="role-card__icon">🚗</div>
-            <div className="role-card__content">
-              <h3>Driver</h3>
-              <p>Start trips, track location, and log activities</p>
-            </div>
-            <span className="role-card__badge">Mobile App</span>
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ===== MANAGER LOGIN (Web/Desktop optimized) =====
-function ManagerLogin({ onBack }: { onBack: () => void }) {
+// ===== UNIFIED LOGIN / MANAGER SIGNUP =====
+function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
   const { email, password, setEmail, setPassword, handleLogin, handleSignup, loading, error, setError } = useAuth();
-  const [isSignup, setIsSignup] = useState(false);
+  const [isSignup, setIsSignup] = useState(initialSignup);
   const [name, setName] = useState("");
   const [orgName, setOrgName] = useState("");
 
@@ -77,21 +34,23 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
     if (isSignup) {
       await handleSignup(e, name, orgName);
     } else {
-      await handleLogin(e, "manager");
+      await handleLogin(e);
     }
   }
 
   return (
     <section className="auth">
       <div className="auth__card">
-        <button className="auth__back" onClick={onBack}>← Back</button>
+        <Link className="auth__back" to="/">← Back</Link>
         <div className="auth__header">
-          <span className="auth__icon">{isSignup ? "📝" : "💼"}</span>
-          <h2>{isSignup ? "Create Account" : "Manager Login"}</h2>
+          <span className="auth__icon" aria-hidden="true">
+            <img src={BRAND_LOGO_SRC} alt="" />
+          </span>
+          <h2>{isSignup ? "Create Manager Account" : "Sign in to FleetLanka"}</h2>
           <p className="muted">
             {isSignup
-              ? "Register your fleet management account"
-              : "Access your fleet management dashboard"}
+              ? "Create a manager workspace for your fleet operations."
+              : "Enter your credentials to open your workspace."}
           </p>
         </div>
 
@@ -132,7 +91,7 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
             Email Address
             <input
               type="email"
-              placeholder="manager@company.com"
+              placeholder="user@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -152,7 +111,7 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
           <button className="btn" type="submit" disabled={loading}>
             {loading
               ? (isSignup ? "Creating account..." : "Signing in...")
-              : (isSignup ? "Create Account" : "Sign in to Dashboard")}
+              : (isSignup ? "Create manager account" : "Sign in")}
           </button>
         </form>
 
@@ -166,73 +125,14 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
             </p>
           ) : (
             <p>
-              Don't have an account?{" "}
+              Need a manager workspace?{" "}
               <button type="button" onClick={() => setIsSignup(true)}>
-                Create one
+                Create manager account
               </button>
             </p>
           )}
         </div>
       </div>
-    </section>
-  );
-}
-
-// ===== DRIVER LOGIN (Mobile optimized) =====
-function DriverLogin({ onBack }: { onBack: () => void }) {
-  const { email, password, setEmail, setPassword, handleLogin, loading, error, setError } = useAuth();
-
-  async function onSubmit(e: React.FormEvent) {
-    await handleLogin(e, "driver");
-  }
-
-  return (
-    <section className="driver-auth">
-      <header className="driver-auth__header">
-        <button className="driver-auth__back" onClick={onBack}>←</button>
-        <span className="driver-auth__brand">FleetLanka</span>
-      </header>
-
-      <main className="driver-auth__main">
-        <div className="driver-auth__icon">🚗</div>
-        <h1 className="driver-auth__title">Driver Login</h1>
-        <p className="driver-auth__subtitle">Sign in to start tracking your trips</p>
-
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
-            </button>
-          </div>
-        )}
-
-        <form className="driver-form" onSubmit={onSubmit}>
-          <div className="driver-form__field">
-            <label>Email</label>
-            <input
-              type="email"
-              placeholder="driver@fleetlanka.lk"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="driver-form__field">
-            <label>Password</label>
-            <input
-              type="password"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <button className="driver-btn driver-btn--primary" type="submit" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
-      </main>
     </section>
   );
 }
@@ -253,9 +153,16 @@ function DriverRoutes() {
   const {
     vehicles,
     trips,
-    selectedVehicle,
-    setSelectedVehicle,
+    driverScore,
+    driverScoreLabel,
+    driverScoreBreakdown,
     activeTripId,
+    tripTrackingStatus,
+    tripTrackingLastUpdated,
+    pendingTripSyncCount,
+    pendingGpsPointCount,
+    syncingTripQueue,
+    pendingTripStatusById,
     startTrip,
     stopTrip,
     geoSupported,
@@ -267,9 +174,16 @@ function DriverRoutes() {
       vehicles={vehicles}
       trips={trips}
       loading={loading}
-      selectedVehicle={selectedVehicle}
-      setSelectedVehicle={setSelectedVehicle}
       activeTripId={activeTripId}
+      tripTrackingStatus={tripTrackingStatus}
+      tripTrackingLastUpdated={tripTrackingLastUpdated}
+      pendingTripSyncCount={pendingTripSyncCount}
+      pendingGpsPointCount={pendingGpsPointCount}
+      syncingTripQueue={syncingTripQueue}
+      pendingTripStatusById={pendingTripStatusById}
+      driverScore={driverScore}
+      driverScoreLabel={driverScoreLabel}
+      driverScoreBreakdown={driverScoreBreakdown}
       startTrip={startTrip}
       stopTrip={stopTrip}
       geoSupported={geoSupported}
@@ -304,13 +218,34 @@ function ManagerRoutes() {
             <Dashboard
               vehicleCount={data.vehicles.length}
               activeTrips={data.activeTrips}
-              maintenanceCount={data.maintenance.length}
               fuelCostTotal={data.currency.format(data.fuelCostTotal)}
               maintenance={data.maintenance}
-              lastMaintenancePrediction={data.maintResult}
-              lastFuelPrediction={data.fuelResult}
+              vehicles={data.vehicles}
+              driverScores={data.driverScores}
+              serviceBookings={data.serviceBookings}
+              topPerformers={data.topPerformers}
+              maintenancePredictionMap={data.maintenancePredictionMap}
+              liveTrips={data.liveTrips}
               alerts={data.buildAlerts()}
               upcomingDocs={data.upcomingDocs}
+            />
+          </>
+        }
+      />
+      <Route
+        path="/trips"
+        element={
+          <>
+            <Topbar title="Trips" subtitle="Dispatch, route monitoring, and saved locations" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <TripsPage
+              trips={data.trips}
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              liveTrips={data.liveTrips}
+              loading={loading}
+              onCreateTripAssignment={data.handleCreateTripAssignment}
+              onUpdateTripAssignment={data.handleUpdateTripAssignment}
+              onDeleteTrip={data.handleDeleteTripRecord}
             />
           </>
         }
@@ -319,9 +254,10 @@ function ManagerRoutes() {
         path="/management"
         element={
           <>
-            <Topbar title="Fleet Management" subtitle="Create and manage data" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Fleet Management" subtitle="Vehicles, service readiness, and maintenance risk" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Management
               vehicles={data.vehicles}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               loading={loading}
               plateNo={data.plateNo}
               setPlateNo={data.setPlateNo}
@@ -329,8 +265,70 @@ function ManagerRoutes() {
               setMake={data.setMake}
               model={data.model}
               setModel={data.setModel}
+              vehicleType={data.vehicleType}
+              setVehicleType={data.setVehicleType}
               year={data.year}
               setYear={data.setYear}
+              vehicleStatus={data.vehicleStatus}
+              setVehicleStatus={data.setVehicleStatus}
+              vehicleMileage={data.vehicleMileage}
+              setVehicleMileage={data.setVehicleMileage}
+              vehicleOdometer={data.vehicleOdometer}
+              setVehicleOdometer={data.setVehicleOdometer}
+              transmissionType={data.transmissionType}
+              setTransmissionType={data.setTransmissionType}
+              engineSizeCc={data.engineSizeCc}
+              setEngineSizeCc={data.setEngineSizeCc}
+              accidentHistoryCount={data.accidentHistoryCount}
+              setAccidentHistoryCount={data.setAccidentHistoryCount}
+              fuelEfficiency={data.fuelEfficiency}
+              setFuelEfficiency={data.setFuelEfficiency}
+              maintenanceHistory={data.maintenanceHistory}
+              setMaintenanceHistory={data.setMaintenanceHistory}
+              reportedIssuesCount={data.reportedIssuesCount}
+              setReportedIssuesCount={data.setReportedIssuesCount}
+              tireCondition={data.tireCondition}
+              setTireCondition={data.setTireCondition}
+              brakeCondition={data.brakeCondition}
+              setBrakeCondition={data.setBrakeCondition}
+              batteryStatus={data.batteryStatus}
+              setBatteryStatus={data.setBatteryStatus}
+              fuelType={data.fuelType}
+              setFuelType={data.setFuelType}
+              businessType={data.businessType}
+              setBusinessType={data.setBusinessType}
+              roadConditionPrimary={data.roadConditionPrimary}
+              setRoadConditionPrimary={data.setRoadConditionPrimary}
+              driverBehaviorProfile={data.driverBehaviorProfile}
+              setDriverBehaviorProfile={data.setDriverBehaviorProfile}
+              expectedKmpl={data.expectedKmpl}
+              setExpectedKmpl={data.setExpectedKmpl}
+              typicalLoadFactor={data.typicalLoadFactor}
+              setTypicalLoadFactor={data.setTypicalLoadFactor}
+              serviceIntervalKm={data.serviceIntervalKm}
+              setServiceIntervalKm={data.setServiceIntervalKm}
+              oilIntervalKm={data.oilIntervalKm}
+              setOilIntervalKm={data.setOilIntervalKm}
+              tyreLifeKm={data.tyreLifeKm}
+              setTyreLifeKm={data.setTyreLifeKm}
+              brakeLifeKm={data.brakeLifeKm}
+              setBrakeLifeKm={data.setBrakeLifeKm}
+              batteryLifeMonths={data.batteryLifeMonths}
+              setBatteryLifeMonths={data.setBatteryLifeMonths}
+              fuelFilterIntervalKm={data.fuelFilterIntervalKm}
+              setFuelFilterIntervalKm={data.setFuelFilterIntervalKm}
+              lastServiceOdometerKm={data.lastServiceOdometerKm}
+              setLastServiceOdometerKm={data.setLastServiceOdometerKm}
+              lastOilChangeOdometerKm={data.lastOilChangeOdometerKm}
+              setLastOilChangeOdometerKm={data.setLastOilChangeOdometerKm}
+              lastTyreChangeOdometerKm={data.lastTyreChangeOdometerKm}
+              setLastTyreChangeOdometerKm={data.setLastTyreChangeOdometerKm}
+              lastBrakeServiceOdometerKm={data.lastBrakeServiceOdometerKm}
+              setLastBrakeServiceOdometerKm={data.setLastBrakeServiceOdometerKm}
+              lastFuelFilterChangeOdometerKm={data.lastFuelFilterChangeOdometerKm}
+              setLastFuelFilterChangeOdometerKm={data.setLastFuelFilterChangeOdometerKm}
+              batteryInstalledAt={data.batteryInstalledAt}
+              setBatteryInstalledAt={data.setBatteryInstalledAt}
               activeTrips={data.activeTrips}
               editingVehicleId={data.editingVehicleId}
               onSaveVehicle={data.handleSaveVehicle}
@@ -345,7 +343,7 @@ function ManagerRoutes() {
         path="/drivers"
         element={
           <>
-            <Topbar title="Drivers" subtitle="Manage driver accounts" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Drivers" subtitle="Roster readiness and driver access" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Drivers
               drivers={data.drivers}
               loading={loading}
@@ -355,6 +353,8 @@ function ManagerRoutes() {
               setDriverEmail={data.setDriverEmail}
               driverPhone={data.driverPhone}
               setDriverPhone={data.setDriverPhone}
+              driverStatus={data.driverStatus}
+              setDriverStatus={data.setDriverStatus}
               driverPassword={data.driverPassword}
               setDriverPassword={data.setDriverPassword}
               editingDriverId={data.editingDriverId}
@@ -370,10 +370,11 @@ function ManagerRoutes() {
         path="/fuel"
         element={
           <>
-            <Topbar title="Fuel Analytics" subtitle="Track fuel usage" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Fuel" subtitle="Spend, consumption, and fuel log control" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Fuel
               vehicles={data.vehicles}
               fuelLogs={data.fuelLogs}
+              fuelForecasts={data.fuelForecasts}
               loading={loading}
               fuelVehicle={data.fuelVehicle}
               setFuelVehicle={data.setFuelVehicle}
@@ -387,7 +388,12 @@ function ManagerRoutes() {
               setFuelOdometer={data.setFuelOdometer}
               fuelVendor={data.fuelVendor}
               setFuelVendor={data.setFuelVendor}
+              editingFuelId={data.editingFuelId}
+              onExportFuel={() => exportFuel(data.fuelLogs)}
               onAddFuel={data.handleAddFuel}
+              onEditFuel={data.handleEditFuel}
+              onCancelFuelEdit={data.handleCancelFuelEdit}
+              onDeleteFuel={data.handleDeleteFuel}
             />
           </>
         }
@@ -409,22 +415,32 @@ function ManagerRoutes() {
               setMaintDate={data.setMaintDate}
               maintType={data.maintType}
               setMaintType={data.setMaintType}
+              maintEventType={data.maintEventType}
+              setMaintEventType={data.setMaintEventType}
+              maintEventCategory={data.maintEventCategory}
+              setMaintEventCategory={data.setMaintEventCategory}
+              maintSeverity={data.maintSeverity}
+              setMaintSeverity={data.setMaintSeverity}
               maintCost={data.maintCost}
               setMaintCost={data.setMaintCost}
               maintOdometer={data.maintOdometer}
               setMaintOdometer={data.setMaintOdometer}
               maintNextDue={data.maintNextDue}
               setMaintNextDue={data.setMaintNextDue}
-              maintPredictedDate={data.maintPredictedDate}
-              setMaintPredictedDate={data.setMaintPredictedDate}
               maintNotes={data.maintNotes}
               setMaintNotes={data.setMaintNotes}
+              editingMaintenanceId={data.editingMaintenanceId}
               centerName={data.centerName}
               setCenterName={data.setCenterName}
               centerPhone={data.centerPhone}
               setCenterPhone={data.setCenterPhone}
               centerAddress={data.centerAddress}
               setCenterAddress={data.setCenterAddress}
+              centerPortalEmail={data.centerPortalEmail}
+              setCenterPortalEmail={data.setCenterPortalEmail}
+              centerPortalPassword={data.centerPortalPassword}
+              setCenterPortalPassword={data.setCenterPortalPassword}
+              editingCenterId={data.editingCenterId}
               bookingVehicle={data.bookingVehicle}
               setBookingVehicle={data.setBookingVehicle}
               bookingCenter={data.bookingCenter}
@@ -433,9 +449,21 @@ function ManagerRoutes() {
               setBookingDate={data.setBookingDate}
               bookingNotes={data.bookingNotes}
               setBookingNotes={data.setBookingNotes}
+              editingBookingId={data.editingBookingId}
               onAddMaintenance={data.handleAddMaintenance}
+              onEditMaintenance={data.handleEditMaintenance}
+              onCancelMaintenanceEdit={data.handleCancelMaintenanceEdit}
+              onDeleteMaintenance={data.handleDeleteMaintenance}
               onAddCenter={data.handleAddCenter}
+              onEditCenter={data.handleEditCenter}
+              onCancelCenterEdit={data.handleCancelCenterEdit}
+              onDeleteCenter={data.handleDeleteCenter}
               onAddBooking={data.handleAddBooking}
+              onEditBooking={data.handleEditBooking}
+              onCancelBookingEdit={data.handleCancelBookingEdit}
+              onDeleteBooking={data.handleDeleteBooking}
+              onApproveBookingCompletion={data.handleApproveBookingCompletion}
+              onRejectBookingCompletion={data.handleRejectBookingCompletion}
             />
           </>
         }
@@ -444,20 +472,29 @@ function ManagerRoutes() {
         path="/documents"
         element={
           <>
-            <Topbar title="Documents" subtitle="Compliance tracking" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Documents" subtitle="Renewals, ownership, and coverage" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Documents
               vehicles={data.vehicles}
+              drivers={data.drivers}
               documents={data.documents}
               loading={loading}
+              docOwnerType={data.docOwnerType}
+              setDocOwnerType={data.setDocOwnerType}
               docVehicle={data.docVehicle}
               setDocVehicle={data.setDocVehicle}
+              docDriver={data.docDriver}
+              setDocDriver={data.setDocDriver}
               docType={data.docType}
               setDocType={data.setDocType}
               docNumber={data.docNumber}
               setDocNumber={data.setDocNumber}
               docExpiry={data.docExpiry}
               setDocExpiry={data.setDocExpiry}
+              editingDocumentId={data.editingDocumentId}
               onAddDocument={data.handleAddDocument}
+              onEditDocument={data.handleEditDocument}
+              onCancelDocumentEdit={data.handleCancelDocumentEdit}
+              onDeleteDocument={data.handleDeleteDocument}
             />
           </>
         }
@@ -468,14 +505,24 @@ function ManagerRoutes() {
         path="/analytics"
         element={
           <>
-            <Topbar title="Analytics" subtitle="Trends and exports" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Analytics" subtitle="Fleet performance and operating insight" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Analytics
-              fuelLogs={data.fuelLogs}
               maintenance={data.maintenance}
+              fuelCostTotal={data.fuelCostTotal}
+              projectedFuelDemand={data.fuelForecasts.reduce(
+                (sum, row) => sum + row.forecast_liters_7d,
+                0
+              )}
+              avgFuelPerVehicle={
+                data.vehicles.length > 0
+                  ? data.fuelLogs.reduce((sum, f) => sum + f.liters, 0) /
+                    data.vehicles.length
+                  : 0
+              }
               vehicleCount={data.vehicles.length}
               driverCount={data.drivers.length}
               activeTrips={data.activeTrips}
-              onExportFuel={() => exportFuel(data.fuelLogs)}
+              topPerformers={data.topPerformers}
               onExportMaintenance={() => exportMaintenance(data.maintenance)}
             />
           </>
@@ -485,17 +532,15 @@ function ManagerRoutes() {
         path="/ml"
         element={
           <>
-            <Topbar title="ML Predictions" subtitle="Run model inference" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="ML Predictions" subtitle="Maintenance risk checks and history" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <MLPredictions
-              maintFeatures={data.maintFeatures}
-              setMaintFeatures={data.setMaintFeatures}
-              fuelFeatures={data.fuelFeatures}
-              setFuelFeatures={data.setFuelFeatures}
-              maintResult={data.maintResult}
-              fuelResult={data.fuelResult}
+              vehicles={data.vehicles}
+              mlVehicleId={data.mlVehicleId}
+              setMlVehicleId={data.setMlVehicleId}
+              maintenancePredictions={data.maintenancePredictions}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               loading={loading}
-              onPredictMaintenance={data.handlePredictMaintenance}
-              onPredictFuel={data.handlePredictFuel}
+              onRunVehicleMaintenanceCheck={data.runVehicleMaintenanceCheck}
             />
           </>
         }
@@ -504,14 +549,16 @@ function ManagerRoutes() {
         path="/reports"
         element={
           <>
-            <Topbar title="Reports" subtitle="Exports and summaries" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Reports" subtitle="Filtered exports and operational records" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Reports
-              onExportVehicles={() => exportVehicles(data.vehicles)}
-              onExportDrivers={() => exportDrivers(data.drivers)}
-              onExportTrips={() => exportTrips(data.trips)}
-              onExportFuel={() => exportFuel(data.fuelLogs)}
-              onExportMaintenance={() => exportMaintenance(data.maintenance)}
-              onExportDocuments={() => exportDocuments(data.documents)}
+              vehicles={data.vehicles}
+              drivers={data.drivers}
+              trips={data.trips}
+              fuelLogs={data.fuelLogs}
+              maintenance={data.maintenance}
+              documents={data.documents}
+              serviceBookings={data.serviceBookings}
+              serviceCenters={data.serviceCenters}
             />
           </>
         }
@@ -520,8 +567,13 @@ function ManagerRoutes() {
         path="/compliance"
         element={
           <>
-            <Topbar title="Compliance" subtitle="Renewals and upcoming actions" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
-            <Compliance documents={data.documents} maintenance={data.maintenance} />
+            <Topbar title="Compliance" subtitle="Priority alerts and renewal actions" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Compliance
+              documents={data.documents}
+              maintenance={data.maintenance}
+              vehicles={data.vehicles}
+              serviceBookings={data.serviceBookings}
+            />
           </>
         }
       />
@@ -547,52 +599,135 @@ function ManagerRoutes() {
   );
 }
 
+function ServiceRoutes() {
+  const {
+    handleSignOut,
+    loading,
+    email,
+    role,
+    fullName,
+    phone,
+    handleUpdateProfile,
+    handleChangePassword,
+    profileLoading,
+    token,
+  } = useAuth();
+
+  const resolvedName = fullName || (email ? email.split("@")[0] : "Service Center");
+  const userName = resolvedName.split(" ")[0];
+  const userRole = role || "service";
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/service" replace />} />
+      <Route
+        path="/service"
+        element={
+          <>
+            <Topbar
+              title="Service Center Dashboard"
+              subtitle="Booking queue and workshop workload"
+              userName={userName}
+              userRole={userRole}
+              onSignOut={handleSignOut}
+            />
+            <ServicePortal token={token} />
+          </>
+        }
+      />
+      <Route
+        path="/service/bookings"
+        element={
+          <>
+            <Topbar
+              title="Service Bookings"
+              subtitle="Accept, complete, and update service jobs"
+              userName={userName}
+              userRole={userRole}
+              onSignOut={handleSignOut}
+            />
+            <ServicePortal token={token} initialTab="bookings" />
+          </>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <>
+            <Topbar title="Profile Settings" subtitle="Manage your account" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <ProfileSettings
+              email={email}
+              role={userRole}
+              name={fullName}
+              phone={phone}
+              profileLoading={profileLoading}
+              loading={loading}
+              onUpdateProfile={handleUpdateProfile}
+              onChangePassword={handleChangePassword}
+            />
+          </>
+        }
+      />
+      <Route path="*" element={<Navigate to="/service" replace />} />
+    </Routes>
+  );
+}
+
 function AppContent() {
   const { accessToken, role, profileLoading, error, setError, authReady } = useAuth();
-  const [selectedLoginRole, setSelectedLoginRole] = useState<"manager" | "driver" | null>(() => {
-    const stored = localStorage.getItem("fleetlanka.loginRole");
-    return stored === "manager" || stored === "driver" ? stored : null;
-  });
+  const location = useLocation();
+  const path = location.pathname;
 
-  function handleSelectRole(selected: "manager" | "driver") {
-    localStorage.setItem("fleetlanka.loginRole", selected);
-    setSelectedLoginRole(selected);
+  function appHomePath() {
+    if (role === "driver") return "/driver";
+    if (role === "service") return "/service";
+    return "/dashboard";
   }
 
   if (!authReady) {
     return <LoadingScreen />;
   }
 
-  // If logged in, show appropriate interface
-  if (accessToken) {
-    if (profileLoading && !role) {
-      return <LoadingScreen />;
-    }
-    return (
-      <AppLayout showSidebar={role !== "driver"} role={role}>
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
-            </button>
-          </div>
-        )}
-        {role === "driver" ? <DriverRoutes /> : <ManagerRoutes />}
-      </AppLayout>
-    );
+  if (path === "/") {
+    return <PublicHomePage accessToken={accessToken} role={role} />;
   }
 
-  // Not logged in - show login flow
-  if (!selectedLoginRole) {
-    return <RoleSelection onSelectRole={handleSelectRole} />;
+  if (path === "/login") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <AuthPortal />;
   }
 
-  if (selectedLoginRole === "manager") {
-    return <ManagerLogin onBack={() => setSelectedLoginRole(null)} />;
+  if (path === "/login/manager" || path === "/login/driver" || path === "/login/service") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <Navigate to="/login" replace />;
   }
 
-  return <DriverLogin onBack={() => setSelectedLoginRole(null)} />;
+  if (path === "/signup") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <AuthPortal initialSignup />;
+  }
+
+  if (!accessToken) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (profileLoading && !role) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <AppLayout showSidebar={role !== "driver"} role={role}>
+      {error && (
+        <div className="alert alert--error">
+          <span>{error}</span>
+          <button className="alert__close" type="button" onClick={() => setError(null)}>
+            ×
+          </button>
+        </div>
+      )}
+      {role === "driver" ? <DriverRoutes /> : role === "service" ? <ServiceRoutes /> : <ManagerRoutes />}
+    </AppLayout>
+  );
 }
 
 export default function App() {

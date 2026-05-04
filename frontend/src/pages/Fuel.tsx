@@ -1,4 +1,5 @@
-import { FormEvent } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { BarChart3, CalendarDays, CircleDollarSign, ClipboardList, Eye, Fuel as FuelIconGlyph, Gauge, Pencil, Trash2, TrendingUp, type LucideIcon } from "lucide-react";
 
 type Vehicle = {
   id: string;
@@ -7,14 +8,24 @@ type Vehicle = {
 
 type FuelLog = {
   id: string;
+  vehicle_id: string;
   fuel_date: string;
   liters: number;
   cost_lkr?: number;
+  odometer_km?: number;
+  vendor?: string;
+};
+
+type FuelForecast = {
+  vehicle_id: string;
+  plate_no: string;
+  forecast_liters_7d: number;
 };
 
 type FuelProps = {
   vehicles: Vehicle[];
   fuelLogs: FuelLog[];
+  fuelForecasts: FuelForecast[];
   loading: boolean;
   fuelVehicle: string;
   setFuelVehicle: (v: string) => void;
@@ -28,128 +39,710 @@ type FuelProps = {
   setFuelOdometer: (v: string) => void;
   fuelVendor: string;
   setFuelVendor: (v: string) => void;
+  editingFuelId: string | null;
+  onExportFuel: () => void;
   onAddFuel: (e: FormEvent) => void;
+  onEditFuel: (fuelLog: FuelLog) => void;
+  onCancelFuelEdit: () => void;
+  onDeleteFuel: (fuelId: string) => Promise<void>;
 };
 
+type FuelTab = "overview" | "forecast" | "register";
+
+type FuelIconName = "logs" | "volume" | "cost" | "trend" | "demand";
+
+function FuelIcon({ name }: { name: FuelIconName }) {
+  const icons: Record<FuelIconName, LucideIcon> = {
+    logs: ClipboardList,
+    volume: FuelIconGlyph,
+    cost: CircleDollarSign,
+    trend: TrendingUp,
+    demand: BarChart3,
+  };
+  const Icon = icons[name];
+  return <Icon aria-hidden="true" />;
+}
+
 export default function Fuel(props: FuelProps) {
+  const [activeTab, setActiveTab] = useState<FuelTab>("overview");
+  const [showFuelModal, setShowFuelModal] = useState(false);
+  const [selectedFuelLog, setSelectedFuelLog] = useState<FuelLog | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FuelLog | null>(null);
+  const [fuelSearch, setFuelSearch] = useState("");
+  const [fuelRowsPerPage, setFuelRowsPerPage] = useState(10);
+  const [fuelPage, setFuelPage] = useState(1);
+
   const totalLiters = props.fuelLogs.reduce((sum, f) => sum + f.liters, 0);
   const totalCost = props.fuelLogs.reduce((sum, f) => sum + (f.cost_lkr || 0), 0);
+  const avgCostPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+  const projectedFuelDemand = props.fuelForecasts.reduce(
+    (sum, row) => sum + row.forecast_liters_7d,
+    0
+  );
+
+  const vehicleLabelMap = useMemo(
+    () =>
+      props.vehicles.reduce<Record<string, string>>((acc, vehicle) => {
+        acc[vehicle.id] = vehicle.plate_no;
+        return acc;
+      }, {}),
+    [props.vehicles]
+  );
+
+  const filteredFuelLogs = props.fuelLogs.filter((log) => {
+    const query = fuelSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      log.fuel_date,
+      log.vendor,
+      vehicleLabelMap[log.vehicle_id] || "",
+      String(log.liters),
+      typeof log.cost_lkr === "number" ? String(log.cost_lkr) : "",
+      typeof log.odometer_km === "number" ? String(log.odometer_km) : "",
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const fuelTotalPages = Math.max(1, Math.ceil(filteredFuelLogs.length / fuelRowsPerPage));
+  const currentFuelPage = Math.min(fuelPage, fuelTotalPages);
+  const paginatedFuelLogs = filteredFuelLogs.slice(
+    (currentFuelPage - 1) * fuelRowsPerPage,
+    currentFuelPage * fuelRowsPerPage
+  );
+
+  useEffect(() => {
+    setFuelPage(1);
+  }, [fuelRowsPerPage, fuelSearch, props.fuelLogs.length]);
+
+  useEffect(() => {
+    if (!props.loading) {
+      setShowFuelModal(false);
+    }
+  }, [props.loading]);
+
+  const fuelByDate = props.fuelLogs.reduce<Record<string, number>>((acc, f) => {
+    acc[f.fuel_date] = (acc[f.fuel_date] || 0) + f.liters;
+    return acc;
+  }, {});
+  const fuelSeries = Object.entries(fuelByDate)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-7);
+  const maxFuel = fuelSeries.reduce((m, [, v]) => Math.max(m, v), 1);
+  const demandWeights =
+    fuelSeries.length > 0
+      ? fuelSeries.map(([, value]) => value)
+      : Array.from({ length: 7 }, () => 1);
+  const demandWeightTotal =
+    demandWeights.reduce((sum, value) => sum + value, 0) || 1;
+  const futureDemandSeries = Array.from({ length: 7 }, (_, index) => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + index + 1);
+    const weight = demandWeights[index % demandWeights.length] / demandWeightTotal;
+    return [
+      futureDate.toISOString().slice(0, 10),
+      projectedFuelDemand * weight,
+    ] as const;
+  });
+  const maxFuelDemand = futureDemandSeries.reduce(
+    (m, [, value]) => Math.max(m, value),
+    1
+  );
+  const vehicleFuelDemand = [...props.fuelForecasts]
+    .sort((a, b) => b.forecast_liters_7d - a.forecast_liters_7d)
+    .slice(0, 8);
+  const topDemandVehicle = vehicleFuelDemand[0] || null;
+  const recentFuelLogs = [...props.fuelLogs]
+    .sort((a, b) => new Date(b.fuel_date).getTime() - new Date(a.fuel_date).getTime())
+    .slice(0, 5);
+  const latestFuelLog = recentFuelLogs[0] || null;
+  const highDemandVehicles = vehicleFuelDemand.slice(0, 5);
+  const costPerLiter =
+    selectedFuelLog?.cost_lkr && selectedFuelLog.liters > 0
+      ? selectedFuelLog.cost_lkr / selectedFuelLog.liters
+      : null;
+
+  function closeFuelModal() {
+    setShowFuelModal(false);
+    if (props.editingFuelId) {
+      props.onCancelFuelEdit();
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    await props.onDeleteFuel(deleteTarget.id);
+    setDeleteTarget(null);
+  }
 
   return (
     <section className="section">
-      <div className="stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: "24px" }}>
-        <div className="stat-card">
-          <div className="stat-icon">📊</div>
+      <section className="analytics-page fuel-page">
+      <div className="stats stats--three analytics-stats">
+        <div className="stat-card stat-card--blue">
+          <div className="stat-icon"><FuelIcon name="logs" /></div>
           <div className="stat-value">{props.fuelLogs.length}</div>
-          <div className="stat-label">Total Entries</div>
+          <div className="stat-label">Fuel Entries</div>
+          <div className="stat-sub">Recorded transactions</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">⛽</div>
+        <div className="stat-card stat-card--green">
+          <div className="stat-icon"><FuelIcon name="volume" /></div>
           <div className="stat-value">{totalLiters.toFixed(0)}L</div>
           <div className="stat-label">Total Fuel</div>
+          <div className="stat-sub">Logged consumption</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">💰</div>
-          <div className="stat-value">Rs.{totalCost.toLocaleString()}</div>
-          <div className="stat-label">Total Cost</div>
+        <div className="stat-card stat-card--purple">
+          <div className="stat-icon"><FuelIcon name="cost" /></div>
+          <div className="stat-value">{avgCostPerLiter > 0 ? avgCostPerLiter.toFixed(0) : "0"}</div>
+          <div className="stat-label">Avg Cost / Liter</div>
+          <div className="stat-sub">Spend efficiency</div>
         </div>
       </div>
 
-      <div className="grid">
-        <section className="card">
-          <div className="card__header">
-            <h3>⛽ Log Fuel Purchase</h3>
-          </div>
-          <form className="form" onSubmit={props.onAddFuel}>
-            <label>
-              Vehicle
-              <select
-                value={props.fuelVehicle}
-                onChange={(e) => props.setFuelVehicle(e.target.value)}
-                required
-              >
-                <option value="">Select a vehicle</option>
-                {props.vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.plate_no}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Fuel Date
-              <input
-                type="date"
-                value={props.fuelDate}
-                onChange={(e) => props.setFuelDate(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Liters
-              <input
-                type="number"
-                placeholder="e.g., 45"
-                value={props.fuelLiters}
-                onChange={(e) => props.setFuelLiters(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Cost (LKR)
-              <input
-                type="number"
-                placeholder="e.g., 15000"
-                value={props.fuelCost}
-                onChange={(e) => props.setFuelCost(e.target.value)}
-              />
-            </label>
-            <label>
-              Odometer (km)
-              <input
-                type="number"
-                placeholder="Current reading"
-                value={props.fuelOdometer}
-                onChange={(e) => props.setFuelOdometer(e.target.value)}
-              />
-            </label>
-            <label>
-              Vendor / Station
-              <input
-                placeholder="e.g., Lanka IOC, Colombo"
-                value={props.fuelVendor}
-                onChange={(e) => props.setFuelVendor(e.target.value)}
-              />
-            </label>
-            <button className="btn" type="submit" disabled={props.loading}>
-              {props.loading ? "Saving..." : "+ Add Fuel Log"}
+      <nav className="admin-tabs" aria-label="Fuel sections">
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "forecast" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("forecast")}
+        >
+          Forecast
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
+          onClick={() => setActiveTab("register")}
+        >
+          Register
+        </button>
+      </nav>
+
+      {activeTab === "overview" && (
+      <div className="fuel-workspace">
+        <section className="card fuel-panel fuel-panel--spend">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Fuel spend</span>
+              <h3>Cost and Consumption</h3>
+              <p>Review the fleet’s fuel spend, total liters, and latest station entry in one place.</p>
+            </div>
+            <button
+              className="btn btn--secondary btn--compact"
+              type="button"
+              onClick={() => setActiveTab("register")}
+            >
+              View Register
             </button>
-          </form>
+          </div>
+          <div className="fuel-metric-grid">
+            <div><span>Total Spend</span><strong>Rs.{totalCost.toLocaleString()}</strong></div>
+            <div><span>Total Liters</span><strong>{totalLiters.toFixed(1)} L</strong></div>
+            <div><span>Avg Cost / Liter</span><strong>{avgCostPerLiter > 0 ? `Rs.${avgCostPerLiter.toFixed(0)}` : "--"}</strong></div>
+            <div><span>Latest Entry</span><strong>{latestFuelLog ? `${vehicleLabelMap[latestFuelLog.vehicle_id] || "Vehicle"} • ${latestFuelLog.fuel_date}` : "No logs"}</strong></div>
+          </div>
         </section>
 
-        <section className="card">
-          <div className="card__header">
-            <h3>📋 Recent Fuel Logs</h3>
-            {props.fuelLogs.length > 0 && (
-              <span className="pill">{props.fuelLogs.length}</span>
-            )}
-          </div>
-          {props.fuelLogs.length === 0 ? (
-            <p className="empty">No fuel logs recorded yet. Add your first entry above.</p>
-          ) : (
-            <ul className="list">
-              {props.fuelLogs.slice(0, 8).map((f) => (
-                <li key={f.id}>
-                  <div className="list__title">{f.fuel_date}</div>
-                  <div className="list__meta">
-                    {f.liters}L • {f.cost_lkr ? `Rs.${f.cost_lkr.toLocaleString()}` : "Cost not recorded"}
+        <div className="fuel-side-stack">
+          <section className="card fuel-panel">
+            <div className="fuel-panel__header fuel-panel__header--compact">
+              <div>
+                <span className="fuel-panel__eyebrow">Fuel logging</span>
+                <h3>Record Purchase</h3>
+              </div>
+            </div>
+            <p className="fuel-panel__note">Capture vehicle, liters, cost, odometer, and station details as soon as receipts are received.</p>
+            <div className="fuel-action-stack">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  props.onCancelFuelEdit();
+                  setShowFuelModal(true);
+                }}
+              >
+                Add Fuel Log
+              </button>
+              <button className="btn btn--secondary" type="button" onClick={props.onExportFuel}>
+                Export CSV
+              </button>
+            </div>
+          </section>
+
+          <section className="card fuel-panel">
+            <div className="fuel-panel__header fuel-panel__header--compact">
+              <div>
+                <span className="fuel-panel__eyebrow">Consumption watch</span>
+                <h3>Highest Demand</h3>
+              </div>
+            </div>
+            {highDemandVehicles.length === 0 ? (
+              <div className="fuel-empty-state">
+                <TrendingUp aria-hidden="true" />
+                <div><strong>No forecast yet</strong><span>Vehicle demand will appear after forecasts run.</span></div>
+              </div>
+            ) : (
+              <div className="fuel-card-list">
+                {highDemandVehicles.map((forecast) => (
+                  <div className="fuel-card-row" key={forecast.vehicle_id}>
+                    <div>
+                      <strong>{forecast.plate_no}</strong>
+                      <span>Next 7 days</span>
+                    </div>
+                    <span>{forecast.forecast_liters_7d.toFixed(1)} L</span>
                   </div>
-                </li>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="card fuel-panel fuel-panel--wide">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Recent fuel activity</span>
+              <h3>Latest Logs</h3>
+              <p>Recent purchases with vehicle, station, liters, cost, and odometer context.</p>
+            </div>
+            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("register")}>Open Register</button>
+          </div>
+          {recentFuelLogs.length === 0 ? (
+            <div className="fuel-empty-state">
+              <FuelIconGlyph aria-hidden="true" />
+              <div><strong>No fuel logs recorded</strong><span>Add the first fuel purchase from the logging panel.</span></div>
+            </div>
+          ) : (
+            <div className="fuel-card-list">
+              {recentFuelLogs.map((log) => (
+                <button key={log.id} className="fuel-card-row fuel-card-row--button" type="button" onClick={() => setSelectedFuelLog(log)}>
+                  <div>
+                    <strong>{vehicleLabelMap[log.vehicle_id] || "Vehicle"} • {log.fuel_date}</strong>
+                    <span>{log.vendor || "Station not recorded"} • {log.odometer_km ? `${log.odometer_km.toLocaleString()} km` : "Odometer not recorded"}</span>
+                  </div>
+                  <span>{log.liters} L • {log.cost_lkr ? `Rs.${log.cost_lkr.toLocaleString()}` : "Cost pending"}</span>
+                </button>
               ))}
-            </ul>
+            </div>
           )}
         </section>
       </div>
+      )}
+
+      {activeTab === "forecast" && (
+      <div className="fuel-forecast-grid">
+        <section className="card fuel-panel fuel-panel--chart">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Recent trend</span>
+              <h3>Fuel Trend (last 7 days)</h3>
+              <p>Daily logged fuel usage across the fleet.</p>
+            </div>
+          </div>
+          {fuelSeries.length === 0 ? (
+            <p className="muted empty">No fuel data to plot.</p>
+          ) : (
+            <div className="bar-chart">
+              {fuelSeries.map(([date, value]) => (
+                <div key={date} className="bar">
+                  <div className="bar__track">
+                    <div
+                      className="bar__fill"
+                      style={{ height: `${(value / maxFuel) * 100}%` }}
+                    />
+                  </div>
+                  <div className="bar__meta">
+                    <div className="bar__label">{date.slice(5)}</div>
+                    <div className="bar__value">{value.toFixed(1)}L</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card fuel-panel fuel-panel--chart">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Demand outlook</span>
+              <h3>Projected Fuel Demand (next 7 days)</h3>
+              <p>Projected day-by-day fuel requirement from the current weekly forecast.</p>
+            </div>
+          </div>
+          {props.fuelForecasts.length === 0 ? (
+            <p className="muted empty">No fuel forecast available yet.</p>
+          ) : (
+            <div className="bar-chart">
+              {futureDemandSeries.map(([date, value]) => (
+                <div key={date} className="bar">
+                  <div className="bar__track">
+                    <div
+                      className="bar__fill bar__fill--demand"
+                      style={{ height: `${(value / maxFuelDemand) * 100}%` }}
+                    />
+                  </div>
+                  <div className="bar__meta">
+                    <div className="bar__label">{date.slice(5)}</div>
+                    <div className="bar__value">{value.toFixed(1)}L</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="card fuel-panel fuel-panel--ranking">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Vehicle ranking</span>
+              <h3>Highest Demand Vehicles</h3>
+              <p>Vehicles expected to need the most fuel in the next week.</p>
+            </div>
+          </div>
+          {vehicleFuelDemand.length === 0 ? (
+            <div className="fuel-empty-state">
+              <BarChart3 aria-hidden="true" />
+              <div><strong>No forecast available</strong><span>Vehicle demand rankings will appear after forecasts are available.</span></div>
+            </div>
+          ) : (
+            <div className="fuel-card-list">
+              {vehicleFuelDemand.map((forecast) => (
+                <div className="fuel-card-row" key={forecast.vehicle_id}>
+                  <div>
+                    <strong>{forecast.plate_no}</strong>
+                    <span>Forecast demand</span>
+                  </div>
+                  <span>{forecast.forecast_liters_7d.toFixed(1)} L</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+      )}
+
+      {activeTab === "register" && (
+      <div className="fuel-register-grid">
+        <section className="card fuel-panel">
+          <div className="fuel-panel__header">
+            <div>
+              <span className="fuel-panel__eyebrow">Register activity</span>
+              <h3>Recent Activity</h3>
+              <p>Latest fuel entries available for quick review.</p>
+            </div>
+            <button className="btn btn--secondary btn--compact" onClick={props.onExportFuel}>
+              Export CSV
+            </button>
+          </div>
+          {props.fuelLogs.length === 0 ? (
+            <div className="fuel-empty-state"><FuelIconGlyph aria-hidden="true" /><div><strong>No fuel logs recorded</strong><span>New entries will appear here after logging.</span></div></div>
+          ) : (
+            <div className="fuel-card-list">
+              {props.fuelLogs.slice(0, 4).map((log) => (
+                <button key={log.id} className="fuel-card-row fuel-card-row--button" type="button" onClick={() => setSelectedFuelLog(log)}>
+                  <div>
+                    <strong>{vehicleLabelMap[log.vehicle_id] || "Vehicle"} • {log.fuel_date}</strong>
+                    <span>{log.vendor || "Station not recorded"}</span>
+                  </div>
+                  <span>{log.liters} L</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+      <section className="card analytics-register fuel-panel fuel-panel--register">
+        <div className="fuel-panel__header">
+          <div>
+            <span className="fuel-panel__eyebrow">Fuel register</span>
+            <h3>Fuel Register</h3>
+            <p>Search, review, edit, and export the complete fuel log history.</p>
+          </div>
+        </div>
+        {props.fuelLogs.length === 0 ? (
+          <p className="empty">No fuel logs recorded yet.</p>
+        ) : (
+          <>
+            <div className="table-controls">
+              <div className="table-controls__filters">
+                <label className="table-controls__label table-controls__label--search">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Date, vehicle, vendor..."
+                    value={fuelSearch}
+                    onChange={(e) => setFuelSearch(e.target.value)}
+                  />
+                </label>
+                <label className="table-controls__label">
+                  Rows
+                  <select
+                    value={fuelRowsPerPage}
+                    onChange={(e) => setFuelRowsPerPage(Number(e.target.value))}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </label>
+              </div>
+              <div className="table-pagination">
+                <span className="table-pagination__meta">
+                  Page {currentFuelPage} of {fuelTotalPages}
+                </span>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setFuelPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentFuelPage === 1}
+                >
+                  Prev
+                </button>
+                <button
+                  className="btn btn--secondary btn--compact"
+                  type="button"
+                  onClick={() => setFuelPage((prev) => Math.min(fuelTotalPages, prev + 1))}
+                  disabled={currentFuelPage === fuelTotalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            {filteredFuelLogs.length === 0 ? (
+              <p className="empty">No fuel logs match the current search.</p>
+            ) : (
+              <div className="table fuel-table" style={{ ["--table-columns" as any]: 6 }}>
+                <div className="table__head fuel-table__head">
+                  <span>Date</span>
+                  <span>Vehicle</span>
+                  <span>Liters</span>
+                  <span>Cost</span>
+                  <span>Vendor</span>
+                  <span>Actions</span>
+                </div>
+                {paginatedFuelLogs.map((log) => (
+                  <div className="table__row fuel-table__row" key={log.id}>
+                    <span data-label="Date">{log.fuel_date}</span>
+                    <span data-label="Vehicle">{vehicleLabelMap[log.vehicle_id] || "--"}</span>
+                    <span data-label="Liters">{log.liters}L</span>
+                    <span data-label="Cost">{log.cost_lkr ? `Rs.${log.cost_lkr.toLocaleString()}` : "--"}</span>
+                    <span data-label="Vendor">{log.vendor || "--"}</span>
+                    <span className="table__actions fuel-table__actions" data-label="Actions">
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => setSelectedFuelLog(log)}
+                        aria-label={`View fuel log ${log.id}`}
+                        title="View fuel log"
+                      >
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-action"
+                        type="button"
+                        onClick={() => {
+                          props.onEditFuel(log);
+                          setShowFuelModal(true);
+                        }}
+                        aria-label={`Edit fuel log ${log.id}`}
+                        title="Edit fuel log"
+                      >
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
+                      </button>
+                      <button
+                        className="icon-action icon-action--danger"
+                        type="button"
+                        onClick={() => setDeleteTarget(log)}
+                        aria-label={`Delete fuel log ${log.id}`}
+                        title="Delete fuel log"
+                        disabled={props.loading}
+                      >
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+      </div>
+      )}
+      </section>
+
+      {showFuelModal && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--form" role="dialog" aria-modal="true" aria-label="Fuel log form">
+            <div className="modal__header">
+              <div>
+                <h3>{props.editingFuelId ? "Edit Fuel Log" : "Log Fuel Purchase"}</h3>
+                <p className="modal__subtle">
+                  {props.editingFuelId
+                    ? "Update liters, cost, odometer, and vendor details."
+                    : "Capture liters, cost, odometer, and vendor details."}
+                </p>
+              </div>
+              <button className="modal__close" type="button" onClick={closeFuelModal} aria-label="Close fuel form">
+                ✕
+              </button>
+            </div>
+            <form id="fuel-form" className="form form--two-col form--scroll" onSubmit={props.onAddFuel}>
+              <div className="form-section-title form__field--full">
+                <CalendarDays aria-hidden="true" />
+                <div>
+                  <h4>Vehicle & Date</h4>
+                  <p>Select the vehicle and the purchase date from the fuel receipt.</p>
+                </div>
+              </div>
+              <label>
+                Vehicle
+                <select
+                  value={props.fuelVehicle}
+                  onChange={(e) => props.setFuelVehicle(e.target.value)}
+                  required
+                >
+                  <option value="">Select a vehicle</option>
+                  {props.vehicles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.plate_no}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Fuel Date
+                <input
+                  type="date"
+                  value={props.fuelDate}
+                  onChange={(e) => props.setFuelDate(e.target.value)}
+                  required
+                />
+              </label>
+              <div className="form-section-title form__field--full">
+                <FuelIconGlyph aria-hidden="true" />
+                <div>
+                  <h4>Fuel Quantity</h4>
+                  <p>Record the number of liters added to the vehicle.</p>
+                </div>
+              </div>
+              <label>
+                Liters
+                <input
+                  type="number"
+                  placeholder="e.g., 45"
+                  value={props.fuelLiters}
+                  onChange={(e) => props.setFuelLiters(e.target.value)}
+                  required
+                />
+              </label>
+              <div className="form-section-title form__field--full">
+                <CircleDollarSign aria-hidden="true" />
+                <div>
+                  <h4>Cost & Station</h4>
+                  <p>Add payment amount and station/vendor details for audit trails.</p>
+                </div>
+              </div>
+              <label>
+                Cost (LKR)
+                <input
+                  type="number"
+                  placeholder="e.g., 15000"
+                  value={props.fuelCost}
+                  onChange={(e) => props.setFuelCost(e.target.value)}
+                />
+              </label>
+              <label>
+                Vendor / Station
+                <input
+                  placeholder="e.g., Lanka IOC, Colombo"
+                  value={props.fuelVendor}
+                  onChange={(e) => props.setFuelVendor(e.target.value)}
+                />
+              </label>
+              <div className="form-section-title form__field--full">
+                <Gauge aria-hidden="true" />
+                <div>
+                  <h4>Odometer</h4>
+                  <p>Use the current vehicle reading when available.</p>
+                </div>
+              </div>
+              <label className="form__field--full">
+                Odometer (km)
+                <input
+                  type="number"
+                  placeholder="Current reading"
+                  value={props.fuelOdometer}
+                  onChange={(e) => props.setFuelOdometer(e.target.value)}
+                />
+              </label>
+            </form>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={closeFuelModal}>
+                Cancel
+              </button>
+              <button className="btn" type="submit" form="fuel-form" disabled={props.loading}>
+                {props.loading ? "Saving..." : props.editingFuelId ? "Save Changes" : "Add Fuel Log"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedFuelLog && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Fuel log details">
+            <div className="modal__header">
+              <div>
+                <h3>Fuel Log Details</h3>
+                <p className="modal__subtle">
+                  {vehicleLabelMap[selectedFuelLog.vehicle_id] || "Vehicle"} • {selectedFuelLog.fuel_date}
+                </p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setSelectedFuelLog(null)} aria-label="Close fuel details">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid">
+              <div className="detail-item"><span>Date</span><strong>{selectedFuelLog.fuel_date}</strong></div>
+              <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedFuelLog.vehicle_id] || "--"}</strong></div>
+              <div className="detail-item"><span>Liters</span><strong>{selectedFuelLog.liters}L</strong></div>
+              <div className="detail-item"><span>Cost</span><strong>{selectedFuelLog.cost_lkr ? `Rs.${selectedFuelLog.cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Cost / Liter</span><strong>{costPerLiter ? `Rs.${costPerLiter.toFixed(0)}` : "--"}</strong></div>
+              <div className="detail-item"><span>Odometer</span><strong>{selectedFuelLog.odometer_km ?? "--"}</strong></div>
+              <div className="detail-item"><span>Vendor</span><strong>{selectedFuelLog.vendor || "--"}</strong></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-label="Confirm delete">
+            <div className="modal__header">
+              <h3>Delete Fuel Log?</h3>
+              <button className="modal__close" type="button" onClick={() => setDeleteTarget(null)} aria-label="Close delete dialog">
+                ✕
+              </button>
+            </div>
+            <p className="muted">
+              Are you sure you want to delete this fuel log for <strong>{vehicleLabelMap[deleteTarget.vehicle_id] || "Vehicle"}</strong>? This action cannot be undone.
+            </p>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button className="btn btn--danger" type="button" onClick={confirmDelete} disabled={props.loading}>
+                {props.loading ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

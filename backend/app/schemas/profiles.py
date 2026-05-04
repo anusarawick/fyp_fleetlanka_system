@@ -9,6 +9,7 @@ class ProfileOut(BaseModel):
     id: str
     org_id: str
     role: str
+    status: Optional[str] = None
     full_name: Optional[str] = None
     phone: Optional[str] = None
 

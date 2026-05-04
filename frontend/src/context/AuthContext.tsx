@@ -26,7 +26,7 @@ type AuthContextType = {
     setPassword: (v: string) => void;
     setError: (v: string | null) => void;
     setLoading: (v: boolean) => void;
-    handleLogin: (e: FormEvent, expectedRole?: "manager" | "driver") => Promise<void>;
+    handleLogin: (e: FormEvent) => Promise<void>;
     handleSignup: (e: FormEvent, name?: string, orgName?: string) => Promise<void>;
     handleUpdateProfile: (name: string, phone: string) => Promise<void>;
     handleChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -48,10 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [authReady, setAuthReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [expectedRole, setExpectedRole] = useState<"manager" | "driver" | null>(() => {
-        const stored = localStorage.getItem("fleetlanka.loginRole");
-        return stored === "manager" || stored === "driver" ? stored : null;
-    });
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
 
@@ -66,9 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!isMounted) return;
                 setAccessToken(session?.access_token ?? null);
                 setEmail(session?.user?.email ?? "");
-                if (session && expectedRole && !role) {
-                    setRole(expectedRole);
-                }
             } finally {
                 if (isMounted) setAuthReady(true);
             }
@@ -89,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!session && event === "SIGNED_OUT") {
                 setOrgId(null);
                 setRole(null);
-                setExpectedRole(null);
                 pendingSignOutRef.current = false;
             }
         });
@@ -100,40 +92,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    async function handleInactiveDriverSignOut() {
+        setError("This account is inactive. Please contact your manager.");
+        pendingSignOutRef.current = true;
+        await supabase.auth.signOut();
+        setAccessToken(null);
+        setOrgId(null);
+        setRole(null);
+    }
+
+    async function fetchProfileForToken(accessTokenValue: string) {
+        return apiGet<{ org_id: string; role: string; status?: string; full_name?: string; phone?: string }>(
+            "/profiles/me",
+            accessTokenValue
+        );
+    }
+
+    async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
+        if ((profile.role === "driver" || profile.role === "service") && profile.status !== "active") {
+            await handleInactiveDriverSignOut();
+            return false;
+        }
+        setOrgId(profile.org_id);
+        setRole(profile.role);
+        const nameValue = profile.full_name || "";
+        const phoneValue = profile.phone || "";
+        setFullName(nameValue);
+        setPhone(phoneValue);
+        localStorage.setItem("fleetlanka.profile.name", nameValue);
+        localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+        return true;
+    }
+
     async function loadProfile() {
         if (!token) return;
         setProfileLoading(true);
         try {
-            const profile = await apiGet<{ org_id: string; role: string; full_name?: string; phone?: string }>(
-                "/profiles/me",
-                token
-            );
-            if (expectedRole === "manager" && profile.role === "driver") {
-                setError("Driver accounts must use the Driver login.");
-                pendingSignOutRef.current = true;
-                await supabase.auth.signOut();
-                setAccessToken(null);
-                setOrgId(null);
-                setRole(null);
+            const profile = await fetchProfileForToken(token);
+            await applyProfile(profile);
+        } catch (err: any) {
+            const message = err?.message || "Profile load failed";
+            if (message.includes("Inactive account")) {
+                await handleInactiveDriverSignOut();
                 return;
             }
-            if (expectedRole === "driver" && profile.role !== "driver") {
-                setError("Manager accounts must use the Manager login.");
-                pendingSignOutRef.current = true;
-                await supabase.auth.signOut();
-                setAccessToken(null);
-                setOrgId(null);
-                setRole(null);
-                return;
-            }
-            setOrgId(profile.org_id);
-            setRole(profile.role);
-            const nameValue = profile.full_name || "";
-            const phoneValue = profile.phone || "";
-            setFullName(nameValue);
-            setPhone(phoneValue);
-            localStorage.setItem("fleetlanka.profile.name", nameValue);
-            localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+            throw err;
         } finally {
             setProfileLoading(false);
         }
@@ -142,54 +145,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!token) return;
         loadProfile().catch((e) => setError(e.message));
-    }, [token, expectedRole]);
+    }, [token]);
 
-    async function handleLogin(e: FormEvent, loginRole?: "manager" | "driver") {
+    async function handleLogin(e: FormEvent) {
         e.preventDefault();
         setError(null);
         setLoading(true);
         suppressListenerRef.current = true;
-        if (loginRole) {
-            setExpectedRole(loginRole);
-            localStorage.setItem("fleetlanka.loginRole", loginRole);
-        }
         try {
             const { data, error: authError } = await supabase.auth.signInWithPassword(
                 { email, password }
             );
             if (authError) throw authError;
-            const metaRole = data.user?.user_metadata?.role as
-                | "manager"
-                | "driver"
-                | "owner"
-                | "service"
-                | undefined;
-            if (loginRole && metaRole) {
-                const isDriver = metaRole === "driver";
-                if (loginRole === "manager" && isDriver) {
-                    pendingSignOutRef.current = true;
-                    await supabase.auth.signOut();
-                    setAccessToken(null);
-                    setOrgId(null);
-                    setRole(null);
-                    setError("Driver accounts must use the Driver login.");
-                    return;
-                }
-                if (loginRole === "driver" && !isDriver) {
-                    pendingSignOutRef.current = true;
-                    await supabase.auth.signOut();
-                    setAccessToken(null);
-                    setOrgId(null);
-                    setRole(null);
-                    setError("Manager accounts must use the Manager login.");
-                    return;
-                }
+            const sessionToken = data.session?.access_token ?? null;
+            if (!sessionToken) {
+                throw new Error("Login failed");
             }
-            setAccessToken(data.session?.access_token ?? null);
+            const profile = await fetchProfileForToken(sessionToken);
+            const allowed = await applyProfile(profile);
+            if (!allowed) return;
+            setAccessToken(sessionToken);
             setEmail(data.session?.user?.email ?? "");
-            if (loginRole) {
-                setRole(loginRole);
-            }
         } catch (err: any) {
             setError(err.message || "Login failed");
         } finally {
@@ -203,8 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
         setLoading(true);
         suppressListenerRef.current = true;
-        setExpectedRole("manager");
-        localStorage.setItem("fleetlanka.loginRole", "manager");
         try {
             const fullName = name || email.split("@")[0];
             const resolvedOrgName = orgName?.trim() ? orgName.trim() : `${fullName} Org`;
@@ -289,8 +263,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
         setFullName("");
         setPhone("");
-        setExpectedRole(null);
-        localStorage.removeItem("fleetlanka.loginRole");
         localStorage.removeItem("fleetlanka.profile.name");
         localStorage.removeItem("fleetlanka.profile.phone");
         pendingSignOutRef.current = false;

@@ -2,34 +2,45 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.deps import get_bearer_token, get_current_profile
+from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.drivers import DriverCreate, DriverOut, DriverUpdate
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 
+def _profile_with_email(admin_client, row: dict) -> dict:
+    email = None
+    try:
+        user_resp = admin_client.auth.admin.get_user_by_id(row["id"])
+        user = user_resp.user if user_resp else None
+        email = getattr(user, "email", None)
+    except Exception:
+        email = None
+    return {**row, "email": email}
+
+
 @router.get("", response_model=List[DriverOut])
 def list_drivers(
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> List[DriverOut]:
     org_id = profile["org_id"]
     admin_client = get_supabase_client(use_service_role=True)
     response = (
         admin_client.table("profiles")
-        .select("id, org_id, role, full_name, phone")
+        .select("id, org_id, role, status, full_name, phone")
         .eq("org_id", org_id)
         .eq("role", "driver")
         .execute()
     )
-    return response.data or []
+    return [_profile_with_email(admin_client, row) for row in (response.data or [])]
 
 
 @router.post("", response_model=DriverOut)
 def create_driver(
     payload: DriverCreate, 
-    profile: dict = Depends(get_current_profile),
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token)
 ) -> DriverOut:
     org_id = profile["org_id"]
@@ -43,6 +54,7 @@ def create_driver(
             "user_metadata": {
                 "org_id": org_id,
                 "role": "driver",
+                "status": payload.status or "active",
                 "full_name": payload.full_name,
                 "phone": payload.phone,
             },
@@ -54,7 +66,7 @@ def create_driver(
 
     profile_resp = (
         admin_client.table("profiles")
-        .select("id, org_id, role, full_name, phone")
+        .select("id, org_id, role, status, full_name, phone")
         .eq("id", user_id)
         .single()
         .execute()
@@ -62,33 +74,56 @@ def create_driver(
     if not profile_resp.data:
         raise HTTPException(status_code=500, detail="Profile was not created")
 
-    return profile_resp.data
+    return _profile_with_email(admin_client, profile_resp.data)
 
 
 @router.patch("/{driver_id}", response_model=DriverOut)
 def update_driver(
     driver_id: str,
     payload: DriverUpdate,
+    profile: dict = Depends(require_manager_profile),
     token: Optional[str] = Depends(get_bearer_token),
 ) -> DriverOut:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
 
     admin_client = get_supabase_client(use_service_role=True)
+    profile_updates = payload.model_dump(exclude_none=True, exclude={"email"})
+    auth_updates = {}
+    user_metadata = {}
+    if payload.email is not None:
+        auth_updates["email"] = payload.email
+    if payload.password is not None:
+        auth_updates["password"] = payload.password
+    if payload.status is not None:
+        user_metadata["status"] = payload.status
+    if payload.full_name is not None:
+        user_metadata["full_name"] = payload.full_name
+    if payload.phone is not None:
+        user_metadata["phone"] = payload.phone
+    if user_metadata:
+        auth_updates["user_metadata"] = user_metadata
+    if auth_updates:
+        try:
+            admin_client.auth.admin.update_user_by_id(driver_id, auth_updates)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Driver auth update failed: {exc}")
     response = (
         admin_client.table("profiles")
-        .update(payload.model_dump(exclude_none=True))
+        .update(profile_updates)
         .eq("id", driver_id)
         .execute()
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
-    return response.data[0]
+    return _profile_with_email(admin_client, response.data[0])
 
 
 @router.delete("/{driver_id}")
 def delete_driver(
-    driver_id: str, token: Optional[str] = Depends(get_bearer_token)
+    driver_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
 ) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")

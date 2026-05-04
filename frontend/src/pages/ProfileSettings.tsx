@@ -28,7 +28,12 @@ export default function ProfileSettings({
     const [confirmPassword, setConfirmPassword] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
 
-    const roleLabel = role === "manager" ? "Fleet Manager" : "Driver";
+    const roleLabel =
+        role === "manager" || role === "owner"
+            ? "Fleet Manager"
+            : role === "service"
+                ? "Service Center"
+                : "Driver";
     const initials = localName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "U";
 
     useEffect(() => {
@@ -65,12 +70,12 @@ export default function ProfileSettings({
     }
 
     return (
-        <div className="profile-page">
+        <section className="section">
+        <div className="profile-page profile-page--manager">
             {successMessage && (
                 <div className="alert alert--success">{successMessage}</div>
             )}
 
-            {/* Profile Header */}
             <div className="profile-header">
                 <div className="profile-header__avatar">{initials}</div>
                 <div className="profile-header__info">
@@ -81,10 +86,8 @@ export default function ProfileSettings({
             </div>
 
             <div className="profile-grid">
-                {/* Personal Information */}
                 <section className="profile-section">
                     <div className="profile-section__header">
-                        <span className="profile-section__icon">👤</span>
                         <div>
                             <h3>Personal Information</h3>
                             <p className="muted">Update your personal details</p>
@@ -145,10 +148,8 @@ export default function ProfileSettings({
                     </form>
                 </section>
 
-                {/* Security Settings */}
                 <section className="profile-section">
                     <div className="profile-section__header">
-                        <span className="profile-section__icon">🔒</span>
                         <div>
                             <h3>Security</h3>
                             <p className="muted">Manage your password</p>
@@ -196,10 +197,8 @@ export default function ProfileSettings({
                     </form>
                 </section>
 
-                {/* Preferences */}
                 <section className="profile-section">
                     <div className="profile-section__header">
-                        <span className="profile-section__icon">⚙️</span>
                         <div>
                             <h3>Preferences</h3>
                             <p className="muted">Customize your experience</p>
@@ -253,10 +252,8 @@ export default function ProfileSettings({
                     </div>
                 </section>
 
-                {/* Critical Actions */}
                 <section className="profile-section profile-section--danger">
                     <div className="profile-section__header">
-                        <span className="profile-section__icon">⚠️</span>
                         <div>
                             <h3>Critical Actions</h3>
                             <p className="muted">Irreversible actions</p>
@@ -275,5 +272,6 @@ export default function ProfileSettings({
                 </section>
             </div>
         </div>
+        </section>
     );
 }
