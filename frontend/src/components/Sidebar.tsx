@@ -96,7 +96,7 @@ export default function Sidebar({ role }: SidebarProps) {
     <aside className="sidebar">
       <div className="sidebar__brand">
         <span className="sidebar__brand-icon" aria-hidden="true">
-          FL
+          <img src="/icons/fleetlanka-logo.png" alt="" />
         </span>
         <div className="sidebar__brand-copy">
           <strong>FleetLanka</strong>

@@ -30,10 +30,20 @@
 }
 
 .driver-auth__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 15px;
   font-weight: 700;
   color: #1f2937;
   letter-spacing: 0.01em;
+}
+
+.driver-auth__brand img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
 }
 
 .driver-auth__main {

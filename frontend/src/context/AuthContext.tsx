@@ -26,7 +26,7 @@ type AuthContextType = {
     setPassword: (v: string) => void;
     setError: (v: string | null) => void;
     setLoading: (v: boolean) => void;
-    handleLogin: (e: FormEvent, expectedRole?: "manager" | "driver" | "service") => Promise<void>;
+    handleLogin: (e: FormEvent) => Promise<void>;
     handleSignup: (e: FormEvent, name?: string, orgName?: string) => Promise<void>;
     handleUpdateProfile: (name: string, phone: string) => Promise<void>;
     handleChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -48,10 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [authReady, setAuthReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [expectedRole, setExpectedRole] = useState<"manager" | "driver" | "service" | null>(() => {
-        const stored = localStorage.getItem("fleetlanka.loginRole");
-        return stored === "manager" || stored === "driver" || stored === "service" ? stored : null;
-    });
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
 
@@ -66,9 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (!isMounted) return;
                 setAccessToken(session?.access_token ?? null);
                 setEmail(session?.user?.email ?? "");
-                if (session && expectedRole && !role) {
-                    setRole(expectedRole);
-                }
             } finally {
                 if (isMounted) setAuthReady(true);
             }
@@ -89,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!session && event === "SIGNED_OUT") {
                 setOrgId(null);
                 setRole(null);
-                setExpectedRole(null);
                 pendingSignOutRef.current = false;
             }
         });
@@ -119,33 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
         if ((profile.role === "driver" || profile.role === "service") && profile.status !== "active") {
             await handleInactiveDriverSignOut();
-            return false;
-        }
-        if (expectedRole === "manager" && profile.role !== "manager" && profile.role !== "owner") {
-            setError("This account must use its dedicated login.");
-            pendingSignOutRef.current = true;
-            await supabase.auth.signOut();
-            setAccessToken(null);
-            setOrgId(null);
-            setRole(null);
-            return false;
-        }
-        if (expectedRole === "driver" && profile.role !== "driver") {
-            setError("This account must use its dedicated login.");
-            pendingSignOutRef.current = true;
-            await supabase.auth.signOut();
-            setAccessToken(null);
-            setOrgId(null);
-            setRole(null);
-            return false;
-        }
-        if (expectedRole === "service" && profile.role !== "service") {
-            setError("This account must use its dedicated login.");
-            pendingSignOutRef.current = true;
-            await supabase.auth.signOut();
-            setAccessToken(null);
-            setOrgId(null);
-            setRole(null);
             return false;
         }
         setOrgId(profile.org_id);
@@ -180,59 +145,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!token) return;
         loadProfile().catch((e) => setError(e.message));
-    }, [token, expectedRole]);
+    }, [token]);
 
-    async function handleLogin(e: FormEvent, loginRole?: "manager" | "driver" | "service") {
+    async function handleLogin(e: FormEvent) {
         e.preventDefault();
         setError(null);
         setLoading(true);
         suppressListenerRef.current = true;
-        if (loginRole) {
-            setExpectedRole(loginRole);
-            localStorage.setItem("fleetlanka.loginRole", loginRole);
-        }
         try {
             const { data, error: authError } = await supabase.auth.signInWithPassword(
                 { email, password }
             );
             if (authError) throw authError;
-            const metaRole = data.user?.user_metadata?.role as
-                | "manager"
-                | "driver"
-                | "owner"
-                | "service"
-                | undefined;
-            if (loginRole && metaRole) {
-                const isManager = metaRole === "manager" || metaRole === "owner";
-                const isDriver = metaRole === "driver";
-                if (loginRole === "manager" && !isManager) {
-                    pendingSignOutRef.current = true;
-                    await supabase.auth.signOut();
-                    setAccessToken(null);
-                    setOrgId(null);
-                    setRole(null);
-                    setError("This account must use its dedicated login.");
-                    return;
-                }
-                if (loginRole === "driver" && !isDriver) {
-                    pendingSignOutRef.current = true;
-                    await supabase.auth.signOut();
-                    setAccessToken(null);
-                    setOrgId(null);
-                    setRole(null);
-                    setError("This account must use its dedicated login.");
-                    return;
-                }
-                if (loginRole === "service" && metaRole !== "service") {
-                    pendingSignOutRef.current = true;
-                    await supabase.auth.signOut();
-                    setAccessToken(null);
-                    setOrgId(null);
-                    setRole(null);
-                    setError("This account must use its dedicated login.");
-                    return;
-                }
-            }
             const sessionToken = data.session?.access_token ?? null;
             if (!sessionToken) {
                 throw new Error("Login failed");
@@ -255,8 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
         setLoading(true);
         suppressListenerRef.current = true;
-        setExpectedRole("manager");
-        localStorage.setItem("fleetlanka.loginRole", "manager");
         try {
             const fullName = name || email.split("@")[0];
             const resolvedOrgName = orgName?.trim() ? orgName.trim() : `${fullName} Org`;
@@ -341,8 +263,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null);
         setFullName("");
         setPhone("");
-        setExpectedRole(null);
-        localStorage.removeItem("fleetlanka.loginRole");
         localStorage.removeItem("fleetlanka.profile.name");
         localStorage.removeItem("fleetlanka.profile.phone");
         pendingSignOutRef.current = false;

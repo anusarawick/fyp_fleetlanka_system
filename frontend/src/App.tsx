@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { DataProvider, useData } from "./context/DataContext";
 import AppLayout from "./layout/AppLayout";
@@ -17,66 +17,16 @@ import ProfileSettings from "./pages/ProfileSettings";
 import Drivers from "./pages/Drivers";
 import ServicePortal from "./pages/ServicePortal";
 import TripsPage from "./pages/Trips";
+import PublicHomePage from "./pages/PublicHomePage";
 import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
 
-// ===== ROLE SELECTION PAGE =====
-function RoleSelection({ onSelectRole }: { onSelectRole: (role: "manager" | "driver" | "service") => void }) {
-  return (
-    <section className="auth auth--role-select">
-      <div className="role-select">
-        <div className="role-select__header">
-          <span className="role-select__logo">🚐</span>
-          <h1>FleetLanka</h1>
-          <p className="muted">Choose how you want to sign in</p>
-        </div>
+const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
 
-        <div className="role-select__options">
-          <button
-            className="role-card role-card--manager"
-            onClick={() => onSelectRole("manager")}
-          >
-            <div className="role-card__icon">💼</div>
-            <div className="role-card__content">
-              <h3>Fleet Manager</h3>
-              <p>Access dashboard, analytics, and fleet management tools</p>
-            </div>
-            <span className="role-card__badge">Web Portal</span>
-          </button>
-
-          <button
-            className="role-card role-card--driver"
-            onClick={() => onSelectRole("driver")}
-          >
-            <div className="role-card__icon">🚗</div>
-            <div className="role-card__content">
-              <h3>Driver</h3>
-              <p>Start trips, track location, and log activities</p>
-            </div>
-            <span className="role-card__badge">Mobile App</span>
-          </button>
-
-          <button
-            className="role-card role-card--service"
-            onClick={() => onSelectRole("service")}
-          >
-            <div className="role-card__icon">🏪</div>
-            <div className="role-card__content">
-              <h3>Service Center</h3>
-              <p>Review assigned jobs, confirm bookings, and update service progress</p>
-            </div>
-            <span className="role-card__badge">Partner Portal</span>
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ===== MANAGER LOGIN (Web/Desktop optimized) =====
-function ManagerLogin({ onBack }: { onBack: () => void }) {
+// ===== UNIFIED LOGIN / MANAGER SIGNUP =====
+function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
   const { email, password, setEmail, setPassword, handleLogin, handleSignup, loading, error, setError } = useAuth();
-  const [isSignup, setIsSignup] = useState(false);
+  const [isSignup, setIsSignup] = useState(initialSignup);
   const [name, setName] = useState("");
   const [orgName, setOrgName] = useState("");
 
@@ -84,21 +34,23 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
     if (isSignup) {
       await handleSignup(e, name, orgName);
     } else {
-      await handleLogin(e, "manager");
+      await handleLogin(e);
     }
   }
 
   return (
     <section className="auth">
       <div className="auth__card">
-        <button className="auth__back" onClick={onBack}>← Back</button>
+        <Link className="auth__back" to="/">← Back</Link>
         <div className="auth__header">
-          <span className="auth__icon">{isSignup ? "📝" : "💼"}</span>
-          <h2>{isSignup ? "Create Account" : "Manager Login"}</h2>
+          <span className="auth__icon" aria-hidden="true">
+            <img src={BRAND_LOGO_SRC} alt="" />
+          </span>
+          <h2>{isSignup ? "Create Manager Account" : "Sign in to FleetLanka"}</h2>
           <p className="muted">
             {isSignup
-              ? "Register your fleet management account"
-              : "Access your fleet management dashboard"}
+              ? "Create a manager workspace for your fleet operations."
+              : "Enter your credentials to open your workspace."}
           </p>
         </div>
 
@@ -139,7 +91,7 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
             Email Address
             <input
               type="email"
-              placeholder="manager@company.com"
+              placeholder="user@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -159,7 +111,7 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
           <button className="btn" type="submit" disabled={loading}>
             {loading
               ? (isSignup ? "Creating account..." : "Signing in...")
-              : (isSignup ? "Create Account" : "Sign in to Dashboard")}
+              : (isSignup ? "Create manager account" : "Sign in")}
           </button>
         </form>
 
@@ -173,134 +125,13 @@ function ManagerLogin({ onBack }: { onBack: () => void }) {
             </p>
           ) : (
             <p>
-              Don't have an account?{" "}
+              Need a manager workspace?{" "}
               <button type="button" onClick={() => setIsSignup(true)}>
-                Create one
+                Create manager account
               </button>
             </p>
           )}
         </div>
-      </div>
-    </section>
-  );
-}
-
-// ===== DRIVER LOGIN (Mobile optimized) =====
-function DriverLogin({ onBack }: { onBack: () => void }) {
-  const { email, password, setEmail, setPassword, handleLogin, loading, error, setError } = useAuth();
-
-  async function onSubmit(e: React.FormEvent) {
-    await handleLogin(e, "driver");
-  }
-
-  return (
-    <section className="driver-auth driver-auth--driver-ref">
-      <header className="driver-auth__header">
-        <button className="driver-auth__back" onClick={onBack} aria-label="Back to role selection">←</button>
-        <span className="driver-auth__brand">FleetLanka</span>
-      </header>
-
-      <main className="driver-auth__main">
-        <div className="driver-auth__panel">
-          <div className="driver-auth__hero">
-            <div className="driver-auth__hero-copy">
-              <span className="driver-auth__eyebrow">Driver app</span>
-              <h1 className="driver-auth__title">Driver Login</h1>
-              <p className="driver-auth__subtitle">Sign in to start trips, track live route activity, and submit daily fuel updates.</p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="alert alert--error">
-              <span>{error}</span>
-              <button className="alert__close" type="button" onClick={() => setError(null)}>
-                ×
-              </button>
-            </div>
-          )}
-
-          <form className="driver-form" onSubmit={onSubmit}>
-            <div className="driver-form__field">
-              <label>Email</label>
-              <input
-                type="email"
-                placeholder="driver@fleetlanka.lk"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="driver-form__field">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <button className="driver-btn driver-btn--primary" type="submit" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
-        </div>
-      </main>
-    </section>
-  );
-}
-
-function ServiceLogin({ onBack }: { onBack: () => void }) {
-  const { email, password, setEmail, setPassword, handleLogin, loading, error, setError } = useAuth();
-
-  async function onSubmit(e: React.FormEvent) {
-    await handleLogin(e, "service");
-  }
-
-  return (
-    <section className="auth">
-      <div className="auth__card">
-        <button className="auth__back" onClick={onBack}>← Back</button>
-        <div className="auth__header">
-          <span className="auth__icon">🏪</span>
-          <h2>Service Center Login</h2>
-          <p className="muted">Access the service portal for your assigned center.</p>
-        </div>
-
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
-            </button>
-          </div>
-        )}
-
-        <form className="form" onSubmit={onSubmit}>
-          <label>
-            Portal Email
-            <input
-              type="email"
-              placeholder="servicecenter@partner.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </label>
-          <button className="btn" type="submit" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in to Portal"}
-          </button>
-        </form>
       </div>
     </section>
   );
@@ -844,54 +675,59 @@ function ServiceRoutes() {
 
 function AppContent() {
   const { accessToken, role, profileLoading, error, setError, authReady } = useAuth();
-  const [selectedLoginRole, setSelectedLoginRole] = useState<"manager" | "driver" | "service" | null>(() => {
-    const stored = localStorage.getItem("fleetlanka.loginRole");
-    return stored === "manager" || stored === "driver" || stored === "service" ? stored : null;
-  });
+  const location = useLocation();
+  const path = location.pathname;
 
-  function handleSelectRole(selected: "manager" | "driver" | "service") {
-    localStorage.setItem("fleetlanka.loginRole", selected);
-    setSelectedLoginRole(selected);
+  function appHomePath() {
+    if (role === "driver") return "/driver";
+    if (role === "service") return "/service";
+    return "/dashboard";
   }
 
   if (!authReady) {
     return <LoadingScreen />;
   }
 
-  // If logged in, show appropriate interface
-  if (accessToken) {
-    if (profileLoading && !role) {
-      return <LoadingScreen />;
-    }
-    return (
-      <AppLayout showSidebar={role !== "driver"} role={role}>
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
-            </button>
-          </div>
-        )}
-        {role === "driver" ? <DriverRoutes /> : role === "service" ? <ServiceRoutes /> : <ManagerRoutes />}
-      </AppLayout>
-    );
+  if (path === "/") {
+    return <PublicHomePage accessToken={accessToken} role={role} />;
   }
 
-  // Not logged in - show login flow
-  if (!selectedLoginRole) {
-    return <RoleSelection onSelectRole={handleSelectRole} />;
+  if (path === "/login") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <AuthPortal />;
   }
 
-  if (selectedLoginRole === "manager") {
-    return <ManagerLogin onBack={() => setSelectedLoginRole(null)} />;
+  if (path === "/login/manager" || path === "/login/driver" || path === "/login/service") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <Navigate to="/login" replace />;
   }
 
-  if (selectedLoginRole === "service") {
-    return <ServiceLogin onBack={() => setSelectedLoginRole(null)} />;
+  if (path === "/signup") {
+    if (accessToken) return <Navigate to={appHomePath()} replace />;
+    return <AuthPortal initialSignup />;
   }
 
-  return <DriverLogin onBack={() => setSelectedLoginRole(null)} />;
+  if (!accessToken) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (profileLoading && !role) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <AppLayout showSidebar={role !== "driver"} role={role}>
+      {error && (
+        <div className="alert alert--error">
+          <span>{error}</span>
+          <button className="alert__close" type="button" onClick={() => setError(null)}>
+            ×
+          </button>
+        </div>
+      )}
+      {role === "driver" ? <DriverRoutes /> : role === "service" ? <ServiceRoutes /> : <ManagerRoutes />}
+    </AppLayout>
+  );
 }
 
 export default function App() {
