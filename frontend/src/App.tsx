@@ -213,6 +213,7 @@ function ManagerRoutes() {
               subtitle="Manager overview"
               userName={userName}
               userRole={userRole}
+              notificationCount={data.buildAlerts().length}
               onSignOut={handleSignOut}
             />
             <Dashboard
@@ -228,6 +229,7 @@ function ManagerRoutes() {
               liveTrips={data.liveTrips}
               alerts={data.buildAlerts()}
               upcomingDocs={data.upcomingDocs}
+              fuelForecasts={data.fuelForecasts}
             />
           </>
         }

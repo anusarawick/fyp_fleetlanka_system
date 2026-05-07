@@ -1,17 +1,23 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Settings } from "lucide-react";
+import { useShell } from "../layout/AppLayout";
 
 type TopbarProps = {
   title: string;
   subtitle?: string;
   userName?: string;
   userRole?: string;
+  notificationCount?: number;
   onSignOut?: () => void;
 };
 
 function BellIcon() {
   return <Bell aria-hidden="true" className="topbar__icon-svg" />;
+}
+
+function MenuIcon() {
+  return <Menu aria-hidden="true" className="topbar__icon-svg" />;
 }
 
 function UserSettingsIcon() {
@@ -31,11 +37,13 @@ export default function Topbar({
   subtitle,
   userName = "Manager",
   userRole = "manager",
+  notificationCount = 0,
   onSignOut
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { canOpenSidebar, openSidebar } = useShell();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -57,14 +65,36 @@ export default function Topbar({
 
   return (
     <header className="topbar">
-      <div className="topbar__title">
-        <h1>{title}</h1>
-        {subtitle && <p className="muted">{subtitle}</p>}
+      <div className="topbar__title-group">
+        {canOpenSidebar && (
+          <button
+            className="topbar__menu-btn"
+            type="button"
+            aria-label="Open navigation"
+            onClick={openSidebar}
+          >
+            <MenuIcon />
+          </button>
+        )}
+        <div className="topbar__title">
+          <h1>{title}</h1>
+          {subtitle && <p className="muted">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="topbar__actions">
-        <button className="topbar__icon-btn" title="Notifications" type="button" aria-label="Notifications">
+        <button
+          className="topbar__icon-btn"
+          title={notificationCount > 0 ? "Open compliance alerts" : "No active alerts"}
+          type="button"
+          aria-label={notificationCount > 0 ? "Open compliance alerts" : "No active alerts"}
+          aria-disabled={notificationCount === 0}
+          onClick={() => {
+            if (notificationCount > 0) navigate("/compliance");
+          }}
+        >
           <BellIcon />
+          {notificationCount > 0 && <span className="topbar__badge">{notificationCount}</span>}
         </button>
 
         <div className="topbar__profile" ref={dropdownRef}>

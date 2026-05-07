@@ -11,6 +11,8 @@ import {
   Gauge,
   LayoutDashboard,
   Map,
+  PanelLeftClose,
+  PanelLeftOpen,
   Users,
   Wrench,
   type LucideIcon,
@@ -18,6 +20,9 @@ import {
 
 type SidebarProps = {
   role?: string | null;
+  collapsed?: boolean;
+  onCollapseToggle?: () => void;
+  onCloseMobile?: () => void;
 };
 
 type NavItemConfig = {
@@ -87,13 +92,23 @@ const serviceNav: NavItemConfig[] = [
   { to: "/service/bookings", label: "Service Bookings", icon: "bookings" },
 ];
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({
+  role,
+  collapsed = false,
+  onCollapseToggle,
+  onCloseMobile,
+}: SidebarProps) {
   const isDriver = role === "driver";
   const isService = role === "service";
   const shellLabel = isDriver ? "Driver Console" : isService ? "Service Console" : "Manager Console";
+  const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+
+  function navClass(isActive: boolean) {
+    return `nav-item${isActive ? " active" : ""}`;
+  }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`}>
       <div className="sidebar__brand">
         <span className="sidebar__brand-icon" aria-hidden="true">
           <img src="/icons/fleetlanka-logo.png" alt="" />
@@ -106,19 +121,26 @@ export default function Sidebar({ role }: SidebarProps) {
 
       <nav className="sidebar__nav">
         {isDriver ? (
-          <NavLink to="/driver" className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+          <NavLink to="/driver" className={({ isActive }) => navClass(isActive)} onClick={onCloseMobile}>
             <span className="nav-item__icon">
               <NavIcon name="trips" />
             </span>
-            Driver Trips
+            <span className="nav-item__label">Driver Trips</span>
           </NavLink>
         ) : isService ? (
           serviceNav.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => navClass(isActive)}
+              onClick={onCloseMobile}
+              title={collapsed ? item.label : undefined}
+            >
               <span className="nav-item__icon">
                 <NavIcon name={item.icon} />
               </span>
-              {item.label}
+              <span className="nav-item__label">{item.label}</span>
             </NavLink>
           ))
         ) : (
@@ -126,7 +148,13 @@ export default function Sidebar({ role }: SidebarProps) {
             <div className="sidebar__nav-section" key={group.label}>
               <div className="sidebar__nav-label">{group.label}</div>
               {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => navClass(isActive)}
+                  onClick={onCloseMobile}
+                  title={collapsed ? item.label : undefined}
+                >
                   <span className="nav-item__icon">
                     <NavIcon name={item.icon} />
                   </span>
@@ -137,6 +165,21 @@ export default function Sidebar({ role }: SidebarProps) {
           ))
         )}
       </nav>
+
+      {!isDriver && (
+        <div className="sidebar__utility">
+          <button
+            className="sidebar__collapse"
+            type="button"
+            onClick={onCollapseToggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <CollapseIcon aria-hidden="true" />
+            <span>{collapsed ? "Expand" : "Collapse"}</span>
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
