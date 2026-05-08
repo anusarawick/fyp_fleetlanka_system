@@ -1,21 +1,35 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BatteryCharging,
   Building2,
   CalendarClock,
+  CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
   ClipboardList,
   Eye,
   FileText,
   Pencil,
+  Plus,
+  Search,
+  Settings,
+  ShieldCheck,
+  Target,
   Trash2,
+  WalletCards,
   Wrench,
-  type LucideIcon,
+  XCircle,
 } from "lucide-react";
 
 type Vehicle = {
   id: string;
   plate_no: string;
+  tire_condition?: string;
+  brake_condition?: string;
+  battery_status?: string;
+  odometer_km?: number;
+  next_service_due_km?: number;
 };
 
 type MaintenanceRecord = {
@@ -126,46 +140,42 @@ type MaintenanceProps = {
   onRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
 };
 
-type MaintenanceTab = "overview" | "centers" | "workflow" | "history";
-
-type MaintenanceIconName = "records" | "centers" | "cost" | "review";
-
-function MaintenanceIcon({ name }: { name: MaintenanceIconName }) {
-  const icons: Record<MaintenanceIconName, LucideIcon> = {
-    records: ClipboardList,
-    centers: Building2,
-    cost: CircleDollarSign,
-    review: AlertTriangle,
-  };
-  const Icon = icons[name];
-  return <Icon aria-hidden="true" />;
-}
+type MaintenanceTab = "records" | "bookings" | "centers" | "approvals";
 
 export default function Maintenance(props: MaintenanceProps) {
-  const [activeTab, setActiveTab] = useState<MaintenanceTab>("overview");
+  const [activeTab, setActiveTab] = useState<MaintenanceTab>("records");
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [showCenterModal, setShowCenterModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [maintenanceSearch, setMaintenanceSearch] = useState("");
+  const [maintenanceSeverityFilter, setMaintenanceSeverityFilter] = useState("all");
+  const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("all");
   const [maintenanceRowsPerPage, setMaintenanceRowsPerPage] = useState(10);
   const [maintenancePage, setMaintenancePage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MaintenanceRecord | null>(null);
   const [centerSearch, setCenterSearch] = useState("");
+  const [centerLocationFilter, setCenterLocationFilter] = useState("all");
+  const [centerPortalFilter, setCenterPortalFilter] = useState("all");
   const [centerRowsPerPage, setCenterRowsPerPage] = useState(10);
   const [centerPage, setCenterPage] = useState(1);
   const [selectedCenter, setSelectedCenter] = useState<ServiceCenter | null>(null);
   const [deleteCenterTarget, setDeleteCenterTarget] = useState<ServiceCenter | null>(null);
   const [bookingSearch, setBookingSearch] = useState("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState("all");
+  const [bookingReviewFilter, setBookingReviewFilter] = useState("all");
   const [bookingRowsPerPage, setBookingRowsPerPage] = useState(10);
   const [bookingPage, setBookingPage] = useState(1);
+  const [approvalSearch, setApprovalSearch] = useState("");
+  const [approvalReviewFilter, setApprovalReviewFilter] = useState("all");
+  const [approvalCenterFilter, setApprovalCenterFilter] = useState("all");
+  const [approvalRowsPerPage, setApprovalRowsPerPage] = useState(10);
+  const [approvalPage, setApprovalPage] = useState(1);
   const [selectedBooking, setSelectedBooking] = useState<ServiceBooking | null>(null);
   const [deleteBookingTarget, setDeleteBookingTarget] = useState<ServiceBooking | null>(null);
   const [approveBookingTarget, setApproveBookingTarget] = useState<ServiceBooking | null>(null);
   const [rejectBookingTarget, setRejectBookingTarget] = useState<ServiceBooking | null>(null);
   const [rejectBookingNote, setRejectBookingNote] = useState("");
-
-  const totalCost = props.maintenance.reduce((sum, m) => sum + (m.cost_lkr || 0), 0);
 
   const vehicleLabelMap = useMemo(
     () =>
@@ -185,22 +195,129 @@ export default function Maintenance(props: MaintenanceProps) {
     [props.centers]
   );
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const openBookings = props.bookings.filter((booking) =>
+    ["pending", "confirmed", "in_progress"].includes(booking.status || "pending")
+  );
+  const pendingApprovalCount = props.bookings.filter((booking) => isPendingCompletionReview(booking)).length;
+  const maintenanceThisMonth = props.maintenance.filter((record) => isSameMonth(record.service_date, currentMonth));
+  const bookingIdsWithRecords = new Set(props.maintenance.map((record) => record.service_booking_id).filter(Boolean));
+  const completedBookingsThisMonth = props.bookings.filter((booking) =>
+    (booking.status || "pending") === "completed" &&
+    isSameMonth(booking.completed_at || booking.requested_date, currentMonth) &&
+    !bookingIdsWithRecords.has(booking.id)
+  );
+  const completedThisMonth = maintenanceThisMonth.length + completedBookingsThisMonth.length;
+  const maintenanceSpendThisMonth =
+    maintenanceThisMonth.reduce((sum, record) => sum + (record.cost_lkr || 0), 0) +
+    completedBookingsThisMonth.reduce((sum, booking) => sum + (booking.final_cost_lkr || 0), 0);
+  const highSeverityRecords = props.maintenance.filter((record) => severityBucket(record) === "high");
+  const linkedCentersCount = props.centers.filter((center) => Boolean(center.profile_id)).length;
+
+  const maintenanceTypeOptions = Array.from(
+    new Set(props.maintenance.map((record) => serviceTypeLabel(record)).filter(Boolean))
+  ).sort();
+
   const filteredMaintenance = props.maintenance.filter((record) => {
     const query = maintenanceSearch.trim().toLowerCase();
-    if (!query) return true;
-    return [
-      record.service_date,
-      record.service_type,
-      record.notes,
-      record.service_booking_id ? "service booking" : "manual",
-      record.service_center_id ? centerLabelMap[record.service_center_id] : "",
-      record.vehicle_id ? vehicleLabelMap[record.vehicle_id] : "",
-      typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "",
-      typeof record.next_service_due_km === "number" ? String(record.next_service_due_km) : "",
-    ]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query));
+    const matchesQuery =
+      !query ||
+      [
+        record.service_date,
+        record.service_type,
+        record.event_type,
+        record.severity,
+        record.notes,
+        record.service_booking_id ? "service booking" : "manual",
+        record.service_center_id ? centerLabelMap[record.service_center_id] : "",
+        record.vehicle_id ? vehicleLabelMap[record.vehicle_id] : "",
+        typeof record.cost_lkr === "number" ? String(record.cost_lkr) : "",
+        typeof record.odometer_km === "number" ? String(record.odometer_km) : "",
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    const matchesSeverity =
+      maintenanceSeverityFilter === "all" || severityBucket(record) === maintenanceSeverityFilter;
+    const matchesType =
+      maintenanceTypeFilter === "all" || serviceTypeLabel(record) === maintenanceTypeFilter;
+    return matchesQuery && matchesSeverity && matchesType;
   });
+
+  const filteredCenters = props.centers.filter((center) => {
+    const query = centerSearch.trim().toLowerCase();
+    const portalState = getPortalState(center);
+    const location = getCenterLocation(center);
+    const matchesQuery =
+      !query ||
+      [center.name, center.phone, center.address, portalState.label, location]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    const matchesLocation = centerLocationFilter === "all" || location === centerLocationFilter;
+    const matchesPortal = centerPortalFilter === "all" || portalState.key === centerPortalFilter;
+    return matchesQuery && matchesLocation && matchesPortal;
+  });
+
+  const centerLocationOptions = Array.from(
+    new Set(props.centers.map((center) => getCenterLocation(center)).filter(Boolean))
+  ).sort();
+
+  const filteredBookings = props.bookings.filter((booking) => {
+    const query = bookingSearch.trim().toLowerCase();
+    const review = reviewState(booking);
+    const status = bookingWorkflowStatus(booking);
+    const matchesQuery =
+      !query ||
+      [
+        booking.requested_date,
+        booking.status,
+        booking.notes,
+        booking.work_type,
+        booking.service_notes,
+        review.label,
+        status.label,
+        booking.vehicle_id ? vehicleLabelMap[booking.vehicle_id] : "",
+        booking.center_id ? centerLabelMap[booking.center_id] : "",
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    const matchesStatus = bookingStatusFilter === "all" || status.key === bookingStatusFilter;
+    const matchesReview = bookingReviewFilter === "all" || review.key === bookingReviewFilter;
+    return matchesQuery && matchesStatus && matchesReview;
+  });
+
+  const approvalBookings = props.bookings.filter((booking) => (booking.status || "pending") === "completed");
+  const filteredApprovals = approvalBookings.filter((booking) => {
+    const query = approvalSearch.trim().toLowerCase();
+    const review = reviewState(booking);
+    const updates = proposedUpdates(booking).join(" ");
+    const matchesQuery =
+      !query ||
+      [
+        booking.work_type,
+        booking.completed_at,
+        booking.requested_date,
+        updates,
+        review.label,
+        booking.vehicle_id ? vehicleLabelMap[booking.vehicle_id] : "",
+        booking.center_id ? centerLabelMap[booking.center_id] : "",
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    const matchesReview = approvalReviewFilter === "all" || review.key === approvalReviewFilter;
+    const matchesCenter = approvalCenterFilter === "all" || booking.center_id === approvalCenterFilter;
+    return matchesQuery && matchesReview && matchesCenter;
+  });
+
+  const upcomingBookings = props.bookings
+    .filter((booking) => ["pending", "confirmed", "in_progress"].includes(booking.status || "pending"))
+    .sort((a, b) => a.requested_date.localeCompare(b.requested_date))
+    .slice(0, 5);
+  const componentHealth = buildComponentHealth();
+  const activePortalCenters = props.centers.filter((center) => getPortalState(center).key === "active");
+  const missingContactCenters = props.centers.filter((center) => getPortalState(center).key === "missing_contacts");
+  const pendingSetupCenters = props.centers.filter((center) => getPortalState(center).key === "pending_setup");
+  const approvedReviews = props.bookings.filter((booking) => reviewState(booking).key === "approved").length;
+  const rejectedReviews = props.bookings.filter((booking) => reviewState(booking).key === "rejected").length;
 
   const maintenanceTotalPages = Math.max(
     1,
@@ -212,19 +329,6 @@ export default function Maintenance(props: MaintenanceProps) {
     currentMaintenancePage * maintenanceRowsPerPage
   );
 
-  const filteredCenters = props.centers.filter((center) => {
-    const query = centerSearch.trim().toLowerCase();
-    if (!query) return true;
-    return [
-      center.name,
-      center.phone,
-      center.address,
-      center.profile_id ? "portal linked" : "portal not linked",
-    ]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query));
-  });
-
   const centerTotalPages = Math.max(1, Math.ceil(filteredCenters.length / centerRowsPerPage));
   const currentCenterPage = Math.min(centerPage, centerTotalPages);
   const paginatedCenters = filteredCenters.slice(
@@ -232,66 +336,41 @@ export default function Maintenance(props: MaintenanceProps) {
     currentCenterPage * centerRowsPerPage
   );
 
-  const workflowBookings = props.bookings.filter((booking) => {
-    const status = booking.status || "pending";
-    const reviewStatus = booking.completion_review_status || "pending";
-    return status === "pending" || status === "confirmed" || (status === "completed" && reviewStatus !== "approved");
-  });
-
-  const filteredBookings = workflowBookings.filter((booking) => {
-    const query = bookingSearch.trim().toLowerCase();
-    if (!query) return true;
-    return [
-      booking.requested_date,
-      booking.status,
-      booking.notes,
-      booking.work_type,
-      booking.service_notes,
-      booking.completion_review_status,
-      booking.proposed_tire_condition,
-      booking.proposed_brake_condition,
-      booking.proposed_battery_status,
-      booking.vehicle_id ? vehicleLabelMap[booking.vehicle_id] : "",
-      booking.center_id ? centerLabelMap[booking.center_id] : "",
-      typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "",
-    ]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(query));
-  });
-
   const bookingTotalPages = Math.max(1, Math.ceil(filteredBookings.length / bookingRowsPerPage));
   const currentBookingPage = Math.min(bookingPage, bookingTotalPages);
   const paginatedBookings = filteredBookings.slice(
     (currentBookingPage - 1) * bookingRowsPerPage,
     currentBookingPage * bookingRowsPerPage
   );
-  const upcomingBookings = props.bookings
-    .filter((booking) => {
-      const status = booking.status || "pending";
-      return status === "pending" || status === "confirmed";
-    })
-    .sort((a, b) => a.requested_date.localeCompare(b.requested_date))
-    .slice(0, 4);
-  const pendingApprovalCount = workflowBookings.filter((booking) => isPendingCompletionReview(booking)).length;
-  const reviewQueue = workflowBookings
-    .filter((booking) => isPendingCompletionReview(booking))
-    .slice(0, 4);
-  const recentMaintenance = [...props.maintenance]
-    .sort((a, b) => b.service_date.localeCompare(a.service_date))
-    .slice(0, 5);
-  const linkedCentersCount = props.centers.filter((center) => Boolean(center.profile_id)).length;
+
+  const approvalTotalPages = Math.max(1, Math.ceil(filteredApprovals.length / approvalRowsPerPage));
+  const currentApprovalPage = Math.min(approvalPage, approvalTotalPages);
+  const paginatedApprovals = filteredApprovals.slice(
+    (currentApprovalPage - 1) * approvalRowsPerPage,
+    currentApprovalPage * approvalRowsPerPage
+  );
 
   useEffect(() => {
     setMaintenancePage(1);
-  }, [maintenanceRowsPerPage, maintenanceSearch, props.maintenance.length]);
+  }, [
+    maintenanceRowsPerPage,
+    maintenanceSearch,
+    maintenanceSeverityFilter,
+    maintenanceTypeFilter,
+    props.maintenance.length,
+  ]);
 
   useEffect(() => {
     setCenterPage(1);
-  }, [centerRowsPerPage, centerSearch, props.centers.length]);
+  }, [centerRowsPerPage, centerSearch, centerLocationFilter, centerPortalFilter, props.centers.length]);
 
   useEffect(() => {
     setBookingPage(1);
-  }, [bookingRowsPerPage, bookingSearch, workflowBookings.length]);
+  }, [bookingRowsPerPage, bookingSearch, bookingStatusFilter, bookingReviewFilter, props.bookings.length]);
+
+  useEffect(() => {
+    setApprovalPage(1);
+  }, [approvalRowsPerPage, approvalSearch, approvalReviewFilter, approvalCenterFilter, approvalBookings.length]);
 
   useEffect(() => {
     if (!selectedBooking) return;
@@ -378,643 +457,374 @@ export default function Maintenance(props: MaintenanceProps) {
     return typeof value === "number" ? `Rs.${value.toLocaleString()}` : "Not recorded";
   }
 
-  function bookingStatusLabel(booking: ServiceBooking) {
-    if (isPendingCompletionReview(booking)) return "Pending approval";
-    return formatReadable(booking.status || "pending");
+  function isSameMonth(value: string | undefined, monthKey: string) {
+    if (!value) return false;
+    return value.slice(0, 7) === monthKey;
   }
 
-  function bookingStatusTone(booking: ServiceBooking) {
-    if (isPendingCompletionReview(booking)) return "warning";
+  function formatDate(value?: string) {
+    if (!value) return "--";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function formatLkr(value?: number) {
+    return typeof value === "number" ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "--";
+  }
+
+  function formatOdometer(value?: number) {
+    return typeof value === "number" ? value.toLocaleString() : "--";
+  }
+
+  function serviceTypeLabel(record: MaintenanceRecord) {
+    return record.service_type || formatReadable(record.event_type) || "General Service";
+  }
+
+  function severityBucket(record: MaintenanceRecord) {
+    const severity = (record.severity || "").toLowerCase();
+    if (["critical", "major", "high"].includes(severity)) return "high";
+    if (["moderate", "medium"].includes(severity)) return "medium";
+    return "low";
+  }
+
+  function severityLabel(record: MaintenanceRecord) {
+    const bucket = severityBucket(record);
+    return bucket === "high" ? "High" : bucket === "medium" ? "Medium" : "Low";
+  }
+
+  function bookingWorkflowStatus(booking: ServiceBooking) {
     const status = booking.status || "pending";
-    if (status === "completed") return "success";
-    if (status === "cancelled") return "danger";
-    if (status === "confirmed") return "info";
-    return "warning";
+    if (status === "completed" && isPendingCompletionReview(booking)) {
+      return { key: "awaiting_review", label: "Awaiting Review", tone: "info" };
+    }
+    if (status === "confirmed" || status === "in_progress") {
+      return { key: "in_progress", label: "In Progress", tone: "info" };
+    }
+    if (status === "completed") return { key: "completed", label: "Completed", tone: "success" };
+    if (status === "cancelled") return { key: "cancelled", label: "Cancelled", tone: "neutral" };
+    return { key: "scheduled", label: "Scheduled", tone: "info" };
+  }
+
+  function reviewState(booking: ServiceBooking) {
+    if ((booking.status || "pending") !== "completed") {
+      return { key: "not_required", label: "Not Required", tone: "neutral" };
+    }
+    const status = booking.completion_review_status || "pending";
+    if (status === "approved") return { key: "approved", label: "Approved", tone: "success" };
+    if (status === "rejected") return { key: "rejected", label: "Needs Clarification", tone: "danger" };
+    return { key: "pending", label: "Pending Review", tone: "warning" };
+  }
+
+  function proposedUpdates(booking: ServiceBooking) {
+    const updates: string[] = [];
+    if (booking.proposed_tire_condition) updates.push("Tire");
+    if (booking.proposed_brake_condition) updates.push("Brake");
+    if (booking.proposed_battery_status) updates.push("Battery");
+    return updates;
+  }
+
+  function getPortalState(center: ServiceCenter) {
+    if (!center.phone || !center.address) {
+      return { key: "missing_contacts", label: "Missing Contacts", tone: "warning" };
+    }
+    if (!center.profile_id) {
+      return { key: "pending_setup", label: "Pending Setup", tone: "info" };
+    }
+    return { key: "active", label: "Active", tone: "success" };
+  }
+
+  function getCenterLocation(center: ServiceCenter) {
+    const parts = (center.address || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : "Unspecified";
+  }
+
+  function serviceUrgency(booking: ServiceBooking) {
+    const requested = new Date(booking.requested_date);
+    if (Number.isNaN(requested.getTime())) return { label: "Low", tone: "success" };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((requested.getTime() - today.getTime()) / 86400000);
+    if (diffDays <= 0) return { label: "High", tone: "danger" };
+    if (diffDays <= 7) return { label: "Medium", tone: "warning" };
+    return { label: "Low", tone: "success" };
+  }
+
+  function conditionIsHealthy(value?: string) {
+    const normalized = (value || "").toLowerCase();
+    return ["good", "new", "ok", "healthy", "normal"].some((term) => normalized.includes(term));
+  }
+
+  function buildComponentHealth() {
+    const tireRecorded = props.vehicles.filter((vehicle) => Boolean(vehicle.tire_condition));
+    const brakeRecorded = props.vehicles.filter((vehicle) => Boolean(vehicle.brake_condition));
+    const batteryRecorded = props.vehicles.filter((vehicle) => Boolean(vehicle.battery_status));
+    const serviceRecorded = props.vehicles.filter(
+      (vehicle) => typeof vehicle.odometer_km === "number" && typeof vehicle.next_service_due_km === "number"
+    );
+    return [
+      {
+        label: "Tires",
+        icon: Target,
+        healthy: tireRecorded.filter((vehicle) => conditionIsHealthy(vehicle.tire_condition)).length,
+        total: tireRecorded.length,
+        tone: "warning",
+      },
+      {
+        label: "Brakes",
+        icon: ShieldCheck,
+        healthy: brakeRecorded.filter((vehicle) => conditionIsHealthy(vehicle.brake_condition)).length,
+        total: brakeRecorded.length,
+        tone: "success",
+      },
+      {
+        label: "Battery",
+        icon: BatteryCharging,
+        healthy: batteryRecorded.filter((vehicle) => conditionIsHealthy(vehicle.battery_status)).length,
+        total: batteryRecorded.length,
+        tone: "success",
+      },
+      {
+        label: "Engine Service",
+        icon: Settings,
+        healthy: serviceRecorded.filter((vehicle) => {
+          const remaining = (vehicle.next_service_due_km || 0) - (vehicle.odometer_km || 0);
+          return remaining > 1000;
+        }).length,
+        total: serviceRecorded.length,
+        tone: "warning",
+      },
+    ];
   }
 
   return (
     <section className="section">
       <section className="admin-page maintenance-page">
-      <section className="stats stats--four admin-stats">
-        <div className="stat-card stat-card--blue">
-          <div className="stat-icon"><MaintenanceIcon name="records" /></div>
-          <div className="stat-value">{props.maintenance.length}</div>
-          <div className="stat-label">Service Records</div>
-          <div className="stat-sub">Logged maintenance history</div>
-        </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-icon"><MaintenanceIcon name="centers" /></div>
-          <div className="stat-value">{props.centers.length}</div>
-          <div className="stat-label">Service Centers</div>
-          <div className="stat-sub">{linkedCentersCount} centers linked to portal access</div>
-        </div>
-        <div className="stat-card stat-card--purple">
-          <div className="stat-icon"><MaintenanceIcon name="cost" /></div>
-          <div className="stat-value">Rs.{totalCost.toLocaleString()}</div>
-          <div className="stat-label">Total Maintenance Cost</div>
-          <div className="stat-sub">Recorded service expenditure</div>
-        </div>
-        <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><MaintenanceIcon name="review" /></div>
-          <div className="stat-value">{pendingApprovalCount}</div>
-          <div className="stat-label">Pending Approval</div>
-          <div className="stat-sub">Completed bookings waiting for manager review</div>
-        </div>
-      </section>
-
-      <nav className="admin-tabs" aria-label="Maintenance sections">
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("overview")}
-        >
-          Overview
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "centers" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("centers")}
-        >
-          Service Centers
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "workflow" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("workflow")}
-        >
-          Booking Workflow
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "history" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          History
-        </button>
-      </nav>
-
-      {activeTab === "overview" && (
-      <div className="maintenance-workspace">
-        <section className="card maintenance-panel maintenance-panel--review">
-          <div className="maintenance-panel__header">
-            <div>
-              <span className="maintenance-panel__eyebrow">Booking review</span>
-              <h3>Review Queue</h3>
-              <p>Completed workshop jobs waiting for manager approval before vehicle updates are applied.</p>
-            </div>
-            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("workflow")}>
-              View Workflow
-            </button>
-          </div>
-          {reviewQueue.length === 0 ? (
-            <div className="maintenance-empty-state">
-              <ClipboardList aria-hidden="true" />
-              <div>
-                <strong>No bookings waiting for approval</strong>
-                <span>Completed service jobs will appear here for final review.</span>
-              </div>
-            </div>
-          ) : (
-            <div className="maintenance-review-list">
-              {reviewQueue.map((booking) => (
-                <button
-                  className="maintenance-review-item"
-                  type="button"
-                  key={booking.id}
-                  onClick={() => setSelectedBooking(booking)}
-                >
-                  <div>
-                    <strong>{vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"}</strong>
-                    <span>{centerLabelMap[booking.center_id || ""] || "Service center"} • {formatCurrency(booking.final_cost_lkr)}</span>
-                  </div>
-                  <span className="pill pill--warning">Pending approval</span>
-                </button>
-              ))}
-            </div>
-          )}
+        <section className="dashboard-kpis maintenance-kpi-grid">
+          <article className="dashboard-kpi-card dashboard-kpi-card--orange maintenance-kpi-card">
+            <div className="dashboard-kpi-card__icon"><CalendarClock aria-hidden="true" /></div>
+            <div><span className="dashboard-kpi-card__label">Open Bookings</span><strong>{openBookings.length}</strong><small className="dashboard-trend dashboard-trend--warning">{pendingApprovalCount} awaiting action</small></div>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--red maintenance-kpi-card">
+            <div className="dashboard-kpi-card__icon"><ClipboardList aria-hidden="true" /></div>
+            <div><span className="dashboard-kpi-card__label">Pending Approval</span><strong>{pendingApprovalCount}</strong><small className="dashboard-trend dashboard-trend--danger">completion reviews pending</small></div>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--green maintenance-kpi-card">
+            <div className="dashboard-kpi-card__icon"><CheckCircle2 aria-hidden="true" /></div>
+            <div><span className="dashboard-kpi-card__label">Completed This Month</span><strong>{completedThisMonth}</strong><small className="dashboard-trend dashboard-trend--positive">from current records</small></div>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--teal maintenance-kpi-card">
+            <div className="dashboard-kpi-card__icon"><WalletCards aria-hidden="true" /></div>
+            <div><span className="dashboard-kpi-card__label">Maintenance Spend</span><strong>LKR {maintenanceSpendThisMonth >= 1000000 ? `${(maintenanceSpendThisMonth / 1000000).toFixed(2)}M` : maintenanceSpendThisMonth.toLocaleString()}</strong><small className="dashboard-trend dashboard-trend--live">month to date</small></div>
+          </article>
         </section>
 
-        <aside className="maintenance-side-stack">
-          <section className="card maintenance-panel">
-            <div className="maintenance-panel__header maintenance-panel__header--compact">
-              <div>
-                <span className="maintenance-panel__eyebrow">Actions</span>
-                <h3>Service Actions</h3>
-              </div>
-            </div>
-            <div className="maintenance-action-stack">
-              <button
-                className="btn"
-                type="button"
-                onClick={() => {
-                  props.onCancelMaintenanceEdit();
-                  setShowMaintenanceModal(true);
-                }}
-              >
-                Log Maintenance
-              </button>
-              <button
-                className="btn btn--secondary"
-                type="button"
-                onClick={() => {
-                  props.onCancelBookingEdit();
-                  setShowBookingModal(true);
-                }}
-              >
-                Book Service
-              </button>
-              <button
-                className="btn btn--secondary"
-                type="button"
-                onClick={() => {
-                  props.onCancelCenterEdit();
-                  setShowCenterModal(true);
-                }}
-              >
-                Add Workshop
-              </button>
-            </div>
+        <div className="maintenance-workspace maintenance-workspace--redesign">
+          <section className="maintenance-board-card maintenance-main-card">
+            <nav className="maintenance-tabs" aria-label="Maintenance sections">
+              {[
+                ["records", "Records"],
+                ["bookings", "Service Bookings"],
+                ["centers", "Service Centers"],
+                ["approvals", "Approval Queue"],
+              ].map(([tab, label]) => (
+                <button key={tab} type="button" className={`maintenance-tab ${activeTab === tab ? "maintenance-tab--active" : ""}`} onClick={() => setActiveTab(tab as MaintenanceTab)}>
+                  {label}
+                  {tab === "approvals" && pendingApprovalCount > 0 && <span className="maintenance-tab-count">{pendingApprovalCount}</span>}
+                </button>
+              ))}
+            </nav>
+
+            {activeTab === "records" && (
+              <>
+                <div className="maintenance-table-controls maintenance-table-controls--records">
+                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, type, or notes..." value={maintenanceSearch} onChange={(event) => setMaintenanceSearch(event.target.value)} /></label>
+                  <label className="maintenance-select-control"><span>Severity</span><select value={maintenanceSeverityFilter} onChange={(event) => setMaintenanceSeverityFilter(event.target.value)}><option value="all">All Severities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+                  <label className="maintenance-select-control"><span>Type</span><select value={maintenanceTypeFilter} onChange={(event) => setMaintenanceTypeFilter(event.target.value)}><option value="all">All Types</option>{maintenanceTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={maintenanceRowsPerPage} onChange={(event) => setMaintenanceRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+                  <button className="maintenance-table-action" type="button" onClick={() => { props.onCancelMaintenanceEdit(); setShowMaintenanceModal(true); }}><Plus aria-hidden="true" /> Log Service</button>
+                </div>
+                {filteredMaintenance.length === 0 ? <div className="maintenance-empty-state"><FileText aria-hidden="true" /><div><strong>No service records found</strong><span>Log completed service work when vehicles return from maintenance.</span></div></div> : (
+                  <div className="maintenance-register-table maintenance-records-table">
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Date</span><span>Type</span><span>Severity</span><span>Cost (LKR)</span><span>Odometer (km)</span><span>Actions</span></div>
+                    {paginatedMaintenance.map((record) => (
+                      <div className="maintenance-table__row" key={record.id}>
+                        <span data-label="Vehicle"><strong>{vehicleLabelMap[record.vehicle_id] || "--"}</strong></span>
+                        <span data-label="Date">{formatDate(record.service_date)}</span>
+                        <span data-label="Type">{serviceTypeLabel(record)}</span>
+                        <span data-label="Severity"><span className={`maintenance-badge maintenance-badge--${severityBucket(record)}`}>{severityLabel(record)}</span></span>
+                        <span data-label="Cost (LKR)">{formatLkr(record.cost_lkr)}</span>
+                        <span data-label="Odometer (km)">{formatOdometer(record.odometer_km)}</span>
+                        <span className="maintenance-row-actions" data-label="Actions">
+                          <button className="icon-action" type="button" onClick={() => setSelectedRecord(record)} title="View record" aria-label={`View maintenance ${record.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
+                          <button className="icon-action" type="button" onClick={() => { props.onEditMaintenance(record); setShowMaintenanceModal(true); }} title="Edit record" aria-label={`Edit maintenance ${record.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
+                          <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteTarget(record)} disabled={props.loading} title="Delete record" aria-label={`Delete maintenance ${record.id}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="maintenance-table-footer"><span>Showing {filteredMaintenance.length === 0 ? 0 : (currentMaintenancePage - 1) * maintenanceRowsPerPage + 1} to {Math.min(currentMaintenancePage * maintenanceRowsPerPage, filteredMaintenance.length)} of {filteredMaintenance.length} records</span><div><button type="button" onClick={() => setMaintenancePage((prev) => Math.max(1, prev - 1))} disabled={currentMaintenancePage === 1}>Prev</button><strong>{currentMaintenancePage}</strong><button type="button" onClick={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))} disabled={currentMaintenancePage === maintenanceTotalPages}>Next</button></div></div>
+              </>
+            )}
+
+            {activeTab === "bookings" && (
+              <>
+                {pendingApprovalCount > 0 && <div className="maintenance-alert-banner"><AlertTriangle aria-hidden="true" /><strong>{pendingApprovalCount} completion reviews require manager action</strong><button type="button" onClick={() => setActiveTab("approvals")}>Go to Approval Queue</button></div>}
+                <div className="maintenance-table-controls maintenance-table-controls--bookings">
+                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, center, or work type..." value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} /></label>
+                  <label className="maintenance-select-control"><span>Status</span><select value={bookingStatusFilter} onChange={(event) => setBookingStatusFilter(event.target.value)}><option value="all">All Statuses</option><option value="scheduled">Scheduled</option><option value="in_progress">In Progress</option><option value="awaiting_review">Awaiting Review</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+                  <label className="maintenance-select-control"><span>Review</span><select value={bookingReviewFilter} onChange={(event) => setBookingReviewFilter(event.target.value)}><option value="all">All Reviews</option><option value="pending">Pending Review</option><option value="approved">Approved</option><option value="rejected">Needs Clarification</option><option value="not_required">Not Required</option></select></label>
+                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={bookingRowsPerPage} onChange={(event) => setBookingRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+                  <button className="maintenance-table-action" type="button" onClick={() => { props.onCancelBookingEdit(); setShowBookingModal(true); }}><Plus aria-hidden="true" /> Create Booking</button>
+                </div>
+                {filteredBookings.length === 0 ? <div className="maintenance-empty-state"><CalendarClock aria-hidden="true" /><div><strong>No service bookings found</strong><span>Create bookings for vehicles that need workshop attention.</span></div></div> : (
+                  <div className="maintenance-register-table maintenance-bookings-table">
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Requested Date</span><span>Work Type</span><span>Status</span><span>Review</span><span>Actions</span></div>
+                    {paginatedBookings.map((booking) => {
+                      const status = bookingWorkflowStatus(booking);
+                      const review = reviewState(booking);
+                      const canChange = (booking.status || "pending") === "pending";
+                      return (
+                        <div className="maintenance-table__row" key={booking.id}>
+                          <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
+                          <span data-label="Service Center">{centerLabelMap[booking.center_id || ""] || "--"}</span>
+                          <span data-label="Requested Date">{formatDate(booking.requested_date)}</span>
+                          <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
+                          <span data-label="Status"><span className={`maintenance-badge maintenance-badge--${status.tone}`}>{status.label}</span></span>
+                          <span data-label="Review"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
+                          <span className="maintenance-row-actions" data-label="Actions">
+                            <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label={`View booking ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
+                            {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
+                            <button className="icon-action" type="button" onClick={() => { props.onEditBooking(booking); setShowBookingModal(true); }} disabled={!canChange} title="Edit booking" aria-label={`Edit booking ${booking.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
+                            <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteBookingTarget(booking)} disabled={props.loading || !canChange} title="Delete booking" aria-label={`Delete booking ${booking.id}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="maintenance-table-footer"><span>Showing {filteredBookings.length === 0 ? 0 : (currentBookingPage - 1) * bookingRowsPerPage + 1} to {Math.min(currentBookingPage * bookingRowsPerPage, filteredBookings.length)} of {filteredBookings.length} bookings</span><div><button type="button" onClick={() => setBookingPage((prev) => Math.max(1, prev - 1))} disabled={currentBookingPage === 1}>Prev</button><strong>{currentBookingPage}</strong><button type="button" onClick={() => setBookingPage((prev) => Math.min(bookingTotalPages, prev + 1))} disabled={currentBookingPage === bookingTotalPages}>Next</button></div></div>
+              </>
+            )}
+
+            {activeTab === "centers" && (
+              <>
+                <div className="maintenance-portal-strip">
+                  <div className="maintenance-strip-title"><CalendarClock aria-hidden="true" /><div><strong>Portal Readiness Overview</strong><span>Status of service centers on FleetLanka portal</span></div></div>
+                  <div><strong>{activePortalCenters.length}</strong><span>Active Portal Accounts</span></div>
+                  <div><strong>{missingContactCenters.length}</strong><span>Centers Missing Contacts</span></div>
+                  <div><strong>{pendingSetupCenters.length}</strong><span>Pending Account Setup</span></div>
+                </div>
+                <div className="maintenance-table-controls maintenance-table-controls--centers">
+                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by center name, contact, city..." value={centerSearch} onChange={(event) => setCenterSearch(event.target.value)} /></label>
+                  <label className="maintenance-select-control"><span>Location</span><select value={centerLocationFilter} onChange={(event) => setCenterLocationFilter(event.target.value)}><option value="all">All Locations</option>{centerLocationOptions.map((location) => <option key={location} value={location}>{location}</option>)}</select></label>
+                  <label className="maintenance-select-control"><span>Portal</span><select value={centerPortalFilter} onChange={(event) => setCenterPortalFilter(event.target.value)}><option value="all">All Portal Status</option><option value="active">Active</option><option value="pending_setup">Pending Setup</option><option value="missing_contacts">Missing Contacts</option></select></label>
+                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={centerRowsPerPage} onChange={(event) => setCenterRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+                  <button className="maintenance-table-action" type="button" onClick={() => { props.onCancelCenterEdit(); setShowCenterModal(true); }}><Plus aria-hidden="true" /> Add Service Center</button>
+                </div>
+                {filteredCenters.length === 0 ? <div className="maintenance-empty-state"><Building2 aria-hidden="true" /><div><strong>No service centers found</strong><span>Add workshop partners to schedule and review maintenance work.</span></div></div> : (
+                  <div className="maintenance-register-table maintenance-centers-table">
+                    <div className="maintenance-table__head"><span>Center</span><span>Portal Account</span><span>Phone</span><span>Address</span><span>Actions</span></div>
+                    {paginatedCenters.map((center) => {
+                      const portal = getPortalState(center);
+                      return (
+                        <div className="maintenance-table__row" key={center.id}>
+                          <span data-label="Center"><strong>{center.name}</strong><small>{getCenterLocation(center)}</small></span>
+                          <span data-label="Portal Account"><span className={`maintenance-badge maintenance-badge--${portal.tone}`}>{portal.label}</span></span>
+                          <span data-label="Phone">{center.phone || "--"}</span>
+                          <span data-label="Address">{center.address || "--"}</span>
+                          <span className="maintenance-row-actions" data-label="Actions">
+                            <button className="icon-action" type="button" onClick={() => setSelectedCenter(center)} title="View center" aria-label={`View center ${center.name}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
+                            <button className="icon-action" type="button" onClick={() => { props.onEditCenter(center); setShowCenterModal(true); }} title="Edit center" aria-label={`Edit center ${center.name}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
+                            <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteCenterTarget(center)} disabled={props.loading} title="Delete center" aria-label={`Delete center ${center.name}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="maintenance-table-footer"><span>Showing {filteredCenters.length === 0 ? 0 : (currentCenterPage - 1) * centerRowsPerPage + 1} to {Math.min(currentCenterPage * centerRowsPerPage, filteredCenters.length)} of {filteredCenters.length} service centers</span><div><button type="button" onClick={() => setCenterPage((prev) => Math.max(1, prev - 1))} disabled={currentCenterPage === 1}>Prev</button><strong>{currentCenterPage}</strong><button type="button" onClick={() => setCenterPage((prev) => Math.min(centerTotalPages, prev + 1))} disabled={currentCenterPage === centerTotalPages}>Next</button></div></div>
+              </>
+            )}
+
+            {activeTab === "approvals" && (
+              <>
+                {pendingApprovalCount > 0 && <div className="maintenance-alert-banner maintenance-alert-banner--strong"><AlertTriangle aria-hidden="true" /><strong>Several completion reviews require your action.</strong><span>Please review and approve, reject, or request changes to proceed.</span></div>}
+                <div className="maintenance-table-controls maintenance-table-controls--approvals">
+                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, center, or work type..." value={approvalSearch} onChange={(event) => setApprovalSearch(event.target.value)} /></label>
+                  <label className="maintenance-select-control"><span>Review</span><select value={approvalReviewFilter} onChange={(event) => setApprovalReviewFilter(event.target.value)}><option value="all">All Review Statuses</option><option value="pending">Pending Review</option><option value="approved">Approved</option><option value="rejected">Needs Clarification</option></select></label>
+                  <label className="maintenance-select-control"><span>Center</span><select value={approvalCenterFilter} onChange={(event) => setApprovalCenterFilter(event.target.value)}><option value="all">All Service Centers</option>{props.centers.map((center) => <option key={center.id} value={center.id}>{center.name}</option>)}</select></label>
+                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={approvalRowsPerPage} onChange={(event) => setApprovalRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+                </div>
+                {filteredApprovals.length === 0 ? <div className="maintenance-empty-state"><ClipboardList aria-hidden="true" /><div><strong>No completion reviews found</strong><span>Completed bookings will appear here for manager review.</span></div></div> : (
+                  <div className="maintenance-register-table maintenance-approvals-table">
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Work Type</span><span>Completed On</span><span>Proposed Updates</span><span>Review Status</span><span>Actions</span></div>
+                    {paginatedApprovals.map((booking) => {
+                      const review = reviewState(booking);
+                      const updates = proposedUpdates(booking);
+                      return (
+                        <div className="maintenance-table__row" key={booking.id}>
+                          <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
+                          <span data-label="Service Center">{centerLabelMap[booking.center_id || ""] || "--"}</span>
+                          <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
+                          <span data-label="Completed On">{formatDate(booking.completed_at || booking.requested_date)}</span>
+                          <span data-label="Proposed Updates" className="maintenance-update-list">{updates.length ? updates.map((update) => <em key={update}>{update}</em>) : "--"}</span>
+                          <span data-label="Review Status"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
+                          <span className="maintenance-row-actions" data-label="Actions">
+                            <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View review" aria-label={`View review ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
+                            {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
+                            {isPendingCompletionReview(booking) && <button className="icon-action icon-action--danger" type="button" onClick={() => { setRejectBookingTarget(booking); setRejectBookingNote(booking.completion_review_notes || ""); }} disabled={props.loading} title="Reject completion" aria-label={`Reject completion ${booking.id}`}><XCircle className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="maintenance-table-footer"><span>Showing {filteredApprovals.length === 0 ? 0 : (currentApprovalPage - 1) * approvalRowsPerPage + 1} to {Math.min(currentApprovalPage * approvalRowsPerPage, filteredApprovals.length)} of {filteredApprovals.length} reviews</span><div><button type="button" onClick={() => setApprovalPage((prev) => Math.max(1, prev - 1))} disabled={currentApprovalPage === 1}>Prev</button><strong>{currentApprovalPage}</strong><button type="button" onClick={() => setApprovalPage((prev) => Math.min(approvalTotalPages, prev + 1))} disabled={currentApprovalPage === approvalTotalPages}>Next</button></div></div>
+              </>
+            )}
           </section>
 
-          <section className="card maintenance-panel">
-            <div className="maintenance-panel__header maintenance-panel__header--compact">
-              <div>
-                <span className="maintenance-panel__eyebrow">Workload</span>
-                <h3>Service Snapshot</h3>
-              </div>
-            </div>
-            <div className="maintenance-snapshot-grid">
-              <div><span>Active bookings</span><strong>{workflowBookings.length}</strong></div>
-              <div><span>Pending review</span><strong>{pendingApprovalCount}</strong></div>
-              <div><span>Workshops</span><strong>{props.centers.length}</strong></div>
-              <div><span>Portal linked</span><strong>{linkedCentersCount}</strong></div>
-            </div>
-          </section>
-        </aside>
-
-        <section className="card maintenance-panel">
-          <div className="maintenance-panel__header">
-            <div>
-              <span className="maintenance-panel__eyebrow">Schedule</span>
-              <h3>Upcoming Service</h3>
-              <p>Confirmed and pending appointments ordered by service date.</p>
-            </div>
-          </div>
-          {upcomingBookings.length === 0 ? (
-            <div className="maintenance-empty-state">
-              <CalendarClock aria-hidden="true" />
-              <div>
-                <strong>No upcoming service bookings</strong>
-                <span>Book service work when a vehicle needs workshop attention.</span>
-              </div>
-            </div>
-          ) : (
-            <div className="maintenance-card-list">
-              {upcomingBookings.map((booking) => (
-                <button className="maintenance-card-row" type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
-                  <div>
-                    <strong>{vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"}</strong>
-                    <span>{booking.requested_date} • {centerLabelMap[booking.center_id || ""] || "Service center"}</span>
-                  </div>
-                  <span className={`pill pill--${bookingStatusTone(booking)}`}>{bookingStatusLabel(booking)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="card maintenance-panel">
-          <div className="maintenance-panel__header">
-            <div>
-              <span className="maintenance-panel__eyebrow">Service history</span>
-              <h3>Recent Maintenance</h3>
-              <p>Latest service records by vehicle, source, and cost.</p>
-            </div>
-          </div>
-          {recentMaintenance.length === 0 ? (
-            <div className="maintenance-empty-state">
-              <FileText aria-hidden="true" />
-              <div>
-                <strong>No maintenance history yet</strong>
-                <span>Logged records will appear here after service work is completed.</span>
-              </div>
-            </div>
-          ) : (
-            <div className="maintenance-card-list">
-              {recentMaintenance.map((record) => (
-                <button className="maintenance-card-row" type="button" key={record.id} onClick={() => setSelectedRecord(record)}>
-                  <div>
-                    <strong>{vehicleLabelMap[record.vehicle_id || ""] || "Vehicle"} • {record.service_type || "Service"}</strong>
-                    <span>{record.service_date} • {record.service_booking_id ? "Service booking" : "Manual record"}</span>
-                  </div>
-                  <span>{formatCurrency(record.cost_lkr)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-      )}
-
-      {activeTab === "centers" && (
-      <section className="card admin-table-section admin-panel">
-        <div className="card__header">
-          <div>
-            <h3>Registered Centers</h3>
-            <p className="muted admin-card__subtitle">Search and maintain the service-center network used for workshop bookings and portal coordination.</p>
-          </div>
+          <aside className="maintenance-side-column">
+            <section className="maintenance-side-card">
+              <div className="maintenance-side-header"><h3>Upcoming Service</h3><button type="button" onClick={() => setActiveTab("bookings")}>View all</button></div>
+              {upcomingBookings.length === 0 ? <div className="maintenance-empty-state maintenance-empty-state--compact"><CalendarClock aria-hidden="true" /><div><strong>No upcoming bookings</strong><span>Scheduled service work will appear here.</span></div></div> : upcomingBookings.map((booking) => {
+                const urgency = serviceUrgency(booking);
+                return (
+                  <button className="maintenance-side-row" type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
+                    <span className="maintenance-side-icon"><Target aria-hidden="true" /></span>
+                    <span><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "Vehicle"}</strong><small>{booking.work_type || booking.notes || "General Service"}</small></span>
+                    <time>{formatDate(booking.requested_date)}</time>
+                    <span className={`maintenance-badge maintenance-badge--${urgency.tone}`}>{urgency.label}</span>
+                    <ChevronRight aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </section>
+            <section className="maintenance-side-card">
+              <div className="maintenance-side-header"><h3>Vehicle Component Health</h3><button type="button" onClick={() => setActiveTab("records")}>View all</button></div>
+              <div className="maintenance-health-list">{componentHealth.map((item) => {
+                const percentage = item.total ? Math.round((item.healthy / item.total) * 100) : 0;
+                const Icon = item.icon;
+                return <div className="maintenance-health-row" key={item.label}><span className="maintenance-side-icon"><Icon aria-hidden="true" /></span><div><strong>{item.label}</strong><small>{item.total ? `${item.healthy} / ${item.total} Vehicles` : "No readings recorded"}</small><span className={`maintenance-health-bar maintenance-health-bar--${item.tone}`}><em style={{ width: `${percentage}%` }} /></span></div><span>{item.total ? `${percentage}%` : "--"}</span></div>;
+              })}</div>
+            </section>
+            <section className="maintenance-side-card">
+              <div className="maintenance-side-header"><h3>{activeTab === "centers" ? "Service Center Snapshot" : activeTab === "records" ? "Maintenance Performance" : "Monthly Snapshot"}</h3></div>
+              {activeTab === "centers" ? (
+                <div className="maintenance-performance-grid"><div><span>Active Portal Accounts</span><strong>{activePortalCenters.length}</strong></div><div><span>Centers Missing Contacts</span><strong>{missingContactCenters.length}</strong></div><div><span>Pending Account Setup</span><strong>{pendingSetupCenters.length}</strong></div><div><span>Total Service Centers</span><strong>{props.centers.length}</strong></div></div>
+              ) : activeTab === "records" ? (
+                <div className="maintenance-performance-grid"><div><span>Services This Month</span><strong>{maintenanceThisMonth.length}</strong></div><div><span>High Severity Records</span><strong>{highSeverityRecords.length}</strong></div><div><span>Avg. Service Cost</span><strong>{maintenanceThisMonth.length ? Math.round(maintenanceSpendThisMonth / maintenanceThisMonth.length).toLocaleString() : "--"}</strong></div><div><span>Month Spend</span><strong>{maintenanceSpendThisMonth.toLocaleString()}</strong></div></div>
+              ) : (
+                <div className="maintenance-performance-grid"><div><span>Approved Reviews</span><strong>{approvedReviews}</strong></div><div><span>Rejected Reviews</span><strong>{rejectedReviews}</strong></div><div><span>Active Service Centers</span><strong>{linkedCentersCount}</strong></div><div><span>High Severity Records</span><strong>{highSeverityRecords.length}</strong></div></div>
+              )}
+            </section>
+          </aside>
         </div>
-        {props.centers.length === 0 ? (
-          <p className="empty">No service centers added yet.</p>
-        ) : (
-          <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
-                  <input
-                    type="search"
-                    placeholder="Center, phone, address..."
-                    value={centerSearch}
-                    onChange={(e) => setCenterSearch(e.target.value)}
-                  />
-                </label>
-                <label className="table-controls__label">
-                  Rows
-                  <select
-                    value={centerRowsPerPage}
-                    onChange={(e) => setCenterRowsPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentCenterPage} of {centerTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setCenterPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentCenterPage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setCenterPage((prev) => Math.min(centerTotalPages, prev + 1))}
-                  disabled={currentCenterPage === centerTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-            {filteredCenters.length === 0 ? (
-              <p className="empty">No service centers match the search.</p>
-            ) : (
-              <div className="table centers-table" style={{ ["--table-columns" as any]: 4 }}>
-                <div className="table__head centers-table__head">
-                  <span>Center</span>
-                  <span>Phone</span>
-                  <span>Portal</span>
-                  <span>Actions</span>
-                </div>
-                {paginatedCenters.map((center) => (
-                  <div className="table__row centers-table__row" key={center.id}>
-                    <span className="centers-table__cell" data-label="Center">{center.name}</span>
-                    <span className="centers-table__cell" data-label="Phone">{center.phone || "--"}</span>
-                    <span className="centers-table__cell" data-label="Portal">
-                      <span className={`pill pill--${center.profile_id ? "success" : "warning"}`}>
-                        {center.profile_id ? "Linked" : "Not Linked"}
-                      </span>
-                    </span>
-                    <span className="table__actions centers-table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedCenter(center)}
-                        aria-label={`View center ${center.name}`}
-                        title="View center"
-                      >
-                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => {
-                          props.onEditCenter(center);
-                          setShowCenterModal(true);
-                        }}
-                        aria-label={`Edit center ${center.name}`}
-                        title="Edit center"
-                      >
-                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action icon-action--danger"
-                        type="button"
-                        onClick={() => setDeleteCenterTarget(center)}
-                        disabled={props.loading}
-                        aria-label={`Delete center ${center.name}`}
-                        title="Delete center"
-                      >
-                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-      )}
-
-      {activeTab === "workflow" && (
-      <section className="card admin-table-section admin-panel">
-        <div className="card__header">
-          <div>
-            <h3>Booking Workflow</h3>
-            <p className="muted admin-card__subtitle">Track active bookings, review completion updates, and approve or reject proposed vehicle changes.</p>
-          </div>
-        </div>
-        {workflowBookings.length === 0 ? (
-          <p className="empty">No active or in-review service bookings.</p>
-        ) : (
-          <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
-                  <input
-                    type="search"
-                    placeholder="Date, vehicle, center, status..."
-                    value={bookingSearch}
-                    onChange={(e) => setBookingSearch(e.target.value)}
-                  />
-                </label>
-                <label className="table-controls__label">
-                  Rows
-                  <select
-                    value={bookingRowsPerPage}
-                    onChange={(e) => setBookingRowsPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentBookingPage} of {bookingTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setBookingPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentBookingPage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setBookingPage((prev) => Math.min(bookingTotalPages, prev + 1))}
-                  disabled={currentBookingPage === bookingTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-            {filteredBookings.length === 0 ? (
-              <p className="empty">No workflow bookings match the search.</p>
-            ) : (
-              <div className="table bookings-table" style={{ ["--table-columns" as any]: 5 }}>
-                <div className="table__head bookings-table__head">
-                  <span>Date</span>
-                  <span>Vehicle</span>
-                  <span>Center</span>
-                  <span>Status</span>
-                  <span>Actions</span>
-                </div>
-                {paginatedBookings.map((booking) => (
-                  <div className="table__row bookings-table__row" key={booking.id}>
-                    <span className="bookings-table__cell" data-label="Date">{booking.requested_date}</span>
-                    <span className="bookings-table__cell" data-label="Vehicle">
-                      {vehicleLabelMap[booking.vehicle_id || ""] || "--"}
-                    </span>
-                    <span className="bookings-table__cell" data-label="Center">
-                      {centerLabelMap[booking.center_id || ""] || "--"}
-                    </span>
-                    <span className="bookings-table__cell" data-label="Status">
-                      <span className={`pill pill--${bookingStatusTone(booking)}`}>
-                        {bookingStatusLabel(booking)}
-                      </span>
-                    </span>
-                    <span className="table__actions bookings-table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedBooking(booking)}
-                        aria-label={`View booking ${booking.id}`}
-                        title="View booking"
-                      >
-                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => {
-                          props.onEditBooking(booking);
-                          setShowBookingModal(true);
-                        }}
-                        disabled={(booking.status || "pending") !== "pending"}
-                        aria-label={`Edit booking ${booking.id}`}
-                        title="Edit booking"
-                      >
-                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action icon-action--danger"
-                        type="button"
-                        onClick={() => setDeleteBookingTarget(booking)}
-                        disabled={props.loading || (booking.status || "pending") !== "pending"}
-                        aria-label={`Delete booking ${booking.id}`}
-                        title="Delete booking"
-                      >
-                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
-                      </button>
-                      {isPendingCompletionReview(booking) && (
-                        <button
-                          className="btn btn--danger btn--compact booking-review-btn"
-                          type="button"
-                          onClick={() => {
-                            setRejectBookingTarget(booking);
-                            setRejectBookingNote(booking.completion_review_notes || "");
-                          }}
-                          disabled={props.loading}
-                          aria-label={`Reject completion ${booking.id}`}
-                          title="Reject completion updates"
-                        >
-                          Reject
-                        </button>
-                      )}
-                      {isPendingCompletionReview(booking) && (
-                        <button
-                          className="btn btn--compact booking-review-btn"
-                          type="button"
-                          onClick={() => setApproveBookingTarget(booking)}
-                          disabled={props.loading}
-                          aria-label={`Approve completion ${booking.id}`}
-                          title="Approve completion updates"
-                        >
-                          Approve
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-      )}
-
-      {activeTab === "history" && (
-      <section className="card admin-table-section admin-panel">
-        <div className="card__header">
-          <div>
-            <h3>Maintenance History</h3>
-            <p className="muted admin-card__subtitle">Review logged service records, their source, and related cost history.</p>
-          </div>
-        </div>
-        {props.maintenance.length === 0 ? (
-          <p className="empty">No maintenance records yet.</p>
-        ) : (
-          <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
-                  <input
-                    type="search"
-                    placeholder="Date, type, vehicle..."
-                    value={maintenanceSearch}
-                    onChange={(e) => setMaintenanceSearch(e.target.value)}
-                  />
-                </label>
-                <label className="table-controls__label">
-                  Rows
-                  <select
-                    value={maintenanceRowsPerPage}
-                    onChange={(e) => setMaintenanceRowsPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentMaintenancePage} of {maintenanceTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setMaintenancePage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentMaintenancePage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))}
-                  disabled={currentMaintenancePage === maintenanceTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-            {filteredMaintenance.length === 0 ? (
-              <p className="empty">No maintenance records match the search.</p>
-            ) : (
-              <div className="table maintenance-table" style={{ ["--table-columns" as any]: 6 }}>
-                <div className="table__head maintenance-table__head">
-                  <span>Date</span>
-                  <span>Vehicle</span>
-                  <span>Service</span>
-                  <span>Source</span>
-                  <span>Cost</span>
-                  <span>Actions</span>
-                </div>
-                {paginatedMaintenance.map((record) => (
-                  <div className="table__row maintenance-table__row" key={record.id}>
-                    <span className="maintenance-table__cell" data-label="Date">{record.service_date}</span>
-                    <span className="maintenance-table__cell" data-label="Vehicle">
-                      {vehicleLabelMap[record.vehicle_id || ""] || "--"}
-                    </span>
-                    <span className="maintenance-table__cell maintenance-table__cell--service" data-label="Service">
-                      <strong>{record.service_type || "Service"}</strong>
-                      <small>{[formatReadable(record.event_type), formatReadable(record.severity)].filter((value) => value !== "Not recorded").join(" • ") || "General service"}</small>
-                    </span>
-                    <span className="maintenance-table__cell" data-label="Source">
-                      <span className={`pill ${record.service_booking_id ? "pill--info" : "pill--warning"}`}>
-                        {record.service_booking_id ? "Service Booking" : "Manual"}
-                      </span>
-                    </span>
-                    <span className="maintenance-table__cell" data-label="Cost">
-                      {typeof record.cost_lkr === "number" ? `Rs.${record.cost_lkr.toLocaleString()}` : "--"}
-                    </span>
-                    <span className="table__actions maintenance-table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedRecord(record)}
-                        aria-label={`View maintenance ${record.id}`}
-                        title="View record"
-                      >
-                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => {
-                          props.onEditMaintenance(record);
-                          setShowMaintenanceModal(true);
-                        }}
-                        aria-label={`Edit maintenance ${record.id}`}
-                        title="Edit record"
-                      >
-                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                      </button>
-                      <button
-                        className="icon-action icon-action--danger"
-                        type="button"
-                        onClick={() => setDeleteTarget(record)}
-                        disabled={props.loading}
-                        aria-label={`Delete maintenance ${record.id}`}
-                        title="Delete record"
-                      >
-                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
-                      </button>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-      )}
-
       {showMaintenanceModal && (
         <div className="modal-backdrop" role="presentation">
           <div className="modal modal--wide modal--form" role="dialog" aria-modal="true" aria-label="Maintenance form">
