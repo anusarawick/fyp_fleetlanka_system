@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import MapView from "../components/MapView";
 import {
+  Document,
   DriverScore,
   FuelForecast,
   LiveTrip,
@@ -34,7 +35,7 @@ type DashboardProps = {
   topPerformers: Array<{ driverId: string; driverName: string; score: number }>;
   maintenancePredictionMap: Record<string, MaintenancePrediction>;
   liveTrips: LiveTrip[];
-  alerts: { title: string; meta: string }[];
+  documents: Document[];
   upcomingDocs: { id: string; doc_type: string; expiry_date?: string }[];
   fuelForecasts: FuelForecast[];
 };
@@ -56,6 +57,11 @@ type DashboardAlertRow = {
   to: string;
 };
 
+type DashboardAlertQueueRow = DashboardAlertRow & {
+  urgency: number;
+  sortValue: number;
+};
+
 function DashboardIcon({ name }: { name: DashboardIconName }) {
   const icons: Record<DashboardIconName, LucideIcon> = {
     fleet: Car,
@@ -72,6 +78,12 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function startOfTodayMs() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
 }
 
 function formatPercent(value: number) {
@@ -114,7 +126,7 @@ export default function Dashboard({
   topPerformers,
   maintenancePredictionMap,
   liveTrips,
-  alerts,
+  documents,
   upcomingDocs,
   fuelForecasts,
 }: DashboardProps) {
@@ -185,10 +197,10 @@ export default function Dashboard({
         return patterns.some((pattern) => label.includes(pattern));
       }).length;
     return [
-      { label: "Licences", value: docCount(["licence", "license"]), icon: FileText, className: "dashboard-compliance--danger" },
-      { label: "Insurance", value: docCount(["insurance"]), icon: ShieldCheck, className: "dashboard-compliance--warning" },
-      { label: "Road Tax", value: docCount(["tax"]), icon: ClipboardCheck, className: "dashboard-compliance--warning" },
-      { label: "Fitness Certificates", value: docCount(["fitness", "certificate"]), icon: CheckCircle2, className: "dashboard-compliance--success" },
+      { label: "Driver License", value: docCount(["driving license", "driver license"]), icon: FileText, className: "dashboard-compliance--danger" },
+      { label: "Vehicle Insurance", value: docCount(["insurance"]), icon: ShieldCheck, className: "dashboard-compliance--warning" },
+      { label: "Revenue License", value: docCount(["revenue license"]), icon: ClipboardCheck, className: "dashboard-compliance--warning" },
+      { label: "Service Contract", value: docCount(["service contract"]), icon: CheckCircle2, className: "dashboard-compliance--success" },
     ];
   }, [upcomingDocs]);
 
@@ -230,15 +242,96 @@ export default function Dashboard({
       });
   }, [serviceBookings, vehicles]);
 
-  const alertRows = useMemo<DashboardAlertRow[]>(() => {
+  const fullAlertQueue = useMemo<DashboardAlertQueueRow[]>(() => {
+    const now = startOfTodayMs();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+    const serviceDueSoonKm = 1000;
+
+    const documentRows = documents
+      .map<DashboardAlertQueueRow | null>((doc) => {
+        if (!doc.expiry_date) return null;
+        const expiryDate = new Date(doc.expiry_date);
+        const expiryTime = expiryDate.getTime();
+        if (Number.isNaN(expiryTime) || expiryTime > now + fourteenDays) return null;
+        const expired = expiryTime < now;
+        const vehicle = doc.vehicle_id ? vehicles.find((item) => item.id === doc.vehicle_id) : undefined;
+        return {
+          id: `document-${doc.id}`,
+          priority: expired ? "High" : "Medium",
+          category: "Documents",
+          filter: "documents",
+          item: expired ? `Document expired: ${doc.doc_type}` : `Document expiring: ${doc.doc_type}`,
+          details: `${expired ? "Expired" : "Expires"} ${formatDate(doc.expiry_date)}`,
+          dueDate: formatDate(doc.expiry_date),
+          asset: vehicle?.plate_no || (doc.driver_id ? "Driver record" : "Fleet record"),
+          action: "Renew Document",
+          to: "/documents",
+          urgency: expired ? 0 : 4,
+          sortValue: Math.floor((expiryTime - now) / oneDay),
+        };
+      })
+      .filter((row): row is DashboardAlertQueueRow => row !== null);
+
+    const approvalRows = serviceBookings
+      .filter((booking) => {
+        const status = (booking.status || "pending").toLowerCase();
+        const reviewStatus = (booking.completion_review_status || "pending").toLowerCase();
+        return status === "completed" && reviewStatus !== "approved";
+      })
+      .map<DashboardAlertQueueRow>((booking) => {
+        const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
+        const requestedTime = new Date(booking.requested_date).getTime();
+        return {
+          id: `approval-${booking.id}`,
+          priority: "High",
+          category: "Approvals",
+          filter: "approvals",
+          item: "Service Completion Review",
+          details: "Completed service booking requires manager review",
+          dueDate: formatDate(booking.requested_date),
+          asset: vehicle?.plate_no || "Vehicle",
+          action: "Review Completion",
+          to: "/maintenance",
+          urgency: 1,
+          sortValue: Number.isNaN(requestedTime) ? Number.MAX_SAFE_INTEGER : requestedTime,
+        };
+      });
+
+    const maintenanceRows = vehicles
+      .map<DashboardAlertQueueRow | null>((vehicle) => {
+        if (typeof vehicle.next_service_due_km !== "number") return null;
+        const currentKm = typeof vehicle.odometer_km === "number" ? vehicle.odometer_km : vehicle.mileage;
+        if (typeof currentKm !== "number") return null;
+        const remainingKm = vehicle.next_service_due_km - currentKm;
+        if (remainingKm > serviceDueSoonKm) return null;
+        const overdue = remainingKm <= 0;
+        return {
+          id: `maintenance-${vehicle.id}`,
+          priority: overdue ? "High" : "Medium",
+          category: "Maintenance",
+          filter: "maintenance",
+          item: overdue ? "Service overdue" : "Service due soon",
+          details: overdue
+            ? `${Math.abs(Math.round(remainingKm)).toLocaleString()} km overdue`
+            : `${Math.round(remainingKm).toLocaleString()} km until service due`,
+          dueDate: `${Math.round(vehicle.next_service_due_km).toLocaleString()} km`,
+          asset: vehicle.plate_no,
+          action: "Schedule Service",
+          to: "/maintenance",
+          urgency: overdue ? 0 : 4,
+          sortValue: (remainingKm / serviceDueSoonKm) * 14,
+        };
+      })
+      .filter((row): row is DashboardAlertQueueRow => row !== null);
+
     const highRisk = Object.values(maintenancePredictionMap)
       .filter((row) => row.risk_level === "high")
       .sort((a, b) => b.probability - a.probability)
-      .slice(0, 2)
-      .map<DashboardAlertRow>((row) => {
+      .map<DashboardAlertQueueRow>((row) => {
         const vehicle = vehicles.find((item) => item.id === row.vehicle_id);
         return {
-          id: row.id,
+          id: `ml-${row.id}`,
           priority: "High",
           category: "ML Risk",
           filter: "ml",
@@ -248,52 +341,16 @@ export default function Dashboard({
           asset: vehicle?.plate_no || "Vehicle",
           action: "View Insights",
           to: "/ml",
+          urgency: 2,
+          sortValue: -row.probability,
         };
       });
-    const docRows = upcomingDocs.slice(0, 2).map<DashboardAlertRow>((doc) => ({
-      id: doc.id,
-      priority: "High",
-      category: "Documents",
-      filter: "documents",
-      item: `${doc.doc_type} Expiry`,
-      details: doc.expiry_date ? `Expires on ${formatDate(doc.expiry_date)}` : "Expiry date needs review",
-      dueDate: formatDate(doc.expiry_date),
-      asset: "Fleet record",
-      action: "Renew Now",
-      to: "/documents",
-    }));
-    const bookingRows = serviceBookings
-      .filter((booking) => (booking.completion_review_status || "") === "pending")
-      .slice(0, 1)
-      .map<DashboardAlertRow>((booking) => {
-        const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
-        return {
-          id: booking.id,
-          priority: "Medium",
-          category: "Approvals",
-          filter: "approvals",
-          item: "Booking Approval",
-          details: "Completed service booking requires manager review",
-          dueDate: formatDate(booking.requested_date),
-          asset: vehicle?.plate_no || "Vehicle",
-          action: "Review",
-          to: "/maintenance",
-        };
-      });
-    const builtAlerts = alerts.slice(0, 2).map<DashboardAlertRow>((alert, index) => ({
-      id: `alert-${index}`,
-      priority: index === 0 ? "High" : "Medium",
-      category: "Maintenance",
-      filter: "maintenance",
-      item: alert.title,
-      details: alert.meta,
-      dueDate: "--",
-      asset: "Fleet record",
-      action: "Schedule Service",
-      to: "/compliance",
-    }));
-    return [...docRows, ...bookingRows, ...highRisk, ...builtAlerts].slice(0, 6);
-  }, [alerts, maintenancePredictionMap, serviceBookings, upcomingDocs, vehicles]);
+
+    return [...documentRows, ...approvalRows, ...highRisk, ...maintenanceRows].sort((a, b) => {
+      if (a.urgency !== b.urgency) return a.urgency - b.urgency;
+      return a.sortValue - b.sortValue;
+    });
+  }, [documents, maintenancePredictionMap, serviceBookings, vehicles]);
 
   const fuelSummary = useMemo(() => {
     const forecastTotal = fuelForecasts.reduce((sum, row) => sum + row.forecast_liters_7d, 0);
@@ -335,16 +392,16 @@ export default function Dashboard({
   const staleTrips = liveTrips.filter((trip) => trip.stale).length;
   const openRiskCount = riskRows.find((row) => row.key === "high")?.count || 0;
   const alertCounts = {
-    all: alertRows.length,
-    documents: alertRows.filter((row) => row.filter === "documents").length,
-    maintenance: alertRows.filter((row) => row.filter === "maintenance").length,
-    approvals: alertRows.filter((row) => row.filter === "approvals").length,
-    ml: alertRows.filter((row) => row.filter === "ml").length,
+    all: fullAlertQueue.length,
+    documents: fullAlertQueue.filter((row) => row.filter === "documents").length,
+    maintenance: fullAlertQueue.filter((row) => row.filter === "maintenance").length,
+    approvals: fullAlertQueue.filter((row) => row.filter === "approvals").length,
+    ml: fullAlertQueue.filter((row) => row.filter === "ml").length,
   };
   const filteredAlertRows =
     activeAlertFilter === "all"
-      ? alertRows
-      : alertRows.filter((row) => row.filter === activeAlertFilter);
+      ? fullAlertQueue.slice(0, 6)
+      : fullAlertQueue.filter((row) => row.filter === activeAlertFilter).slice(0, 6);
   const alertTabs: Array<{
     key: DashboardAlertFilter;
     label: string;

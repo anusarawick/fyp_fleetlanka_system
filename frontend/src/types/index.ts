@@ -56,6 +56,31 @@ export type Driver = {
   phone?: string;
 };
 
+export type DriverInsightBucket = {
+  count: number;
+  driver_ids: string[];
+  preview: string[];
+};
+
+export type DriverInsights = {
+  attention: {
+    missing_phone: DriverInsightBucket;
+    missing_email: DriverInsightBucket;
+    inactive_access: DriverInsightBucket;
+  };
+  dispatch_coverage: {
+    available_drivers: number;
+    assigned_now: number;
+    contact_ready: number;
+    active_total: number;
+  };
+  cleanup: {
+    incomplete_profiles: number;
+    missing_names: number;
+    disabled_accounts: number;
+  };
+};
+
 export type Trip = {
   id: string;
   org_id?: string;

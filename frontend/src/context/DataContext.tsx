@@ -13,6 +13,7 @@ import { useAuth } from "./AuthContext";
 import {
     Vehicle,
     Driver,
+    DriverInsights,
     Trip,
     FuelLog,
     FuelForecast,
@@ -30,6 +31,7 @@ type DataContextType = {
     // Entity state
     vehicles: Vehicle[];
     drivers: Driver[];
+    driverInsights: DriverInsights | null;
     trips: Trip[];
     liveTrips: LiveTrip[];
     fuelLogs: FuelLog[];
@@ -406,6 +408,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Entity state
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [driverInsights, setDriverInsights] = useState<DriverInsights | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [liveTrips, setLiveTrips] = useState<LiveTrip[]>([]);
     const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
@@ -976,6 +979,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setTripTrackingStatus(activeTrip ? "stale" : "inactive");
                     setTripTrackingLastUpdated(null);
                     setDrivers([]);
+                    setDriverInsights(null);
                     setFuelLogs([]);
                     setMaintenance([]);
                     setDocuments([]);
@@ -991,6 +995,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 if (role === "service") {
                     setVehicles([]);
                     setDrivers([]);
+                    setDriverInsights(null);
                     setTrips([]);
                     setFuelLogs([]);
                     setMaintenance([]);
@@ -1005,9 +1010,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
-                const [v, d, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
+                const [v, d, di, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
                     apiGet<Vehicle[]>("/vehicles", token),
                     apiGet<Driver[]>("/drivers", token),
+                    apiGet<DriverInsights>("/drivers/insights", token).catch(() => null),
                     apiGet<Trip[]>("/trips", token),
                     apiGet<FuelLog[]>("/fuel-logs", token),
                     apiGet<Maintenance[]>("/maintenance", token),
@@ -1019,6 +1025,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 ]);
                 setVehicles(v);
                 setDrivers(d);
+                setDriverInsights(di);
                 setTrips(t);
                 setFuelLogs(f);
                 setMaintenance(m);
@@ -1144,6 +1151,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         setVehicles([]);
         setDrivers([]);
+        setDriverInsights(null);
         setTrips([]);
         setLiveTrips([]);
         setFuelLogs([]);
@@ -1449,6 +1457,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 };
                 const updated = await apiPatch<Driver>(`/drivers/${editingDriverId}`, payload, token);
                 setDrivers((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+                void refreshDriverInsights();
             } else {
                 if (!driverEmail.trim() || !driverPassword.trim()) {
                     throw new Error("Driver email and password are required");
@@ -1462,6 +1471,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 };
                 const created = await apiPost<Driver>("/drivers", payload, token);
                 setDrivers((prev) => [created, ...prev]);
+                void refreshDriverInsights();
             }
             setDriverName("");
             setDriverEmail("");
@@ -1494,6 +1504,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDriverPassword("");
     }
 
+    async function refreshDriverInsights() {
+        if (!token || role !== "manager") {
+            setDriverInsights(null);
+            return;
+        }
+        try {
+            const insights = await apiGet<DriverInsights>("/drivers/insights", token);
+            setDriverInsights(insights);
+        } catch {
+            setDriverInsights(null);
+        }
+    }
+
     async function handleDeleteDriver(driverId: string) {
         if (!token) return;
         setError(null);
@@ -1501,6 +1524,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             await apiDelete(`/drivers/${driverId}`, token);
             setDrivers((prev) => prev.filter((d) => d.id !== driverId));
+            void refreshDriverInsights();
             if (editingDriverId === driverId) {
                 handleCancelDriverEdit();
             }
@@ -1661,6 +1685,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             const created = await apiPost<Trip>("/trips", payload, token);
             setTrips((prev) => [created, ...prev]);
+            void refreshDriverInsights();
         } catch (err: any) {
             setError(err.message || "Trip assignment failed");
         } finally {
@@ -1694,6 +1719,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             const updated = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
             setTrips((prev) => prev.map((trip) => (trip.id === updated.id ? updated : trip)));
+            void refreshDriverInsights();
         } catch (err: any) {
             setError(err.message || "Trip update failed");
         } finally {
@@ -1708,6 +1734,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             await apiDelete(`/trips/${tripId}`, token);
             setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
+            void refreshDriverInsights();
         } catch (err: any) {
             setError(err.message || "Trip delete failed");
         } finally {
@@ -2229,6 +2256,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             value={{
                 vehicles,
                 drivers,
+                driverInsights,
                 trips,
                 liveTrips,
                 fuelLogs,

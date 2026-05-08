@@ -3,7 +3,16 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_bearer_token, require_manager_profile
-from app.schemas.drivers import DriverCreate, DriverOut, DriverUpdate
+from app.schemas.drivers import (
+    DriverAttentionInsights,
+    DriverCleanupInsights,
+    DriverCreate,
+    DriverDispatchCoverage,
+    DriverInsightBucket,
+    DriverInsightsOut,
+    DriverOut,
+    DriverUpdate,
+)
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
@@ -18,6 +27,33 @@ def _profile_with_email(admin_client, row: dict) -> dict:
     except Exception:
         email = None
     return {**row, "email": email}
+
+
+def _derive_trip_status(trip: dict) -> str:
+    status = trip.get("status")
+    if isinstance(status, str) and status.strip():
+        return status
+    if trip.get("end_time"):
+        return "completed"
+    if trip.get("start_time"):
+        return "in_progress"
+    return "assigned"
+
+
+def _is_active_driver(driver: dict) -> bool:
+    return (driver.get("status") or "active") == "active"
+
+
+def _driver_label(driver: dict) -> str:
+    return driver.get("full_name") or driver.get("email") or driver.get("phone") or "Driver"
+
+
+def _driver_bucket(drivers: List[dict]) -> DriverInsightBucket:
+    return DriverInsightBucket(
+        count=len(drivers),
+        driver_ids=[driver["id"] for driver in drivers],
+        preview=[_driver_label(driver) for driver in drivers[:3]],
+    )
 
 
 @router.get("", response_model=List[DriverOut])
@@ -35,6 +71,71 @@ def list_drivers(
         .execute()
     )
     return [_profile_with_email(admin_client, row) for row in (response.data or [])]
+
+
+@router.get("/insights", response_model=DriverInsightsOut)
+def get_driver_insights(
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token)
+) -> DriverInsightsOut:
+    org_id = profile["org_id"]
+    admin_client = get_supabase_client(use_service_role=True)
+    drivers_response = (
+        admin_client.table("profiles")
+        .select("id, org_id, role, status, full_name, phone")
+        .eq("org_id", org_id)
+        .eq("role", "driver")
+        .execute()
+    )
+    drivers = [_profile_with_email(admin_client, row) for row in (drivers_response.data or [])]
+
+    trips_response = (
+        admin_client.table("trips")
+        .select("driver_id, status, start_time, end_time")
+        .eq("org_id", org_id)
+        .execute()
+    )
+    current_driver_ids = {
+        trip.get("driver_id")
+        for trip in (trips_response.data or [])
+        if trip.get("driver_id") and _derive_trip_status(trip) in {"assigned", "in_progress"}
+    }
+
+    missing_phone = [driver for driver in drivers if not driver.get("phone")]
+    missing_email = [driver for driver in drivers if not driver.get("email")]
+    inactive_access = [driver for driver in drivers if not _is_active_driver(driver)]
+    active_drivers = [driver for driver in drivers if _is_active_driver(driver)]
+    available_drivers = [driver for driver in active_drivers if driver["id"] not in current_driver_ids]
+    contact_ready = [
+        driver
+        for driver in active_drivers
+        if driver.get("email") and driver.get("phone")
+    ]
+    incomplete_profiles = [
+        driver
+        for driver in drivers
+        if not driver.get("email") or not driver.get("phone")
+    ]
+    missing_names = [driver for driver in drivers if not driver.get("full_name")]
+
+    return DriverInsightsOut(
+        attention=DriverAttentionInsights(
+            missing_phone=_driver_bucket(missing_phone),
+            missing_email=_driver_bucket(missing_email),
+            inactive_access=_driver_bucket(inactive_access),
+        ),
+        dispatch_coverage=DriverDispatchCoverage(
+            available_drivers=len(available_drivers),
+            assigned_now=len(current_driver_ids),
+            contact_ready=len(contact_ready),
+            active_total=len(active_drivers),
+        ),
+        cleanup=DriverCleanupInsights(
+            incomplete_profiles=len(incomplete_profiles),
+            missing_names=len(missing_names),
+            disabled_accounts=len(inactive_access),
+        ),
+    )
 
 
 @router.post("", response_model=DriverOut)

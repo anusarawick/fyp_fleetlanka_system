@@ -4102,6 +4102,56 @@ textarea {
   font-size: 14px;
 }
 
+/* ===== SIDEBAR BRAND POLISH ===== */
+.app--manager .sidebar__brand,
+.app--service .sidebar__brand {
+  min-height: 48px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 10px 20px;
+  margin-bottom: 22px;
+}
+
+.app--manager .sidebar__brand-icon,
+.app--service .sidebar__brand-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.app--manager .sidebar__brand-icon img,
+.app--service .sidebar__brand-icon img {
+  width: 40px;
+  height: 40px;
+}
+
+.app--manager .sidebar__brand-copy,
+.app--service .sidebar__brand-copy {
+  min-width: 0;
+  gap: 4px;
+}
+
+.app--manager .sidebar__brand-copy strong,
+.app--service .sidebar__brand-copy strong {
+  font-size: 22px;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+
+.app--manager .sidebar__brand-copy span,
+.app--service .sidebar__brand-copy span {
+  margin-top: 0;
+  color: rgba(238, 249, 251, 0.72);
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .app--manager .sidebar__nav,
 .app--service .sidebar__nav {
   gap: 24px;

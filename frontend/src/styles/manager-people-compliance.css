@@ -547,3 +547,649 @@
     justify-items: start;
   }
 }
+
+/* ===== Drivers manager redesign ===== */
+.app--manager .people-page--drivers {
+  display: grid;
+  gap: 12px;
+}
+
+.app--manager .people-page--drivers .drivers-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.people-page--drivers .dashboard-kpi-card--purple .dashboard-kpi-card__icon {
+  color: #5b4bdb;
+  background: #eeeafe;
+}
+
+.people-page--drivers .drivers-kpi-card {
+  min-width: 0;
+}
+
+.drivers-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, calc(75% - 3px)) minmax(300px, calc(25% - 9px));
+  gap: 12px;
+  align-items: start;
+}
+
+.drivers-board-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #d9e2ea;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 35, 45, 0.05);
+}
+
+.drivers-card-header {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #e5ebf0;
+}
+
+.drivers-card-header--compact {
+  min-height: 28px;
+}
+
+.drivers-card-header h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+}
+
+.drivers-register-card {
+  display: grid;
+  gap: 8px;
+}
+
+.drivers-table-controls {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 190px 140px;
+  gap: 10px;
+  align-items: center;
+}
+
+.drivers-search-control,
+.drivers-select-control {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d9e2ea;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.drivers-search-control {
+  padding: 0 12px;
+}
+
+.drivers-search-control svg {
+  width: 15px;
+  height: 15px;
+  color: #475569;
+  flex: 0 0 auto;
+}
+
+.drivers-search-control input,
+.drivers-select-control select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #111827;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.drivers-search-control input {
+  width: 100%;
+}
+
+.drivers-select-control {
+  padding: 0 11px;
+}
+
+.drivers-select-control span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.drivers-select-control select {
+  width: 100%;
+}
+
+.drivers-table-action {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #078f92;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #078f92;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.drivers-table-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.drivers-table-action:hover {
+  border-color: #047779;
+  background: #047779;
+}
+
+.people-page--drivers .drivers-table {
+  display: grid;
+  gap: 0;
+  overflow-x: auto;
+  max-width: 100%;
+  border-top: 1px solid #e5ebf0;
+}
+
+.people-page--drivers .drivers-table__head,
+.people-page--drivers .drivers-table__row {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(220px, 1.45fr)
+    minmax(126px, 0.82fr)
+    104px
+    104px;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 8px;
+  border-bottom: 1px solid #e5ebf0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.people-page--drivers .drivers-table__head {
+  color: #475569;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.people-page--drivers .drivers-table__row {
+  min-height: 52px;
+  color: #111827;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.people-page--drivers .drivers-table__row:hover {
+  background: #fbfdfe;
+  border-color: #e5ebf0;
+  box-shadow: none;
+  transform: none;
+}
+
+.people-page--drivers .drivers-table__cell--name {
+  display: block;
+  font-weight: 850;
+  color: #111827;
+}
+
+.people-page--drivers .drivers-table__cell--name strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.people-page--drivers .drivers-table__cell--status {
+  display: flex;
+  align-items: center;
+}
+
+.people-page--drivers .status-badge {
+  min-width: 60px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.people-page--drivers .drivers-table__actions {
+  display: flex;
+  width: 104px;
+  min-width: 104px;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.people-page--drivers .drivers-table__head > span:last-child {
+  text-align: right;
+}
+
+.app--manager .people-page--drivers .icon-action {
+  width: 30px;
+  height: 30px;
+  border-color: #d9e2ea;
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.app--manager .people-page--drivers .icon-action__svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
+.app--manager .people-page--drivers .icon-action:hover {
+  color: #047779;
+  border-color: rgba(8, 145, 147, 0.35);
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.app--manager .people-page--drivers .icon-action--danger {
+  color: #dc2626;
+}
+
+.app--manager .people-page--drivers .icon-action--danger:hover {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.28);
+}
+
+.drivers-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 6px 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.drivers-table-footer div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drivers-table-footer button,
+.drivers-table-footer strong {
+  min-width: 30px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d9e2ea;
+  border-radius: 6px;
+  color: #334155;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.drivers-table-footer strong {
+  color: #ffffff;
+  border-color: #078f92;
+  background: #078f92;
+}
+
+.drivers-table-footer button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.drivers-insights-column {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.drivers-attention-summary,
+.drivers-signal-list,
+.drivers-access-notes {
+  display: grid;
+  gap: 8px;
+}
+
+.drivers-attention-summary button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #e5ebf0;
+  border-radius: 6px;
+  color: inherit;
+  text-align: left;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.drivers-attention-summary button:hover {
+  border-color: rgba(8, 145, 147, 0.28);
+  background: #fbfdfe;
+}
+
+.drivers-attention-summary span:not(.drivers-insight-icon) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.drivers-attention-summary strong {
+  color: #111827;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.drivers-attention-summary small {
+  min-width: 0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drivers-attention-summary b {
+  min-width: 26px;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: #b91c1c;
+  background: #fee2e2;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.drivers-insight-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.drivers-insight-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.drivers-insight-icon--danger {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.drivers-insight-icon--warning {
+  color: #f97316;
+  background: #ffeadb;
+}
+
+.drivers-insight-icon--info {
+  color: #2563eb;
+  background: #e8f0ff;
+}
+
+.drivers-insight-icon--teal {
+  color: #078f92;
+  background: #e4f5f4;
+}
+
+.drivers-insight-icon--purple {
+  color: #5b4bdb;
+  background: #eeeafe;
+}
+
+.drivers-insight-icon--success {
+  color: #16833d;
+  background: #e6f5e9;
+}
+
+.drivers-signal-list > div {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #e5ebf0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.drivers-signal-list p,
+.drivers-access-notes p {
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.drivers-signal-list strong,
+.drivers-access-notes strong {
+  color: #111827;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.drivers-signal-list small,
+.drivers-access-notes small {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.drivers-signal-list em {
+  color: #334155;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.drivers-signal-list i {
+  grid-column: 2 / 4;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5ebf0;
+}
+
+.drivers-signal-list i b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #078f92;
+}
+
+.drivers-access-notes > div,
+.drivers-access-notes > button {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid #e5ebf0;
+}
+
+.drivers-access-notes > button {
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.drivers-access-notes > button:hover {
+  background: #fbfdfe;
+}
+
+.drivers-access-notes > div:last-child,
+.drivers-access-notes > button:last-child {
+  border-bottom: 0;
+}
+
+.drivers-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px dashed rgba(122, 143, 161, 0.34);
+  border-radius: 6px;
+  color: #475569;
+  background: #f8fbfd;
+}
+
+.drivers-empty-state svg {
+  width: 18px;
+  height: 18px;
+  color: #078f92;
+  flex: 0 0 auto;
+}
+
+.drivers-empty-state strong {
+  display: block;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.drivers-empty-state span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+@media (max-width: 1360px) {
+  .app--manager .people-page--drivers .drivers-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drivers-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .drivers-insights-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drivers-notes-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .app--manager .people-page--drivers .drivers-kpi-grid,
+  .drivers-insights-column {
+    grid-template-columns: 1fr;
+  }
+
+  .drivers-table-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .drivers-select-control {
+    justify-content: space-between;
+  }
+
+  .drivers-notes-card {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .drivers-board-card {
+    padding: 10px;
+  }
+
+  .drivers-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .drivers-table-action {
+    width: 100%;
+  }
+
+  .people-page--drivers .drivers-table {
+    border-top: 0;
+    overflow-x: visible;
+  }
+
+  .people-page--drivers .drivers-table__head {
+    display: none;
+  }
+
+  .people-page--drivers .drivers-table__row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    min-height: 0;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid #e5ebf0;
+    border-radius: 6px;
+  }
+
+  .people-page--drivers .drivers-table__row > span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+  }
+
+  .people-page--drivers .drivers-table__row > span::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .people-page--drivers .drivers-table__row > .table__actions {
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .people-page--drivers .drivers-table__row > .table__actions::before {
+    content: none;
+  }
+
+  .drivers-table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .drivers-attention-summary button,
+  .drivers-signal-list > div {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+  }
+}

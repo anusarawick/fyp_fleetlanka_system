@@ -1,5 +1,27 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, CalendarClock, CheckCircle2, ClipboardList, Clock, Eye, Gauge, MapPin, Pencil, Route, Trash2, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  Car,
+  CheckCircle2,
+  ClipboardList,
+  Clock,
+  Eye,
+  FileText,
+  Home,
+  MapPin,
+  Pencil,
+  Search,
+  Plus,
+  Route,
+  Trash2,
+  Truck,
+  UserRound,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import MapView from "../components/MapView";
 import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
@@ -64,17 +86,18 @@ type TripsProps = {
   onDeleteTrip: (tripId: string) => Promise<void>;
 };
 
-type TripsTab = "overview" | "workflow" | "history" | "places";
+type TripsTab = "workflow" | "history" | "places";
 type LiveTripFilter = "all" | "live" | "stale";
+type TripStatusFilter = "all" | "assigned" | "in_progress" | "delayed";
 
-type TripsIconName = "total" | "active" | "distance" | "duration";
+type TripsIconName = "assigned" | "active" | "completed" | "vehicles";
 
 function TripsIcon({ name }: { name: TripsIconName }) {
   const icons: Record<TripsIconName, LucideIcon> = {
-    total: Route,
-    active: Activity,
-    distance: Gauge,
-    duration: Clock,
+    assigned: Route,
+    active: Truck,
+    completed: CheckCircle2,
+    vehicles: Car,
   };
   const Icon = icons[name];
   return <Icon aria-hidden="true" />;
@@ -117,6 +140,35 @@ function deriveTripStatus(trip: Trip) {
   return "assigned";
 }
 
+function isTripDelayedStart(trip: Trip, referenceTime = Date.now()) {
+  const status = deriveTripStatus(trip);
+  if (status !== "assigned" || !trip.scheduled_start) return false;
+  const scheduledAt = new Date(trip.scheduled_start).getTime();
+  return Number.isFinite(scheduledAt) && scheduledAt < referenceTime;
+}
+
+function formatRouteLabel(trip: Trip) {
+  const origin = trip.origin_label || "Origin";
+  const destination = trip.destination_label || "Destination";
+  return `${origin} -> ${destination}`;
+}
+
+function tripStatusLabel(status: string) {
+  if (status === "in_progress") return "In Progress";
+  if (status === "assigned") return "Assigned";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "completed") return "Completed";
+  return status.replace(/_/g, " ");
+}
+
+function tripStatusClass(status: string) {
+  if (status === "completed") return "status-badge--success";
+  if (status === "in_progress") return "status-badge--warning";
+  if (status === "assigned") return "status-badge--info";
+  if (status === "cancelled") return "status-badge--danger";
+  return "status-badge--warning";
+}
+
 function formatPlaceDisplay(place?: SavedPlace | null) {
   if (!place) return "";
   const name = place.name?.trim();
@@ -131,10 +183,12 @@ function formatCoordinates(lat: number, lon: number) {
 
 export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading, onCreateTripAssignment, onUpdateTripAssignment, onDeleteTrip }: TripsProps) {
   const { token, setError } = useAuth();
-  const [activeTab, setActiveTab] = useState<TripsTab>("overview");
+  const [activeTab, setActiveTab] = useState<TripsTab>("workflow");
   const [liveTripFilter, setLiveTripFilter] = useState<LiveTripFilter>("all");
   const [search, setSearch] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState("");
+  const [workflowStatusFilter, setWorkflowStatusFilter] = useState<TripStatusFilter>("all");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | "completed" | "cancelled">("all");
   const [workflowRowsPerPage, setWorkflowRowsPerPage] = useState(10);
   const [historyRowsPerPage, setHistoryRowsPerPage] = useState(10);
   const [workflowPage, setWorkflowPage] = useState(1);
@@ -211,26 +265,23 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
     [liveTrips]
   );
 
-  const totalDistance = trips.reduce((sum, trip) => sum + (trip.distance_km || 0), 0);
   const completedTrips = trips.filter((trip) => deriveTripStatus(trip) === "completed");
   const activeTrips = trips.filter((trip) => deriveTripStatus(trip) === "in_progress");
   const assignedTrips = trips.filter((trip) => deriveTripStatus(trip) === "assigned");
   const liveTrackedTrips = liveTrips.filter((trip) => !trip.stale);
   const staleTrackedTrips = liveTrips.filter((trip) => trip.stale);
+  const liveVehicleCount = new Set(liveTrips.map((trip) => trip.vehicle_id).filter(Boolean)).size;
+  const now = Date.now();
+  const delayedTrips = trips.filter((trip) => isTripDelayedStart(trip, now));
+  const latestLiveUpdate = liveTrips
+    .map((trip) => new Date(trip.recorded_at).getTime())
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => b - a)[0];
   const filteredLiveTrips = useMemo(() => {
     if (liveTripFilter === "live") return liveTrips.filter((trip) => !trip.stale);
     if (liveTripFilter === "stale") return liveTrips.filter((trip) => trip.stale);
     return liveTrips;
   }, [liveTripFilter, liveTrips]);
-  const avgDuration =
-    completedTrips.length > 0
-      ? completedTrips.reduce((sum, trip) => sum + (trip.duration_min || 0), 0) / completedTrips.length
-      : 0;
-  const avgSpeed =
-    completedTrips.length > 0
-      ? completedTrips.reduce((sum, trip) => sum + (trip.avg_speed_kmh || 0), 0) / completedTrips.length
-      : 0;
-  const totalIdleMinutes = completedTrips.reduce((sum, trip) => sum + (trip.idle_min || 0), 0);
   const todayKey = new Date().toISOString().slice(0, 10);
   const todayTrips = trips.filter((trip) => {
     const tripDate = trip.scheduled_start || trip.start_time || trip.end_time;
@@ -246,12 +297,8 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         new Date(b.scheduled_start || 0).getTime()
     )
     .slice(0, 5);
-  const recentCompletions = [...completedTrips]
-    .sort((a, b) => new Date(b.end_time || 0).getTime() - new Date(a.end_time || 0).getTime())
-    .slice(0, 5);
-  const placesMissingCoordinates = savedPlaces.filter(
-    (place) => Number.isNaN(Number(place.lat)) || Number.isNaN(Number(place.lon))
-  );
+  const nextAssignedTrip = assignmentQueue[0] || null;
+  const savedPlacePreview = savedPlaces.slice(0, 4);
 
   const filteredTrips = useMemo(() => {
     return trips
@@ -279,6 +326,7 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           trip.avg_speed_kmh ? String(trip.avg_speed_kmh) : "",
           trip.idle_min ? String(trip.idle_min) : "",
           status,
+          isTripDelayedStart(trip, now) ? "delayed start" : "",
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
@@ -288,22 +336,29 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
           new Date(b.end_time || b.start_time || b.scheduled_start || 0).getTime() -
           new Date(a.end_time || a.start_time || a.scheduled_start || 0).getTime()
       );
-  }, [trips, vehicleFilter, search, vehicleLabelMap, driverLabelMap]);
+  }, [trips, vehicleFilter, search, vehicleLabelMap, driverLabelMap, now]);
 
   const workflowTrips = useMemo(
     () => filteredTrips.filter((trip) => {
       const status = deriveTripStatus(trip);
-      return status === "assigned" || status === "in_progress";
+      const inWorkflow = status === "assigned" || status === "in_progress";
+      if (!inWorkflow) return false;
+      if (workflowStatusFilter === "all") return true;
+      if (workflowStatusFilter === "delayed") return isTripDelayedStart(trip, now);
+      return status === workflowStatusFilter;
     }),
-    [filteredTrips]
+    [filteredTrips, workflowStatusFilter, now]
   );
 
   const historyTrips = useMemo(
     () => filteredTrips.filter((trip) => {
       const status = deriveTripStatus(trip);
-      return status === "completed" || status === "cancelled";
+      const isHistory = status === "completed" || status === "cancelled";
+      if (!isHistory) return false;
+      if (historyStatusFilter !== "all" && status !== historyStatusFilter) return false;
+      return true;
     }),
-    [filteredTrips]
+    [filteredTrips, historyStatusFilter]
   );
 
   const workflowTotalPages = Math.max(1, Math.ceil(workflowTrips.length / workflowRowsPerPage));
@@ -344,8 +399,11 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
 
   useEffect(() => {
     setWorkflowPage(1);
+  }, [search, vehicleFilter, workflowStatusFilter, workflowRowsPerPage, trips.length]);
+
+  useEffect(() => {
     setHistoryPage(1);
-  }, [search, vehicleFilter, workflowRowsPerPage, historyRowsPerPage, trips.length]);
+  }, [search, vehicleFilter, historyStatusFilter, historyRowsPerPage, trips.length]);
 
   useEffect(() => {
     setPlacePage(1);
@@ -619,76 +677,62 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
   return (
     <section className="section">
       <section className="admin-page trips-page">
-      <div className="stats stats--four trips-stats admin-stats">
-        <div className="stat-card stat-card--blue">
-          <div className="stat-icon"><TripsIcon name="total" /></div>
-          <div className="stat-value">{trips.length}</div>
-          <div className="stat-label">Total Trips</div>
-          <div className="stat-sub">All scheduled and historical journeys</div>
-        </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-icon"><TripsIcon name="active" /></div>
-          <div className="stat-value">{activeTrips.length}</div>
-          <div className="stat-label">Active Now</div>
-          <div className="stat-sub">Ongoing operational trips</div>
-        </div>
-        <div className="stat-card stat-card--purple">
-          <div className="stat-icon"><TripsIcon name="distance" /></div>
-          <div className="stat-value">{totalDistance.toFixed(0)} km</div>
-          <div className="stat-label">Distance Logged</div>
-          <div className="stat-sub">Completed trip distance</div>
-        </div>
-        <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><TripsIcon name="duration" /></div>
-          <div className="stat-value">{avgDuration > 0 ? formatDuration(Math.round(avgDuration)) : "--"}</div>
-          <div className="stat-label">Avg Completed Duration</div>
-          <div className="stat-sub">Average trip cycle time</div>
-        </div>
+      <div className="dashboard-kpis trips-kpi-grid" aria-label="Trip dispatch summary">
+        <article className="dashboard-kpi-card dashboard-kpi-card--teal trips-kpi-card">
+          <span className="dashboard-kpi-card__icon trips-kpi-card__icon"><TripsIcon name="assigned" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Assigned Trips</span>
+            <strong>{assignedTrips.length}</strong>
+            <small className="dashboard-trend">{delayedTrips.length > 0 ? `${delayedTrips.length} delayed` : "Ready for drivers"}</small>
+          </div>
+        </article>
+        <article className="dashboard-kpi-card dashboard-kpi-card--blue trips-kpi-card">
+          <span className="dashboard-kpi-card__icon trips-kpi-card__icon"><TripsIcon name="active" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">In Progress</span>
+            <strong>{activeTrips.length}</strong>
+            <small className="dashboard-trend">{staleTrackedTrips.length > 0 ? `${staleTrackedTrips.length} stale GPS` : "Live workflow"}</small>
+          </div>
+        </article>
+        <article className="dashboard-kpi-card dashboard-kpi-card--green trips-kpi-card">
+          <span className="dashboard-kpi-card__icon trips-kpi-card__icon"><TripsIcon name="completed" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Completed Today</span>
+            <strong>{todayCompletedTrips.length}</strong>
+            <small className="dashboard-trend">{completedTrips.length} completed total</small>
+          </div>
+        </article>
+        <article className="dashboard-kpi-card dashboard-kpi-card--orange trips-kpi-card">
+          <span className="dashboard-kpi-card__icon trips-kpi-card__icon"><TripsIcon name="vehicles" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Live Vehicles</span>
+            <strong>{liveVehicleCount}</strong>
+            <small className="dashboard-trend">{liveTrips.length} tracked trips</small>
+          </div>
+        </article>
       </div>
 
-      <nav className="admin-tabs" aria-label="Trip sections">
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("overview")}
-        >
-          Overview
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "workflow" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("workflow")}
-        >
-          Workflow
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "history" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          History
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "places" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("places")}
-        >
-          Saved Places
-        </button>
-      </nav>
-
-      {activeTab === "overview" && (
-      <div className="trips-workspace">
-        <section className="card trips-panel trips-panel--monitoring">
-          <div className="trips-panel__header">
+      <div className="trips-dispatch-layout">
+        <section className="trips-board-card trips-map-card">
+          <div className="trips-card-header">
             <div>
-              <span className="trips-panel__eyebrow">Active monitoring</span>
-              <h3>Live Dispatch Board</h3>
-              <p>Track vehicles that are currently on the road and review any stale location updates.</p>
+              <h3>Live Dispatch Map</h3>
+              <p>{latestLiveUpdate ? `Updated ${formatCompactDateTime(new Date(latestLiveUpdate).toISOString())}` : "Waiting for live tracking updates"}</p>
             </div>
-            <span className="pill">{filteredLiveTrips.length} shown</span>
+            <div className="trips-map-status">
+              <span className="trips-status-dot trips-status-dot--live" />
+              Live
+            </div>
           </div>
-          <div className="dashboard-map__filters trips-filter-row">
+          <div className="trips-map-panel">
+            <MapView trips={filteredLiveTrips} />
+            <div className="trips-map-legend">
+              <span><i className="trips-status-dot trips-status-dot--live" /> Live ({liveTrackedTrips.length})</span>
+              <span><i className="trips-status-dot trips-status-dot--route" /> In Progress ({activeTrips.length})</span>
+              <span><i className="trips-status-dot trips-status-dot--stale" /> Stale ({staleTrackedTrips.length})</span>
+            </div>
+          </div>
+          <div className="trips-filter-row">
             <button className={`filter-chip ${liveTripFilter === "all" ? "filter-chip--active" : ""}`} type="button" onClick={() => setLiveTripFilter("all")}>
               All ({liveTrips.length})
             </button>
@@ -699,264 +743,228 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
               Stale ({staleTrackedTrips.length})
             </button>
           </div>
-          <div className="trips-map-panel">
-            <MapView trips={filteredLiveTrips} />
-          </div>
-          {filteredLiveTrips.length === 0 ? (
-            <div className="trips-empty-state">
-              <Activity aria-hidden="true" />
-              <div>
-                <strong>No live trips for this filter</strong>
-                <span>Active driver tracking will appear here when a trip starts.</span>
-              </div>
-            </div>
-          ) : (
-            <div className="trips-live-list">
-              {filteredLiveTrips.map((trip) => (
-                <button key={trip.trip_id} className="trips-live-item" type="button" onClick={() => setSelectedTrip(trips.find((row) => row.id === trip.trip_id) || null)}>
-                  <div>
-                    <strong>{trip.vehicle_plate_no || vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</strong>
-                    <span>{trip.driver_name || "Assigned driver"} • Updated {formatCompactDateTime(trip.recorded_at)}</span>
-                  </div>
-                  <span className={`pill ${trip.stale ? "pill--warning" : "pill--success"}`}>{trip.stale ? "Stale" : "Live"}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </section>
 
-        <div className="trips-side-stack">
-          <section className="card trips-panel">
-            <div className="trips-panel__header trips-panel__header--compact">
-              <div>
-                <span className="trips-panel__eyebrow">Dispatch today</span>
-                <h3>Work Status</h3>
+        <aside className="trips-side-stack" aria-label="Dispatch controls">
+          <button className="trips-assign-button" type="button" onClick={openCreateModal}>
+            <Plus aria-hidden="true" />
+            Assign Trip
+          </button>
+
+          <section className="trips-board-card trips-quick-card">
+            <div className="trips-card-header trips-card-header--compact">
+              <h3>Quick Trip Setup</h3>
+            </div>
+            {nextAssignedTrip ? (
+              <div className="trips-quick-list">
+                <div><Route aria-hidden="true" /><span>Route</span><strong>{formatRouteLabel(nextAssignedTrip)}</strong></div>
+                <div><Truck aria-hidden="true" /><span>Vehicle</span><strong>{vehicleLabelMap[nextAssignedTrip.vehicle_id] || "Vehicle"}</strong></div>
+                <div><UserRound aria-hidden="true" /><span>Driver</span><strong>{driverLabelMap[nextAssignedTrip.driver_id || ""] || "Driver"}</strong></div>
+                <div><Clock aria-hidden="true" /><span>Start Time</span><strong>{formatCompactDateTime(nextAssignedTrip.scheduled_start)}</strong></div>
+                <div><Activity aria-hidden="true" /><span>Est. Distance</span><strong>{nextAssignedTrip.distance_km ? `${nextAssignedTrip.distance_km.toFixed(1)} km` : "--"}</strong></div>
+                <button className="trips-text-action" type="button" onClick={() => openEditModal(nextAssignedTrip)}>Edit Details</button>
               </div>
-            </div>
-            <div className="trips-dispatch-grid">
-              <div><span>Assigned</span><strong>{todayAssignedTrips.length}</strong></div>
-              <div><span>Active</span><strong>{todayActiveTrips.length}</strong></div>
-              <div><span>Completed</span><strong>{todayCompletedTrips.length}</strong></div>
-              <div><span>Stale GPS</span><strong>{staleTrackedTrips.length}</strong></div>
-            </div>
+            ) : (
+              <div className="trips-empty-state trips-empty-state--compact">
+                <CalendarClock aria-hidden="true" />
+                <div>
+                  <strong>No upcoming assigned trip</strong>
+                  <span>Create an assignment to populate this setup preview.</span>
+                </div>
+              </div>
+            )}
           </section>
 
-          <section className="card trips-panel">
-            <div className="trips-panel__header trips-panel__header--compact">
-              <div>
-                <span className="trips-panel__eyebrow">Trip setup</span>
-                <h3>Dispatch Actions</h3>
+          <section className="trips-board-card trips-saved-preview-card">
+            <div className="trips-card-header trips-card-header--compact trips-card-header--inline">
+              <h3>Saved Places</h3>
+              <button type="button" onClick={() => setActiveTab("places")}>Manage Places</button>
+            </div>
+            {savedPlacePreview.length === 0 ? (
+              <div className="trips-empty-state trips-empty-state--compact">
+                <MapPin aria-hidden="true" />
+                <div>
+                  <strong>No saved places</strong>
+                  <span>Add frequent dispatch points for faster assignments.</span>
+                </div>
               </div>
-            </div>
-            <div className="trips-action-stack">
-              <button className="btn" type="button" onClick={openCreateModal}>Assign Trip</button>
-              <button className="btn btn--secondary" type="button" onClick={() => openPlaceModal("origin")}>Add Place</button>
-              <button className="btn btn--secondary" type="button" onClick={() => setActiveTab("places")}>Manage Places</button>
-            </div>
+            ) : (
+              <div className="trips-place-shortcuts">
+                {savedPlacePreview.map((place, index) => {
+                  const icons = [Home, Building2, Wrench, MapPin];
+                  const PlaceIcon = icons[index] || MapPin;
+                  return (
+                    <button key={place.id} type="button" onClick={() => setSelectedPlace(place)}>
+                      <PlaceIcon aria-hidden="true" />
+                      <span>{place.name}</span>
+                      <small>{place.label}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
-          <section className="card trips-panel">
-            <div className="trips-panel__header trips-panel__header--compact">
-              <div>
-                <span className="trips-panel__eyebrow">Location library</span>
-                <h3>Saved Places</h3>
-              </div>
+          <section className="trips-board-card trips-overview-card">
+            <div className="trips-card-header trips-card-header--compact">
+              <h3>Today's Dispatch Overview</h3>
             </div>
-            <div className="trips-dispatch-grid trips-dispatch-grid--places">
-              <div><span>Total Places</span><strong>{savedPlaces.length}</strong></div>
-              <div><span>Missing Coordinates</span><strong>{placesMissingCoordinates.length}</strong></div>
+            <div className="trips-overview-grid">
+              <div><CalendarClock aria-hidden="true" /><span>Awaiting Assignment</span><strong>{todayAssignedTrips.length}</strong></div>
+              <div><AlertTriangle aria-hidden="true" /><span>Delayed Starts</span><strong>{delayedTrips.length}</strong></div>
+              <div><Truck aria-hidden="true" /><span>Active Deliveries</span><strong>{todayActiveTrips.length}</strong></div>
+              <div><MapPin aria-hidden="true" /><span>Saved Places</span><strong>{savedPlaces.length}</strong></div>
             </div>
           </section>
-        </div>
-
-        <section className="card trips-panel">
-          <div className="trips-panel__header">
-            <div>
-              <span className="trips-panel__eyebrow">Assignment queue</span>
-              <h3>Next Trips</h3>
-              <p>Upcoming assignments waiting for drivers to begin.</p>
-            </div>
-            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("workflow")}>View Queue</button>
-          </div>
-          {assignmentQueue.length === 0 ? (
-            <div className="trips-empty-state"><CalendarClock aria-hidden="true" /><div><strong>No queued assignments</strong><span>New trip assignments will appear here.</span></div></div>
-          ) : (
-            <div className="trips-card-list">
-              {assignmentQueue.map((trip) => (
-                <button key={trip.id} className="trips-card-row" type="button" onClick={() => setSelectedTrip(trip)}>
-                  <div>
-                    <strong>{trip.trip_title || "Trip Assignment"}</strong>
-                    <span>{vehicleLabelMap[trip.vehicle_id] || "Vehicle"} • {driverLabelMap[trip.driver_id || ""] || "Driver"}</span>
-                  </div>
-                  <span>{trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "Not scheduled"}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="card trips-panel">
-          <div className="trips-panel__header">
-            <div>
-              <span className="trips-panel__eyebrow">Recent completions</span>
-              <h3>Completed Work</h3>
-              <p>Latest trips closed by drivers with distance and duration.</p>
-            </div>
-            <button className="btn btn--secondary btn--compact" type="button" onClick={() => setActiveTab("history")}>View History</button>
-          </div>
-          {recentCompletions.length === 0 ? (
-            <div className="trips-empty-state"><CheckCircle2 aria-hidden="true" /><div><strong>No completed trips yet</strong><span>Completed journeys will be listed here.</span></div></div>
-          ) : (
-            <div className="trips-card-list">
-              {recentCompletions.map((trip) => (
-                <button key={trip.id} className="trips-card-row" type="button" onClick={() => setSelectedTrip(trip)}>
-                  <div>
-                    <strong>{trip.trip_title || "Completed Trip"}</strong>
-                    <span>{vehicleLabelMap[trip.vehicle_id] || "Vehicle"} • {driverLabelMap[trip.driver_id || ""] || "Driver"}</span>
-                  </div>
-                  <span>{trip.distance_km ? `${trip.distance_km.toFixed(1)} km` : "--"} • {formatDuration(trip.duration_min)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+        </aside>
       </div>
-      )}
+
+      <section className="trips-board-card trips-table-card">
+      <nav className="trips-table-tabs" aria-label="Trip sections">
+        <button
+          type="button"
+          className={`trips-table-tab ${activeTab === "workflow" ? "trips-table-tab--active" : ""}`}
+          onClick={() => setActiveTab("workflow")}
+        >
+          Workflow Queue
+        </button>
+        <button
+          type="button"
+          className={`trips-table-tab ${activeTab === "history" ? "trips-table-tab--active" : ""}`}
+          onClick={() => setActiveTab("history")}
+        >
+          Trip History
+        </button>
+        <button
+          type="button"
+          className={`trips-table-tab ${activeTab === "places" ? "trips-table-tab--active" : ""}`}
+          onClick={() => setActiveTab("places")}
+        >
+          Saved Places
+        </button>
+      </nav>
 
       {activeTab === "workflow" && (
-      <section className="card admin-table-section">
-        <div className="card__header">
-          <div>
-            <h3>Assigned and Ongoing Trips</h3>
-            <p className="muted admin-card__subtitle">Current workflow queue for active and not-yet-started assignments.</p>
-          </div>
+      <section className="trips-table-pane">
+        <div className="trips-table-controls trips-table-controls--workflow">
+          <label className="trips-search-control">
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Search trips, vehicles, drivers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <label className="trips-select-control">
+            <span>Status</span>
+            <select value={workflowStatusFilter} onChange={(e) => setWorkflowStatusFilter(e.target.value as TripStatusFilter)}>
+              <option value="all">All Statuses</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="delayed">Delayed</option>
+            </select>
+          </label>
+          <label className="trips-select-control">
+            <span>Vehicle</span>
+            <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
+              <option value="">All Vehicles</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>{vehicle.plate_no}</option>
+              ))}
+            </select>
+          </label>
+          <label className="trips-select-control trips-select-control--rows">
+            <span>Rows</span>
+            <select value={workflowRowsPerPage} onChange={(e) => setWorkflowRowsPerPage(Number(e.target.value))}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </label>
         </div>
         {workflowTrips.length === 0 ? (
           <p className="empty">No assigned or ongoing trips match the current filters.</p>
         ) : (
           <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
-                  <input
-                    type="search"
-                    placeholder="Vehicle, driver, time..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </label>
-                <label className="table-controls__label">
-                  Vehicle
-                  <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
-                    <option value="">All</option>
-                    {vehicles.map((vehicle) => (
-                      <option key={vehicle.id} value={vehicle.id}>
-                        {vehicle.plate_no}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="table-controls__label">
-                  Rows
-                  <select value={workflowRowsPerPage} onChange={(e) => setWorkflowRowsPerPage(Number(e.target.value))}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentWorkflowPage} of {workflowTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setWorkflowPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentWorkflowPage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setWorkflowPage((prev) => Math.min(workflowTotalPages, prev + 1))}
-                  disabled={currentWorkflowPage === workflowTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
             <div className="table trips-table" style={{ ["--table-columns" as any]: 7 }}>
               <div className="table__head trips-table__head">
-                <span>Started</span>
-                <span>Ended</span>
+                <span>Trip</span>
                 <span>Vehicle</span>
                 <span>Driver</span>
-                <span>Distance</span>
+                <span>Route</span>
+                <span>Scheduled Start</span>
                 <span>Status</span>
                 <span>Actions</span>
               </div>
               {paginatedWorkflowTrips.map((trip) => {
                 const liveTrip = liveTripMap[trip.id];
-                const status = deriveTripStatus(trip);
-                const statusLabel =
-                  status === "in_progress"
-                    ? liveTrip?.stale
-                      ? "In Progress • Stale"
-                      : "In Progress"
-                    : status === "assigned"
-                      ? "Assigned"
-                      : status === "cancelled"
-                        ? "Cancelled"
-                        : "Completed";
-                const statusClass =
-                  status === "in_progress"
-                    ? liveTrip?.stale
-                      ? "pill--warning"
-                      : "pill--success"
-                    : status === "assigned"
-                      ? "pill--scheduled"
-                      : status === "cancelled"
-                        ? "pill--danger"
-                        : "pill--info";
-
+                const baseStatus = deriveTripStatus(trip);
+                const delayedStart = isTripDelayedStart(trip, now);
+                const trackingWarning = baseStatus === "in_progress" && liveTrip?.stale;
                 return (
                   <div className="table__row trips-table__row" key={trip.id}>
-                    <span data-label="Started">{trip.start_time ? formatCompactDateTime(trip.start_time) : trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "--"}</span>
-                    <span data-label="Ended">{trip.end_time ? formatCompactDateTime(trip.end_time) : "--"}</span>
+                    <span data-label="Trip"><strong>{trip.trip_title || trip.id.slice(0, 8)}</strong></span>
                     <span data-label="Vehicle">{vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</span>
                     <span data-label="Driver">{driverLabelMap[trip.driver_id || ""] || "--"}</span>
-                    <span data-label="Distance">{trip.distance_km ? `${trip.distance_km.toFixed(1)} km` : "--"}</span>
-                    <span data-label="Status">
-                      <span className={`pill ${statusClass}`}>{statusLabel}</span>
+                    <span data-label="Route">{formatRouteLabel(trip)}</span>
+                    <span data-label="Scheduled Start">{trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "--"}</span>
+                    <span className="trips-status-cell" data-label="Status">
+                      <span className={`status-badge ${tripStatusClass(baseStatus)}`}>{tripStatusLabel(baseStatus)}</span>
+                      <span className={`trips-status-note ${delayedStart || trackingWarning ? "" : "trips-status-note--empty"}`}>
+                        {delayedStart ? "Delayed start" : trackingWarning ? "Stale GPS" : ""}
+                      </span>
                     </span>
-                    <span className="table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedTrip(trip)}
-                        aria-label="View trip"
-                        title="View trip"
-                      >
-                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                      </button>
-                      {(status === "assigned" || status === "cancelled") && (
+                      <span className="table__actions trips-table__actions" data-label="Actions">
+                      {(baseStatus === "assigned" || baseStatus === "cancelled") ? (
                         <>
-                          <button className="icon-action" type="button" onClick={() => openEditModal(trip)} aria-label="Edit trip" title="Edit trip">
-                            <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                          </button>
-                          <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteTarget(trip)} aria-label="Delete trip" title="Delete trip">
-                            <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
-                          </button>
+                          <span className="trips-action-slot">
+                            <button
+                              className="icon-action"
+                              type="button"
+                              onClick={() => setSelectedTrip(trip)}
+                              aria-label="View trip"
+                              title="View trip"
+                            >
+                              <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+                            </button>
+                          </span>
+                          <span className="trips-action-slot">
+                            <button className="icon-action" type="button" onClick={() => openEditModal(trip)} aria-label="Edit trip" title="Edit trip">
+                              <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
+                            </button>
+                          </span>
+                          <span className="trips-action-slot">
+                            <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteTarget(trip)} aria-label="Delete trip" title="Delete trip">
+                              <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
+                            </button>
+                          </span>
                         </>
+                      ) : (
+                        <span className="trips-action-slot">
+                          <button
+                            className="icon-action"
+                            type="button"
+                            onClick={() => setSelectedTrip(trip)}
+                            aria-label="View trip"
+                            title="View trip"
+                          >
+                            <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+                          </button>
+                        </span>
                       )}
-                    </span>
+                      </span>
                   </div>
                 );
               })}
+            </div>
+            <div className="trips-table-footer">
+              <span>Showing {paginatedWorkflowTrips.length} of {workflowTrips.length} entries</span>
+              <div>
+                <button type="button" onClick={() => setWorkflowPage((prev) => Math.max(1, prev - 1))} disabled={currentWorkflowPage === 1}>Prev</button>
+                <strong>{currentWorkflowPage}</strong>
+                <button type="button" onClick={() => setWorkflowPage((prev) => Math.min(workflowTotalPages, prev + 1))} disabled={currentWorkflowPage === workflowTotalPages}>Next</button>
+              </div>
             </div>
           </>
         )}
@@ -964,90 +972,95 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
       )}
 
       {activeTab === "history" && (
-      <section className="card admin-table-section">
-        <div className="card__header">
-          <div>
-            <h3>Trip History</h3>
-            <p className="muted admin-card__subtitle">Completed and cancelled trips that match the current search and filters.</p>
-          </div>
+      <section className="trips-table-pane">
+        <div className="trips-table-controls trips-table-controls--history">
+          <label className="trips-search-control">
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Search trip history..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <label className="trips-select-control">
+            <span>Status</span>
+            <select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value as any)}>
+              <option value="all">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <label className="trips-select-control">
+            <span>Vehicle</span>
+            <select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)}>
+              <option value="">All Vehicles</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>{vehicle.plate_no}</option>
+              ))}
+            </select>
+          </label>
+          <label className="trips-select-control trips-select-control--rows">
+            <span>Rows</span>
+            <select value={historyRowsPerPage} onChange={(e) => setHistoryRowsPerPage(Number(e.target.value))}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </label>
         </div>
         {historyTrips.length === 0 ? (
           <p className="empty">No completed trip history matches the current filters.</p>
         ) : (
           <>
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label">
-                  Rows
-                  <select value={historyRowsPerPage} onChange={(e) => setHistoryRowsPerPage(Number(e.target.value))}>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </label>
-              </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentHistoryPage} of {historyTotalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentHistoryPage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setHistoryPage((prev) => Math.min(historyTotalPages, prev + 1))}
-                  disabled={currentHistoryPage === historyTotalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
             <div className="table trips-table" style={{ ["--table-columns" as any]: 7 }}>
               <div className="table__head trips-table__head">
-                <span>Started</span>
-                <span>Ended</span>
+                <span>Trip</span>
                 <span>Vehicle</span>
                 <span>Driver</span>
-                <span>Distance</span>
+                <span>Route</span>
+                <span>Scheduled Start</span>
                 <span>Status</span>
                 <span>Actions</span>
               </div>
               {paginatedHistoryTrips.map((trip) => {
                 const status = deriveTripStatus(trip);
-                const statusClass = status === "cancelled" ? "pill--danger" : "pill--info";
-                const statusLabel = status === "cancelled" ? "Cancelled" : "Completed";
 
                 return (
                   <div className="table__row trips-table__row" key={trip.id}>
-                    <span data-label="Started">{trip.start_time ? formatCompactDateTime(trip.start_time) : trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "--"}</span>
-                    <span data-label="Ended">{trip.end_time ? formatCompactDateTime(trip.end_time) : "--"}</span>
+                    <span data-label="Trip"><strong>{trip.trip_title || trip.id.slice(0, 8)}</strong></span>
                     <span data-label="Vehicle">{vehicleLabelMap[trip.vehicle_id] || "Vehicle"}</span>
                     <span data-label="Driver">{driverLabelMap[trip.driver_id || ""] || "--"}</span>
-                    <span data-label="Distance">{trip.distance_km ? `${trip.distance_km.toFixed(1)} km` : "--"}</span>
-                    <span data-label="Status">
-                      <span className={`pill ${statusClass}`}>{statusLabel}</span>
+                    <span data-label="Route">{formatRouteLabel(trip)}</span>
+                    <span data-label="Scheduled Start">{trip.scheduled_start ? formatCompactDateTime(trip.scheduled_start) : "--"}</span>
+                    <span className="trips-status-cell" data-label="Status">
+                      <span className={`status-badge ${tripStatusClass(status)}`}>{tripStatusLabel(status)}</span>
+                      <span className="trips-status-note trips-status-note--empty" />
                     </span>
-                    <span className="table__actions" data-label="Actions">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        onClick={() => setSelectedTrip(trip)}
-                        aria-label="View trip"
-                        title="View trip"
-                      >
-                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                      </button>
+                    <span className="table__actions trips-table__actions" data-label="Actions">
+                      <span className="trips-action-slot">
+                        <button
+                          className="icon-action"
+                          type="button"
+                          onClick={() => setSelectedTrip(trip)}
+                          aria-label="View trip"
+                          title="View trip"
+                        >
+                          <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+                        </button>
+                      </span>
                     </span>
                   </div>
                 );
               })}
+            </div>
+            <div className="trips-table-footer">
+              <span>Showing {paginatedHistoryTrips.length} of {historyTrips.length} entries</span>
+              <div>
+                <button type="button" onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))} disabled={currentHistoryPage === 1}>Prev</button>
+                <strong>{currentHistoryPage}</strong>
+                <button type="button" onClick={() => setHistoryPage((prev) => Math.min(historyTotalPages, prev + 1))} disabled={currentHistoryPage === historyTotalPages}>Next</button>
+              </div>
             </div>
           </>
         )}
@@ -1055,95 +1068,83 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
       )}
 
       {activeTab === "places" && (
-      <section className="card admin-table-section admin-panel">
-        <div className="card__header">
-          <div>
-            <h3>Saved Places</h3>
-            <p className="muted admin-card__subtitle">Manage the shared saved place library used by trip assignments.</p>
-          </div>
-          <div className="button-row">
-            <button className="btn" type="button" onClick={openStandalonePlaceModal}>
-              Add Place
-            </button>
-          </div>
-        </div>
-        <div className="table-controls">
-          <div className="table-controls__filters">
-            <label className="table-controls__label table-controls__label--search">
-              Search
-              <input
-                type="search"
-                placeholder="Name, address, contact..."
-                value={placeSearch}
-                onChange={(e) => setPlaceSearch(e.target.value)}
-              />
-            </label>
-            <label className="table-controls__label">
-              Rows
-              <select value={placeRowsPerPage} onChange={(e) => setPlaceRowsPerPage(Number(e.target.value))}>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-          </div>
-          <div className="table-pagination">
-            <span className="table-pagination__meta">
-              Page {currentPlacePage} of {placeTotalPages}
-            </span>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPlacePage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPlacePage === 1}
-            >
-              Prev
-            </button>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPlacePage((prev) => Math.min(placeTotalPages, prev + 1))}
-              disabled={currentPlacePage === placeTotalPages}
-            >
-              Next
-            </button>
-          </div>
+      <section className="trips-table-pane">
+        <div className="trips-table-controls trips-table-controls--places">
+          <label className="trips-search-control">
+            <Search aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Search places, labels, contact..."
+              value={placeSearch}
+              onChange={(e) => setPlaceSearch(e.target.value)}
+            />
+          </label>
+          <label className="trips-select-control trips-select-control--rows">
+            <span>Rows</span>
+            <select value={placeRowsPerPage} onChange={(e) => setPlaceRowsPerPage(Number(e.target.value))}>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </label>
+          <button className="trips-table-action" type="button" onClick={openStandalonePlaceModal}>
+            <Plus aria-hidden="true" />
+            Add Place
+          </button>
         </div>
 
         {savedPlaces.length === 0 ? (
           <p className="empty">No saved places yet. Add your frequent locations first.</p>
         ) : (
-          <div className="table places-table" style={{ ["--table-columns" as any]: 5 }}>
-            <div className="table__head places-table__head">
-              <span>Place</span>
-              <span>Address</span>
-              <span>Contact</span>
-              <span>Coordinates</span>
-              <span>Actions</span>
-            </div>
-            {paginatedPlaces.map((place) => (
-              <div className="table__row places-table__row" key={place.id}>
-                <span data-label="Place">{place.name}</span>
-                <span data-label="Address">{place.label}</span>
-                <span data-label="Contact">{place.contact_phone || place.contact_name || "--"}</span>
-                <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
-                <span className="table__actions places-table__actions" data-label="Actions">
-                  <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
-                    <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                  </button>
-                  <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
-                    <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                  </button>
-                  <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
-                    <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
-                  </button>
-                </span>
+          <>
+            <div className="table places-table" style={{ ["--table-columns" as any]: 5 }}>
+              <div className="table__head places-table__head">
+                <span>Name</span>
+                <span>Label</span>
+                <span>Contact</span>
+                <span>Coordinates</span>
+                <span>Actions</span>
               </div>
-            ))}
-          </div>
+              {paginatedPlaces.map((place) => (
+                <div className="table__row places-table__row" key={place.id}>
+                  <span data-label="Name"><strong>{place.name}</strong></span>
+                  <span data-label="Label">{place.label}</span>
+                  <span data-label="Contact">{place.contact_phone || place.contact_name || "--"}</span>
+                  <span data-label="Coordinates">{formatCoordinates(Number(place.lat), Number(place.lon))}</span>
+                  <span className="table__actions places-table__actions" data-label="Actions">
+                    <span className="trips-action-slot">
+                      <button className="icon-action" type="button" onClick={() => setSelectedPlace(place)} aria-label="View place" title="View place">
+                        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+                      </button>
+                    </span>
+                    <span className="trips-action-slot">
+                      <button className="icon-action" type="button" onClick={() => openEditPlaceModal(place)} aria-label="Edit place" title="Edit place">
+                        <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
+                      </button>
+                    </span>
+                    <span className="trips-action-slot">
+                      <button className="icon-action icon-action--danger" type="button" onClick={() => setPlaceDeleteTarget(place)} aria-label="Delete place" title="Delete place">
+                        <Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" />
+                      </button>
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="trips-table-footer">
+              <span>Showing {paginatedPlaces.length} of {filteredPlaces.length} entries</span>
+              <div>
+                <button type="button" onClick={() => setPlacePage((prev) => Math.max(1, prev - 1))} disabled={currentPlacePage === 1}>Prev</button>
+                <strong>{currentPlacePage}</strong>
+                <button type="button" onClick={() => setPlacePage((prev) => Math.min(placeTotalPages, prev + 1))} disabled={currentPlacePage === placeTotalPages}>Next</button>
+              </div>
+            </div>
+          </>
         )}
       </section>
       )}
+
+      </section>
 
       {selectedTrip && (
         <div className="modal-backdrop" role="presentation">

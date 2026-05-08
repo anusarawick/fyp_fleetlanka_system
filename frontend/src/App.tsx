@@ -227,7 +227,7 @@ function ManagerRoutes() {
               topPerformers={data.topPerformers}
               maintenancePredictionMap={data.maintenancePredictionMap}
               liveTrips={data.liveTrips}
-              alerts={data.buildAlerts()}
+              documents={data.documents}
               upcomingDocs={data.upcomingDocs}
               fuelForecasts={data.fuelForecasts}
             />
@@ -348,6 +348,8 @@ function ManagerRoutes() {
             <Topbar title="Drivers" subtitle="Roster readiness and driver access" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Drivers
               drivers={data.drivers}
+              trips={data.trips}
+              driverInsights={data.driverInsights}
               loading={loading}
               driverName={data.driverName}
               setDriverName={data.setDriverName}
