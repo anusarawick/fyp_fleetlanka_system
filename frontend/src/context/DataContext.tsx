@@ -319,6 +319,7 @@ type DataContextType = {
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
+    deleteMaintenancePrediction: (predictionId: string) => Promise<void>;
     buildAlerts: () => Alert[];
 
     // Reset on logout
@@ -715,7 +716,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const maintenancePredictionMap = useMemo(() => {
         const latestByVehicle: Record<string, MaintenancePrediction> = {};
-        for (const prediction of maintenancePredictions) {
+        for (const prediction of [...maintenancePredictions].sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime())) {
             if (!latestByVehicle[prediction.vehicle_id]) {
                 latestByVehicle[prediction.vehicle_id] = prediction;
             }
@@ -1221,13 +1222,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             probability: number;
             threshold_used: number;
             risk_level: "low" | "medium" | "high";
+            saved_prediction?: MaintenancePrediction;
         }>(`/ml/maintenance/by-vehicle/${vehicleId}`, {}, token);
 
-        const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
-        setMaintenancePredictions((prev) => {
-            const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
-            return [...latest, ...rest];
-        });
+        if (result.saved_prediction) {
+            setMaintenancePredictions((prev) =>
+                [result.saved_prediction!, ...prev.filter((item) => item.id !== result.saved_prediction!.id)]
+                    .sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime())
+            );
+        } else {
+            const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
+            setMaintenancePredictions((prev) => {
+                const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
+                return [...latest, ...rest].sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime());
+            });
+        }
 
         if (updateMaintResult) {
             setMaintResult(
@@ -2218,6 +2227,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    async function deleteMaintenancePrediction(predictionId: string) {
+        if (!token) return;
+        setLoading(true);
+        setError(null);
+        try {
+            await apiDelete(`/ml/maintenance/predictions/${predictionId}`, token);
+            setMaintenancePredictions((prev) => prev.filter((prediction) => prediction.id !== predictionId));
+        } catch (err: any) {
+            setError(err.message || "Prediction delete failed");
+            throw err;
+        } finally {
+            setLoading(false);
+        }
+    }
+
     function buildAlerts(): Alert[] {
         const alerts: Alert[] = [];
         const nowDate = new Date();
@@ -2482,6 +2506,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,
+                deleteMaintenancePrediction,
                 buildAlerts,
                 resetData,
             }}

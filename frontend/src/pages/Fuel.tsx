@@ -83,6 +83,8 @@ type FuelSignal = {
   badge: string;
 };
 
+type FuelDateRangeMode = "last7" | "last30" | "custom";
+
 const currency = new Intl.NumberFormat("en-LK", {
   style: "currency",
   currency: "LKR",
@@ -143,6 +145,18 @@ function isSameMonth(dateValue: string, today = new Date()) {
   const date = parseLogDate(dateValue);
   if (!date) return false;
   return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+}
+
+function startOfLocalDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function formatDateInput(timestamp: number) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function daysAgoKey(daysAgo: number) {
@@ -208,6 +222,9 @@ export default function Fuel(props: FuelProps) {
   const [deleteTarget, setDeleteTarget] = useState<FuelLog | null>(null);
   const [fuelSearch, setFuelSearch] = useState("");
   const [fuelVehicleFilter, setFuelVehicleFilter] = useState("all");
+  const [fuelDateRangeMode, setFuelDateRangeMode] = useState<FuelDateRangeMode>("last30");
+  const [fuelCustomDateFrom, setFuelCustomDateFrom] = useState(formatDateInput(startOfLocalDay() - 30 * 24 * 60 * 60 * 1000));
+  const [fuelCustomDateTo, setFuelCustomDateTo] = useState(formatDateInput(startOfLocalDay()));
   const [fuelRowsPerPage, setFuelRowsPerPage] = useState(10);
   const [fuelPage, setFuelPage] = useState(1);
 
@@ -255,11 +272,24 @@ export default function Fuel(props: FuelProps) {
   const monthlySpendDelta = priorMonthCost > 0 ? ((monthlyCost - priorMonthCost) / priorMonthCost) * 100 : 0;
   const monthlyLiterDelta = priorMonthLiters > 0 ? ((monthlyLiters - priorMonthLiters) / priorMonthLiters) * 100 : 0;
 
+  const fuelDateWindow = useMemo(() => {
+    const today = startOfLocalDay();
+    if (fuelDateRangeMode === "last7") return { start: today - 7 * 24 * 60 * 60 * 1000, end: today };
+    if (fuelDateRangeMode === "last30") return { start: today - 30 * 24 * 60 * 60 * 1000, end: today };
+    return {
+      start: fuelCustomDateFrom ? startOfLocalDay(new Date(`${fuelCustomDateFrom}T00:00:00`)) : Number.NEGATIVE_INFINITY,
+      end: fuelCustomDateTo ? startOfLocalDay(new Date(`${fuelCustomDateTo}T00:00:00`)) : Number.POSITIVE_INFINITY,
+    };
+  }, [fuelCustomDateFrom, fuelCustomDateTo, fuelDateRangeMode]);
+
   const filteredFuelLogs = props.fuelLogs.filter((log) => {
     const query = fuelSearch.trim().toLowerCase();
+    const logDate = parseLogDate(log.fuel_date);
+    const logTimestamp = logDate ? startOfLocalDay(logDate) : undefined;
     const matchesVehicleFilter =
       fuelVehicleFilter === "all" || log.vehicle_id === fuelVehicleFilter;
     if (!matchesVehicleFilter) return false;
+    if (typeof logTimestamp === "number" && (logTimestamp < fuelDateWindow.start || logTimestamp > fuelDateWindow.end)) return false;
     if (!query) return true;
     return [
       log.fuel_date,
@@ -282,7 +312,7 @@ export default function Fuel(props: FuelProps) {
 
   useEffect(() => {
     setFuelPage(1);
-  }, [fuelRowsPerPage, fuelSearch, fuelVehicleFilter, props.fuelLogs.length]);
+  }, [fuelCustomDateFrom, fuelCustomDateTo, fuelDateRangeMode, fuelRowsPerPage, fuelSearch, fuelVehicleFilter, props.fuelLogs.length]);
 
   useEffect(() => {
     if (!props.loading) {
@@ -716,10 +746,18 @@ export default function Fuel(props: FuelProps) {
                   ))}
                 </select>
               </label>
-              <button className="fuel-date-button" type="button">
-                May 13 - May 20, 2025
+              <label className="fuel-select-control fuel-select-control--date">
+                <span>Range</span>
+                <select
+                  value={fuelDateRangeMode}
+                  onChange={(e) => setFuelDateRangeMode(e.target.value as FuelDateRangeMode)}
+                >
+                  <option value="last7">Last 7 Days</option>
+                  <option value="last30">Last 30 Days</option>
+                  <option value="custom">Custom Range</option>
+                </select>
                 <CalendarDays aria-hidden="true" />
-              </button>
+              </label>
               <label className="fuel-select-control fuel-select-control--rows">
                 <span>Rows</span>
                 <select
@@ -731,6 +769,26 @@ export default function Fuel(props: FuelProps) {
                   <option value={50}>50</option>
                 </select>
               </label>
+              {fuelDateRangeMode === "custom" && (
+                <div className="fuel-custom-range">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={fuelCustomDateFrom}
+                      onChange={(e) => setFuelCustomDateFrom(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={fuelCustomDateTo}
+                      onChange={(e) => setFuelCustomDateTo(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
             </div>
             {props.fuelLogs.length === 0 ? (
               <div className="fuel-empty-state">

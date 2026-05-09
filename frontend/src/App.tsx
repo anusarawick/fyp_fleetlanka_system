@@ -511,7 +511,11 @@ function ManagerRoutes() {
           <>
             <Topbar title="Analytics" subtitle="Fleet performance and operating insight" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <Analytics
+              vehicles={data.vehicles}
+              trips={data.trips}
+              fuelLogs={data.fuelLogs}
               maintenance={data.maintenance}
+              maintenancePredictionMap={data.maintenancePredictionMap}
               fuelCostTotal={data.fuelCostTotal}
               projectedFuelDemand={data.fuelForecasts.reduce(
                 (sum, row) => sum + row.forecast_liters_7d,
@@ -539,12 +543,14 @@ function ManagerRoutes() {
             <Topbar title="ML Predictions" subtitle="Maintenance risk checks and history" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <MLPredictions
               vehicles={data.vehicles}
+              maintenance={data.maintenance}
               mlVehicleId={data.mlVehicleId}
               setMlVehicleId={data.setMlVehicleId}
               maintenancePredictions={data.maintenancePredictions}
               maintenancePredictionMap={data.maintenancePredictionMap}
               loading={loading}
               onRunVehicleMaintenanceCheck={data.runVehicleMaintenanceCheck}
+              onDeleteMaintenancePrediction={data.deleteMaintenancePrediction}
             />
           </>
         }
@@ -577,6 +583,7 @@ function ManagerRoutes() {
               maintenance={data.maintenance}
               vehicles={data.vehicles}
               serviceBookings={data.serviceBookings}
+              maintenancePredictionMap={data.maintenancePredictionMap}
             />
           </>
         }

@@ -448,8 +448,7 @@
 }
 
 .fuel-search-control,
-.fuel-select-control,
-.fuel-date-button {
+.fuel-select-control {
   min-width: 0;
   width: 100%;
   min-height: 36px;
@@ -461,13 +460,12 @@
   background: #ffffff;
 }
 
-.fuel-search-control,
-.fuel-date-button {
+.fuel-search-control {
   padding: 0 12px;
 }
 
 .fuel-search-control svg,
-.fuel-date-button svg {
+.fuel-select-control--date svg {
   width: 15px;
   height: 15px;
   color: #475569;
@@ -499,15 +497,6 @@
   font-size: 10px;
   font-weight: 850;
   text-transform: uppercase;
-}
-
-.fuel-date-button {
-  justify-content: space-between;
-  color: #111827;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 750;
-  cursor: default;
 }
 
 .fuel-table-action,
@@ -551,6 +540,46 @@
 .fuel-table-action:hover {
   border-color: var(--fuel-teal-dark);
   background: var(--fuel-teal-dark);
+}
+
+.fuel-select-control--date svg {
+  color: #64748b;
+}
+
+.fuel-custom-range {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 190px));
+  gap: 10px;
+  justify-content: end;
+}
+
+.fuel-custom-range label {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #d9e2ea;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.fuel-custom-range span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.fuel-custom-range input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #334155;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
 }
 
 .fuel-secondary-action:hover {
@@ -631,8 +660,40 @@
 }
 
 .fuel-page .fuel-table__actions {
+  display: flex;
+  width: 104px;
+  min-width: 104px;
+  justify-self: end;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 7px;
+}
+
+.app--manager .fuel-page .icon-action {
+  width: 30px;
+  height: 30px;
+  border-color: #d9e2ea;
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.app--manager .fuel-page .icon-action__svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
+.app--manager .fuel-page .icon-action:hover {
+  color: var(--fuel-teal-dark);
+  border-color: rgba(8, 145, 147, 0.35);
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+.app--manager .fuel-page .icon-action--danger {
+  color: #dc2626;
 }
 
 .fuel-page .fuel-table__head > span:last-child {
@@ -958,6 +1019,11 @@
 
   .fuel-table-controls {
     grid-template-columns: 1fr;
+  }
+
+  .fuel-custom-range {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
   }
 
   .fuel-table-action,

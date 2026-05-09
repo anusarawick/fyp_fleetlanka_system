@@ -3,6 +3,7 @@ export const apiBaseUrl =
 
 export async function apiGet<T>(path: string, token?: string): Promise<T> {
   const res = await fetch(`${apiBaseUrl}${path}`, {
+    cache: "no-store",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   if (!res.ok) {

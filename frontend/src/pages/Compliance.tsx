@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CalendarClock, ClipboardCheck, FileWarning, ShieldCheck, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  FileText,
+  Search,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react";
 
 type Document = {
   id: string;
@@ -23,6 +33,18 @@ type Vehicle = {
   make?: string;
   model?: string;
   status?: string;
+  odometer_km?: number;
+  next_service_due_km?: number;
+  service_interval_km?: number;
+  oil_interval_km?: number;
+  tyre_life_km?: number;
+  brake_life_km?: number;
+  fuel_filter_interval_km?: number;
+  last_service_odometer_km?: number;
+  last_oil_change_odometer_km?: number;
+  last_tyre_change_odometer_km?: number;
+  last_brake_service_odometer_km?: number;
+  last_fuel_filter_change_odometer_km?: number;
 };
 
 type ServiceBooking = {
@@ -33,68 +55,201 @@ type ServiceBooking = {
   completion_review_status?: string;
 };
 
+type MaintenancePrediction = {
+  vehicle_id: string;
+  probability: number;
+  risk_level: "low" | "medium" | "high";
+  predicted_at?: string;
+  input_features?: Record<string, unknown>;
+};
+
 type ComplianceProps = {
   documents: Document[];
   maintenance: MaintenanceRecord[];
   vehicles: Vehicle[];
   serviceBookings: ServiceBooking[];
+  maintenancePredictionMap: Record<string, MaintenancePrediction>;
 };
 
-type AlertRow = {
+type RegisterCategory = "documents" | "maintenance" | "bookings";
+type RegisterPriority = "critical" | "high" | "medium" | "low";
+type RegisterTab = "all" | "critical" | RegisterCategory;
+type RegisterStatus =
+  | "all"
+  | "expired"
+  | "due-soon"
+  | "overdue"
+  | "at-risk"
+  | "pending-review";
+type DateRangeMode = "next7" | "next30" | "custom";
+
+type ComplianceRegisterRow = {
   id: string;
-  category: "documents" | "fleet" | "approvals";
-  severity: "danger" | "warning" | "info";
-  priorityLabel: string;
-  title: string;
-  meta: string;
+  category: RegisterCategory;
+  priority: RegisterPriority;
+  issue: string;
+  asset: string;
+  assetKey: string;
+  dueDate: string;
+  dueSort: number;
+  status: Exclude<RegisterStatus, "all">;
+  statusLabel: string;
   actionLabel: string;
   actionTo: string;
+  searchText: string;
 };
 
-type CompliancePanelRow = {
+type TimelineItem = {
   id: string;
   title: string;
-  meta: string;
-  tone: AlertRow["severity"];
-  label: string;
-  to: string;
+  asset: string;
+  date: string;
+  dueText: string;
+  sort: number;
 };
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+type MaintenanceRiskRow = {
+  vehicle: Vehicle;
+  prediction?: MaintenancePrediction;
+  remainingKm?: number;
+  priority: Extract<RegisterPriority, "high" | "medium">;
+  status: Extract<ComplianceRegisterRow["status"], "overdue" | "at-risk">;
+  statusLabel: "High Risk" | "At Risk" | "Overdue";
+  issue: string;
+  component: string;
+  dueSort: number;
+  dueDate: string;
+  sortScore: number;
+};
 
-function toneClass(tone: AlertRow["severity"]) {
-  return `pill pill--${tone}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * DAY_MS;
+const SERVICE_DUE_SOON_KM = 1200;
+
+function startOfLocalDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function parseDate(value?: string) {
+  if (!value) return undefined;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Not recorded";
+  const parsed = parseDate(value);
+  if (!parsed) return value;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(parsed));
+}
+
+function compactDate(value?: string) {
+  const parsed = parseDate(value);
+  if (!parsed) return { month: "--", day: "--" };
+  const date = new Date(parsed);
+  return {
+    month: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date).toUpperCase(),
+    day: new Intl.DateTimeFormat(undefined, { day: "2-digit" }).format(date),
+  };
+}
+
+function relativeDueText(value?: string) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Date missing";
+  const deltaDays = Math.ceil((startOfLocalDay(new Date(parsed)) - startOfLocalDay()) / DAY_MS);
+  if (deltaDays < 0) return "Overdue";
+  if (deltaDays === 0) return "Due today";
+  if (deltaDays === 1) return "Due tomorrow";
+  return `Due in ${deltaDays} days`;
 }
 
 function vehicleLabel(vehicle?: Vehicle) {
   if (!vehicle) return "Vehicle not found";
-  const makeModel = [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim();
-  if (makeModel && vehicle.plate_no) return `${makeModel} • ${vehicle.plate_no}`;
-  return makeModel || vehicle.plate_no || "Vehicle not found";
+  return vehicle.plate_no || [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "Vehicle not found";
 }
 
-function formatDate(value?: string) {
-  return value || "Date not recorded";
+function bookingLabel(booking: ServiceBooking) {
+  return `Booking #${booking.id.slice(0, 6).toUpperCase()}`;
 }
 
-function documentOwnerLabel(doc: Document) {
-  return doc.driver_id ? "Driver document" : doc.vehicle_id ? "Vehicle document" : "Owner not recorded";
+function statusLabel(value?: string) {
+  const normalized = (value || "pending").replace(/_/g, " ");
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function categoryLabel(category: AlertRow["category"]) {
-  if (category === "documents") return "Documents";
-  if (category === "fleet") return "Fleet";
-  return "Approvals";
+function priorityRank(priority: RegisterPriority) {
+  return { critical: 0, high: 1, medium: 2, low: 3 }[priority];
+}
+
+function priorityBadgeClass(priority: RegisterPriority) {
+  if (priority === "critical") return "documents-badge documents-badge--danger";
+  if (priority === "high") return "documents-badge documents-badge--warning";
+  if (priority === "medium") return "documents-badge documents-badge--info";
+  return "documents-badge documents-badge--success";
+}
+
+function statusBadgeClass(status: ComplianceRegisterRow["status"]) {
+  if (status === "expired" || status === "overdue") return "documents-status-badge documents-status-badge--danger";
+  if (status === "due-soon" || status === "at-risk") return "documents-status-badge documents-status-badge--warning";
+  if (status === "pending-review") return "documents-status-badge documents-status-badge--info";
+  return "documents-status-badge documents-status-badge--neutral";
+}
+
+function countByType(items: string[]) {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    const key = item || "Not classified";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function topGroups(groups: Record<string, number>, fallback: string) {
+  const entries = Object.entries(groups).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  return entries.length ? entries : [[fallback, 0] as [string, number]];
+}
+
+function formatDateInput(timestamp: number) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getFeatureNumber(prediction: MaintenancePrediction | undefined, key: string, fallback = 0) {
+  const raw = prediction?.input_features?.[key];
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function ratioFromVehicle(current?: number, last?: number, interval?: number) {
+  if (!current || !last || !interval) return 0;
+  return Math.max(0, (Number(current) - Number(last)) / Number(interval));
+}
+
+function componentRisk(vehicle: Vehicle, prediction?: MaintenancePrediction) {
+  const rows = [
+    { label: "Engine Service", ratio: getFeatureNumber(prediction, "service_due_ratio", ratioFromVehicle(vehicle.odometer_km, vehicle.last_service_odometer_km, vehicle.service_interval_km)) },
+    { label: "Oil Service", ratio: getFeatureNumber(prediction, "oil_due_ratio", ratioFromVehicle(vehicle.odometer_km, vehicle.last_oil_change_odometer_km, vehicle.oil_interval_km)) },
+    { label: "Tyres", ratio: getFeatureNumber(prediction, "tyre_wear_ratio", ratioFromVehicle(vehicle.odometer_km, vehicle.last_tyre_change_odometer_km, vehicle.tyre_life_km)) },
+    { label: "Brake System", ratio: getFeatureNumber(prediction, "brake_wear_ratio", ratioFromVehicle(vehicle.odometer_km, vehicle.last_brake_service_odometer_km, vehicle.brake_life_km)) },
+    { label: "Fuel Filter", ratio: getFeatureNumber(prediction, "fuel_filter_due_ratio", ratioFromVehicle(vehicle.odometer_km, vehicle.last_fuel_filter_change_odometer_km, vehicle.fuel_filter_interval_km)) },
+  ].sort((a, b) => b.ratio - a.ratio);
+  return rows[0]?.ratio > 0 ? rows[0] : { label: "Service Due", ratio: 0 };
 }
 
 export default function Compliance(props: ComplianceProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "register">("overview");
+  const [activeTab, setActiveTab] = useState<RegisterTab>("all");
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"all" | AlertRow["category"]>("all");
+  const [statusFilter, setStatusFilter] = useState<RegisterStatus>("all");
+  const [assetFilter, setAssetFilter] = useState("all");
+  const [dateRangeMode, setDateRangeMode] = useState<DateRangeMode>("next30");
+  const [customDateFrom, setCustomDateFrom] = useState(formatDateInput(startOfLocalDay()));
+  const [customDateTo, setCustomDateTo] = useState(formatDateInput(startOfLocalDay() + THIRTY_DAYS_MS));
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
 
-  const now = new Date().getTime();
+  const today = startOfLocalDay();
 
   const vehicleMap = useMemo(
     () =>
@@ -108,434 +263,693 @@ export default function Compliance(props: ComplianceProps) {
   const expiredDocuments = useMemo(
     () =>
       props.documents.filter((doc) => {
-        if (!doc.expiry_date) return false;
-        return new Date(doc.expiry_date).getTime() < now;
+        const expiry = parseDate(doc.expiry_date);
+        return typeof expiry === "number" && expiry < today;
       }),
-    [props.documents, now]
+    [props.documents, today]
   );
 
   const expiringSoonDocuments = useMemo(
     () =>
       props.documents.filter((doc) => {
-        if (!doc.expiry_date) return false;
-        const expiry = new Date(doc.expiry_date).getTime();
-        return expiry >= now && expiry <= now + THIRTY_DAYS_MS;
+        const expiry = parseDate(doc.expiry_date);
+        return typeof expiry === "number" && expiry >= today && expiry <= today + THIRTY_DAYS_MS;
       }),
-    [props.documents, now]
+    [props.documents, today]
   );
 
-  const vehiclesInMaintenance = useMemo(
-    () => props.vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance"),
-    [props.vehicles]
+  const maintenanceRiskRows = useMemo<MaintenanceRiskRow[]>(
+    () =>
+      props.vehicles
+        .map((vehicle) => {
+          const prediction = props.maintenancePredictionMap[vehicle.id];
+          const hasPrediction = !!prediction;
+          const component = componentRisk(vehicle, prediction);
+          const remainingKm =
+            typeof vehicle.odometer_km === "number" && typeof vehicle.next_service_due_km === "number"
+              ? vehicle.next_service_due_km - vehicle.odometer_km
+              : undefined;
+
+          if (prediction?.risk_level === "high") {
+            return {
+              vehicle,
+              prediction,
+              remainingKm,
+              priority: "high" as const,
+              status: "overdue" as const,
+              statusLabel: "High Risk" as const,
+              issue: `${component.label} High Risk`,
+              component: component.label,
+              dueSort: today,
+              dueDate: "ML high risk",
+              sortScore: prediction.probability,
+            };
+          }
+
+          if (prediction?.risk_level === "medium") {
+            return {
+              vehicle,
+              prediction,
+              remainingKm,
+              priority: "medium" as const,
+              status: "at-risk" as const,
+              statusLabel: "At Risk" as const,
+              issue: `${component.label} At Risk`,
+              component: component.label,
+              dueSort: today + DAY_MS * 6,
+              dueDate: "Within 7 days",
+              sortScore: prediction.probability,
+            };
+          }
+
+          if (!hasPrediction && typeof remainingKm === "number" && remainingKm <= SERVICE_DUE_SOON_KM) {
+            const overdue = remainingKm <= 0;
+            return {
+              vehicle,
+              remainingKm,
+              priority: overdue ? "high" as const : "medium" as const,
+              status: overdue ? "overdue" as const : "at-risk" as const,
+              statusLabel: overdue ? "Overdue" as const : "At Risk" as const,
+              issue: overdue ? "Service Overdue" : "Service Due Soon",
+              component: "Service Due",
+              dueSort: overdue ? today : today + DAY_MS * 6,
+              dueDate: `${Math.round(vehicle.next_service_due_km || 0).toLocaleString()} km`,
+              sortScore: overdue ? 0.85 : 0.65,
+            };
+          }
+
+          return null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => (b?.sortScore || 0) - (a?.sortScore || 0)) as MaintenanceRiskRow[],
+    [props.maintenancePredictionMap, props.vehicles, today]
   );
 
-  const pendingApprovals = useMemo(
+  const overdueMaintenance = maintenanceRiskRows.filter((row) => row.priority === "high");
+  const dueSoonMaintenance = maintenanceRiskRows.filter((row) => row.priority === "medium");
+
+  const pendingBookings = useMemo(
     () =>
       props.serviceBookings.filter(
         (booking) =>
-          (booking.status || "pending") === "completed" &&
-          (booking.completion_review_status || "pending") !== "approved"
+          (booking.status || "pending").toLowerCase() === "completed" &&
+          (booking.completion_review_status || "pending").toLowerCase() !== "approved"
       ),
     [props.serviceBookings]
   );
 
-  const vehicleDocumentCount = props.documents.filter((doc) => !!doc.vehicle_id).length;
-  const driverDocumentCount = props.documents.filter((doc) => !!doc.driver_id).length;
-  const totalOpenActions = expiredDocuments.length + expiringSoonDocuments.length + vehiclesInMaintenance.length + pendingApprovals.length;
+  const overdueBookingReviews = pendingBookings.filter((booking) => {
+    const requested = parseDate(booking.requested_date);
+    return typeof requested === "number" && requested < today;
+  });
 
-  const alertRows = useMemo<AlertRow[]>(() => {
-    const expiredDocAlerts = expiredDocuments.map((doc) => ({
-      id: `doc-expired-${doc.id}`,
-      category: "documents" as const,
-      severity: "danger" as const,
-      priorityLabel: "Urgent",
-      title: `${doc.doc_type} expired`,
-      meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
-      actionLabel: "Review",
-      actionTo: "/documents",
-    }));
+  const registerRows = useMemo<ComplianceRegisterRow[]>(() => {
+    const documentRows = [
+      ...expiredDocuments.map((doc): ComplianceRegisterRow => {
+        const asset = doc.vehicle_id ? vehicleLabel(vehicleMap[doc.vehicle_id]) : doc.driver_id ? "Driver document" : "Owner not recorded";
+        return {
+          id: `doc-expired-${doc.id}`,
+          category: "documents",
+          priority: "critical",
+          issue: `${doc.doc_type} Expired`,
+          asset,
+          assetKey: doc.vehicle_id ? `vehicle:${doc.vehicle_id}` : doc.driver_id ? `driver:${doc.driver_id}` : "other",
+          dueDate: formatDate(doc.expiry_date),
+          dueSort: parseDate(doc.expiry_date) || 0,
+          status: "expired",
+          statusLabel: "Expired",
+          actionLabel: "Renew",
+          actionTo: "/documents",
+          searchText: `${doc.doc_type} ${asset} expired ${doc.expiry_date || ""}`,
+        };
+      }),
+      ...expiringSoonDocuments.map((doc): ComplianceRegisterRow => {
+        const asset = doc.vehicle_id ? vehicleLabel(vehicleMap[doc.vehicle_id]) : doc.driver_id ? "Driver document" : "Owner not recorded";
+        return {
+          id: `doc-soon-${doc.id}`,
+          category: "documents",
+          priority: "medium",
+          issue: `${doc.doc_type} Expiring Soon`,
+          asset,
+          assetKey: doc.vehicle_id ? `vehicle:${doc.vehicle_id}` : doc.driver_id ? `driver:${doc.driver_id}` : "other",
+          dueDate: formatDate(doc.expiry_date),
+          dueSort: parseDate(doc.expiry_date) || Number.MAX_SAFE_INTEGER,
+          status: "due-soon",
+          statusLabel: "Due Soon",
+          actionLabel: "Renew",
+          actionTo: "/documents",
+          searchText: `${doc.doc_type} ${asset} expiring soon ${doc.expiry_date || ""}`,
+        };
+      }),
+    ];
 
-    const expiringDocAlerts = expiringSoonDocuments.map((doc) => ({
-      id: `doc-soon-${doc.id}`,
-      category: "documents" as const,
-      severity: "warning" as const,
-      priorityLabel: "Due Soon",
-      title: `${doc.doc_type} expiring soon`,
-      meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
-      actionLabel: "Review",
-      actionTo: "/documents",
-    }));
-
-    const maintenanceVehicleAlerts = vehiclesInMaintenance.map((vehicle) => ({
-      id: `vehicle-maint-${vehicle.id}`,
-      category: "fleet" as const,
-      severity: "info" as const,
-      priorityLabel: "Monitor",
-      title: `${vehicleLabel(vehicle)} in maintenance`,
-      meta: "Vehicle currently unavailable for fleet operations",
-      actionLabel: "Review",
-      actionTo: "/management",
-    }));
-
-    const approvalAlerts = pendingApprovals.map((booking) => ({
-      id: `approval-${booking.id}`,
-      category: "approvals" as const,
-      severity: "warning" as const,
-      priorityLabel: "Review",
-      title: `${vehicleLabel(vehicleMap[booking.vehicle_id || ""])} awaiting approval`,
-      meta: `${formatDate(booking.requested_date)} • Completed booking pending manager verification`,
-      actionLabel: "Review",
-      actionTo: "/maintenance",
-    }));
-
-    return [...expiredDocAlerts, ...expiringDocAlerts, ...maintenanceVehicleAlerts, ...approvalAlerts];
-  }, [expiredDocuments, expiringSoonDocuments, vehiclesInMaintenance, pendingApprovals, vehicleMap]);
-
-  const filteredAlerts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return alertRows.filter((row) => {
-      const categoryMatches = categoryFilter === "all" ? true : row.category === categoryFilter;
-      if (!categoryMatches) return false;
-      if (!query) return true;
-      return [row.title, row.meta, row.category, row.severity]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
+    const maintenanceRows = maintenanceRiskRows.map((row): ComplianceRegisterRow => {
+      const { vehicle } = row;
+      return {
+        id: `maintenance-${vehicle.id}`,
+        category: "maintenance",
+        priority: row.priority,
+        issue: row.issue,
+        asset: vehicleLabel(vehicle),
+        assetKey: `vehicle:${vehicle.id}`,
+        dueDate: row.dueDate,
+        dueSort: row.dueSort,
+        status: row.status,
+        statusLabel: row.statusLabel,
+        actionLabel: "Schedule",
+        actionTo: "/maintenance",
+        searchText: `${vehicleLabel(vehicle)} ${row.issue} ${row.component} ${row.prediction?.risk_level || ""} ${row.remainingKm || ""}`,
+      };
     });
-  }, [alertRows, search, categoryFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAlerts.length / rowsPerPage));
+    const bookingRows = pendingBookings.map((booking): ComplianceRegisterRow => {
+      const requested = parseDate(booking.requested_date);
+      const overdue = typeof requested === "number" && requested < today;
+      const asset = booking.vehicle_id ? vehicleLabel(vehicleMap[booking.vehicle_id]) : bookingLabel(booking);
+      return {
+        id: `booking-${booking.id}`,
+        category: "bookings",
+        priority: overdue ? "high" : "low",
+        issue: "Booking Completion Review",
+        asset,
+        assetKey: booking.vehicle_id ? `vehicle:${booking.vehicle_id}` : `booking:${booking.id}`,
+        dueDate: formatDate(booking.requested_date),
+        dueSort: requested || Number.MAX_SAFE_INTEGER,
+        status: "pending-review",
+        statusLabel: "Pending Review",
+        actionLabel: "Review",
+        actionTo: "/maintenance",
+        searchText: `${asset} ${booking.id} booking completion review ${booking.completion_review_status || "pending"}`,
+      };
+    });
+
+    return [...documentRows, ...maintenanceRows, ...bookingRows].sort((a, b) => {
+      const priorityDelta = priorityRank(a.priority) - priorityRank(b.priority);
+      if (priorityDelta !== 0) return priorityDelta;
+      return a.dueSort - b.dueSort;
+    });
+  }, [expiredDocuments, expiringSoonDocuments, maintenanceRiskRows, pendingBookings, vehicleMap]);
+
+  const dateRangeWindow = useMemo(() => {
+    if (dateRangeMode === "next7") return { start: Number.NEGATIVE_INFINITY, end: today + 7 * DAY_MS };
+    if (dateRangeMode === "next30") return { start: Number.NEGATIVE_INFINITY, end: today + THIRTY_DAYS_MS };
+    return {
+      start: customDateFrom ? startOfLocalDay(new Date(`${customDateFrom}T00:00:00`)) : Number.NEGATIVE_INFINITY,
+      end: customDateTo ? startOfLocalDay(new Date(`${customDateTo}T00:00:00`)) : Number.POSITIVE_INFINITY,
+    };
+  }, [customDateFrom, customDateTo, dateRangeMode, today]);
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return registerRows.filter((row) => {
+      const tabMatches = activeTab === "all" ? true : activeTab === "critical" ? row.priority === "critical" : row.category === activeTab;
+      const statusMatches = statusFilter === "all" ? true : row.status === statusFilter;
+      const assetMatches = assetFilter === "all" ? true : row.assetKey === assetFilter;
+      const dateMatches = row.dueSort >= dateRangeWindow.start && row.dueSort <= dateRangeWindow.end;
+      const searchMatches = query ? row.searchText.toLowerCase().includes(query) : true;
+      return tabMatches && statusMatches && assetMatches && dateMatches && searchMatches;
+    });
+  }, [activeTab, assetFilter, dateRangeWindow, registerRows, search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
-  const visibleAlerts = filteredAlerts.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const visibleRows = filteredRows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  const recentMaintenance = useMemo(
-    () =>
-      [...props.maintenance]
-        .sort((a, b) => String(b.service_date).localeCompare(String(a.service_date)))
-        .slice(0, 5),
-    [props.maintenance]
+  const assetOptions = useMemo(() => {
+    const options = registerRows.reduce<Record<string, string>>((acc, row) => {
+      acc[row.assetKey] = row.asset;
+      return acc;
+    }, {});
+    return Object.entries(options).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [registerRows]);
+
+  const documentBreakdown = countByType(expiredDocuments.map((doc) => doc.doc_type));
+  const renewalBreakdown = countByType(expiringSoonDocuments.map((doc) => doc.doc_type));
+  const bookingBreakdown = countByType(pendingBookings.map((booking) => statusLabel(booking.completion_review_status)));
+  const maintenanceBreakdown = countByType(maintenanceRiskRows.map((row) => row.component));
+
+  const criticalCount = expiredDocuments.length + overdueMaintenance.length + overdueBookingReviews.length;
+  const issueCounts = {
+    documents: expiredDocuments.length + expiringSoonDocuments.length,
+    maintenance: maintenanceRiskRows.length,
+    bookings: pendingBookings.length,
+    other: props.vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance").length,
+  };
+  const issueTotal = Math.max(1, issueCounts.documents + issueCounts.maintenance + issueCounts.bookings + issueCounts.other);
+  const healthScore = Math.max(
+    0,
+    Math.min(100, 100 - criticalCount * 8 - dueSoonMaintenance.length * 4 - pendingBookings.length * 3)
   );
+  const healthSegments = {
+    good: Math.max(0, Math.min(100, healthScore)),
+    atRisk: Math.max(0, Math.min(100, 100 - healthScore - criticalCount * 3)),
+    critical: Math.max(0, Math.min(100, criticalCount * 3)),
+  };
 
-  const compliancePanels = [
-    {
-      title: "Document Risk",
-      subtitle: "Expired and near-expiry records that should be handled before dispatch.",
-      empty: "No renewal action needed.",
-      icon: FileWarning,
-      rows: [
-        ...expiredDocuments.slice(0, 5).map((doc): CompliancePanelRow => ({
-        id: doc.id,
-        title: doc.doc_type,
-        meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
-        tone: "danger",
-        label: "Expired",
-        to: "/documents",
-      })),
-        ...expiringSoonDocuments.slice(0, 5).map((doc): CompliancePanelRow => ({
-        id: doc.id,
-        title: doc.doc_type,
-        meta: `${formatDate(doc.expiry_date)} • ${documentOwnerLabel(doc)}`,
-        tone: "warning",
-        label: "Due Soon",
-        to: "/documents",
-      })),
-      ].slice(0, 5),
-    },
-    {
-      title: "Service Review",
-      subtitle: "Completed workshop jobs that still need manager verification.",
-      empty: "No service approvals waiting.",
-      icon: ClipboardCheck,
-      rows: pendingApprovals.slice(0, 5).map((booking): CompliancePanelRow => ({
-        id: booking.id,
-        title: vehicleLabel(vehicleMap[booking.vehicle_id || ""]),
-        meta: `${formatDate(booking.requested_date)} • Completion review waiting`,
-        tone: "warning",
-        label: "Review",
-        to: "/maintenance",
-      })),
-    },
-    {
-      title: "Fleet Availability",
-      subtitle: "Vehicles currently unavailable because their status is set to maintenance.",
-      empty: "No maintenance holds on fleet availability.",
-      icon: Wrench,
-      rows: vehiclesInMaintenance.slice(0, 5).map((vehicle): CompliancePanelRow => ({
-        id: vehicle.id,
-        title: vehicleLabel(vehicle),
-        meta: "Vehicle status is currently set to maintenance",
-        tone: "info",
-        label: "Maintenance",
-        to: "/management",
-      })),
-    },
+  const nextSevenDays = useMemo<TimelineItem[]>(() => {
+    const maxDate = today + 7 * DAY_MS;
+    const documentItems = [...expiredDocuments, ...expiringSoonDocuments]
+      .filter((doc) => {
+        const expiry = parseDate(doc.expiry_date);
+        return typeof expiry === "number" && expiry >= today && expiry <= maxDate;
+      })
+      .map((doc) => ({
+        id: `next-doc-${doc.id}`,
+        title: `${doc.doc_type} Expiry`,
+        asset: doc.vehicle_id ? vehicleLabel(vehicleMap[doc.vehicle_id]) : doc.driver_id ? "Driver document" : "Owner not recorded",
+        date: doc.expiry_date || "",
+        dueText: relativeDueText(doc.expiry_date),
+        sort: parseDate(doc.expiry_date) || Number.MAX_SAFE_INTEGER,
+      }));
+
+    const bookingItems = pendingBookings
+      .filter((booking) => {
+        const requested = parseDate(booking.requested_date);
+        return typeof requested === "number" && requested >= today && requested <= maxDate;
+      })
+      .map((booking) => ({
+        id: `next-booking-${booking.id}`,
+        title: "Booking Review Due",
+        asset: booking.vehicle_id ? vehicleLabel(vehicleMap[booking.vehicle_id]) : bookingLabel(booking),
+        date: booking.requested_date,
+        dueText: relativeDueText(booking.requested_date),
+        sort: parseDate(booking.requested_date) || Number.MAX_SAFE_INTEGER,
+      }));
+
+    const maintenanceItems = dueSoonMaintenance.slice(0, 2).map(({ vehicle, component }, index) => {
+      const sort = today + DAY_MS * (index + 1);
+      return {
+        id: `next-maintenance-${vehicle.id}`,
+        title: `${component} At Risk`,
+        asset: vehicleLabel(vehicle),
+        date: formatDateInput(sort),
+        dueText: "Within 7 days",
+        sort,
+      };
+    });
+
+    return [...documentItems, ...bookingItems, ...maintenanceItems].sort((a, b) => a.sort - b.sort).slice(0, 5);
+  }, [dueSoonMaintenance, expiredDocuments, expiringSoonDocuments, pendingBookings, today, vehicleMap]);
+
+  const registerTabs: Array<{ key: RegisterTab; label: string; count: number; icon: typeof ShieldCheck }> = [
+    { key: "all", label: "All", count: registerRows.length, icon: ShieldCheck },
+    { key: "critical", label: "Critical", count: registerRows.filter((row) => row.priority === "critical").length, icon: AlertTriangle },
+    { key: "documents", label: "Documents", count: issueCounts.documents, icon: FileText },
+    { key: "maintenance", label: "Maintenance", count: issueCounts.maintenance, icon: Wrench },
+    { key: "bookings", label: "Bookings", count: issueCounts.bookings, icon: ClipboardCheck },
   ];
 
   return (
     <section className="section">
       <section className="admin-page compliance-page people-page people-page--compliance">
-      <div className="stats compliance-stats admin-stats">
-        <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><AlertTriangle aria-hidden="true" /></div>
-          <div className="stat-value">{expiredDocuments.length}</div>
-          <div className="stat-label">Renewal Risk</div>
-          <div className="stat-sub">Expired documents blocking readiness</div>
-        </div>
-        <div className="stat-card stat-card--blue">
-          <div className="stat-icon"><CalendarClock aria-hidden="true" /></div>
-          <div className="stat-value">{expiringSoonDocuments.length}</div>
-          <div className="stat-label">Upcoming Renewals</div>
-          <div className="stat-sub">Due within the next 30 days</div>
-        </div>
-        <div className="stat-card stat-card--amber">
-          <div className="stat-icon"><Wrench aria-hidden="true" /></div>
-          <div className="stat-value">{vehiclesInMaintenance.length}</div>
-          <div className="stat-label">Unavailable Vehicles</div>
-          <div className="stat-sub">Held in maintenance state</div>
-        </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-icon"><ClipboardCheck aria-hidden="true" /></div>
-          <div className="stat-value">{pendingApprovals.length}</div>
-          <div className="stat-label">Approval Queue</div>
-          <div className="stat-sub">Completed jobs awaiting review</div>
-        </div>
-      </div>
-
-      <nav className="admin-tabs" aria-label="Compliance sections">
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "overview" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("overview")}
-        >
-          Overview
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${activeTab === "register" ? "admin-tab--active" : ""}`}
-          onClick={() => setActiveTab("register")}
-        >
-          Alert Register
-        </button>
-      </nav>
-
-      {activeTab === "overview" && (
-      <>
-      <div className="compliance-command-grid">
-        <section className="card compliance-command-card compliance-action-summary">
-          <div className="card__header">
+        <section className="dashboard-kpis compliance-kpi-grid" aria-label="Compliance summary">
+          <article className="dashboard-kpi-card dashboard-kpi-card--red compliance-kpi-card">
+            <span className="dashboard-kpi-card__icon"><ShieldCheck aria-hidden="true" /></span>
             <div>
-              <h3>Action Summary</h3>
-              <p className="muted admin-card__subtitle">Open compliance items grouped by urgency and destination.</p>
+              <small>Critical Alerts</small>
+              <strong>{criticalCount}</strong>
+              <span className={criticalCount > 0 ? "dashboard-trend dashboard-trend--down" : "dashboard-trend dashboard-trend--up"}>
+                {criticalCount > 0 ? "Needs action" : "No critical items"}
+              </span>
             </div>
-          </div>
-          <div className="compliance-summary">
-            <div className="compliance-summary__item">
-              <span>Open Actions</span>
-              <strong>{totalOpenActions}</strong>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--amber compliance-kpi-card">
+            <span className="dashboard-kpi-card__icon"><CalendarDays aria-hidden="true" /></span>
+            <div>
+              <small>Expiring in 30 Days</small>
+              <strong>{expiringSoonDocuments.length}</strong>
+              <span className="dashboard-trend dashboard-trend--warning">Document renewals</span>
             </div>
-            <div className="compliance-summary__item">
-              <span>Urgent</span>
-              <strong>{expiredDocuments.length}</strong>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--orange compliance-kpi-card">
+            <span className="dashboard-kpi-card__icon"><Wrench aria-hidden="true" /></span>
+            <div>
+              <small>Overdue Maintenance</small>
+              <strong>{overdueMaintenance.length}</strong>
+              <span className="dashboard-trend dashboard-trend--warning">By odometer due km</span>
             </div>
-          </div>
-          <ul className="people-signal-list compliance-signal-list">
-            <li>
-              <span className="people-signal-list__icon people-signal-list__icon--info"><ShieldCheck aria-hidden="true" /></span>
-              <div>
-                <div className="list__title">Document coverage</div>
-                <div className="list__meta">{vehicleDocumentCount} vehicle records, {driverDocumentCount} driver records</div>
-              </div>
-            </li>
-            <li>
-              <span className="people-signal-list__icon people-signal-list__icon--warning"><CalendarClock aria-hidden="true" /></span>
-              <div>
-                <div className="list__title">Next renewal window</div>
-                <div className="list__meta">{expiringSoonDocuments.length} documents due within 30 days</div>
-              </div>
-            </li>
-          </ul>
+          </article>
+          <article className="dashboard-kpi-card dashboard-kpi-card--purple compliance-kpi-card">
+            <span className="dashboard-kpi-card__icon"><ClipboardCheck aria-hidden="true" /></span>
+            <div>
+              <small>Pending Booking Reviews</small>
+              <strong>{pendingBookings.length}</strong>
+              <span className="dashboard-trend dashboard-trend--neutral">Completed jobs</span>
+            </div>
+          </article>
         </section>
-        <section className="card compliance-command-card compliance-service-card">
-          <div className="card__header">
-            <div>
-              <h3>Recent Service Signals</h3>
-              <p className="muted admin-card__subtitle">Latest maintenance activity that may affect availability or follow-up work.</p>
+
+        <section className="compliance-summary-grid" aria-label="Compliance action groups">
+          <ComplianceSummaryCard
+            icon={AlertTriangle}
+            title="Expired Documents"
+            total={expiredDocuments.length}
+            rows={topGroups(documentBreakdown, "No expired documents")}
+            actionLabel={`View Expired (${expiredDocuments.length})`}
+            to="/documents"
+            tone="danger"
+          />
+          <ComplianceSummaryCard
+            icon={CalendarDays}
+            title="Upcoming Renewals"
+            total={expiringSoonDocuments.length}
+            rows={topGroups(renewalBreakdown, "No upcoming renewals")}
+            actionLabel={`View Renewals (${expiringSoonDocuments.length})`}
+            to="/documents"
+            tone="warning"
+          />
+          <ComplianceSummaryCard
+            icon={Wrench}
+            title="High-Risk Maintenance"
+            total={maintenanceRiskRows.length}
+            rows={topGroups(maintenanceBreakdown, "No high-risk maintenance")}
+            actionLabel={`View Maintenance (${maintenanceRiskRows.length})`}
+            to="/maintenance"
+            tone="warning"
+          />
+          <ComplianceSummaryCard
+            icon={ClipboardCheck}
+            title="Booking Completion Reviews"
+            total={pendingBookings.length}
+            rows={topGroups(bookingBreakdown, "No pending reviews")}
+            actionLabel={`View Reviews (${pendingBookings.length})`}
+            to="/maintenance"
+            tone="info"
+          />
+        </section>
+
+        <div className="compliance-workspace-grid">
+          <section className="card compliance-register-card">
+            <div className="compliance-card-header">
+              <h3>Compliance Register</h3>
             </div>
-          </div>
-          {recentMaintenance.length === 0 ? (
-            <p className="empty">No recent service activity to review.</p>
-          ) : (
-            <ul className="list compliance-list">
-              {recentMaintenance.map((record) => (
-                <li key={record.id}>
-                  <div>
-                    <div className="list__title">{record.service_type || "Service"}</div>
-                    <div className="list__meta">
-                      {formatDate(record.service_date)}
-                      {record.vehicle_id ? ` • ${vehicleLabel(vehicleMap[record.vehicle_id])}` : ""}
-                    </div>
+
+            <div className="compliance-register-tabs" aria-label="Compliance register filters">
+              {registerTabs.map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    type="button"
+                    className={activeTab === tab.key ? "is-active" : ""}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      setPage(1);
+                    }}
+                    key={tab.key}
+                  >
+                    <TabIcon aria-hidden="true" />
+                    {tab.label} ({tab.count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="compliance-table-controls">
+              <label className="compliance-search-control">
+                <Search aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="Search by asset, issue, or reference..."
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              <label className="compliance-select-control">
+                <span>Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as RegisterStatus);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="expired">Expired</option>
+                  <option value="due-soon">Due Soon</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="at-risk">At Risk</option>
+                  <option value="pending-review">Pending Review</option>
+                </select>
+              </label>
+              <label className="compliance-select-control">
+                <span>Asset</span>
+                <select
+                  value={assetFilter}
+                  onChange={(event) => {
+                    setAssetFilter(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">All Assets</option>
+                  {assetOptions.map(([key, label]) => (
+                    <option value={key} key={key}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="compliance-select-control compliance-select-control--date">
+                <span>Range</span>
+                <select
+                  value={dateRangeMode}
+                  onChange={(event) => {
+                    setDateRangeMode(event.target.value as DateRangeMode);
+                    setPage(1);
+                  }}
+                >
+                  <option value="next7">Next 7 Days</option>
+                  <option value="next30">Next 30 Days</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+                <CalendarDays aria-hidden="true" />
+              </label>
+              <label className="compliance-select-control compliance-select-control--rows">
+                <span>Rows</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(event) => {
+                    setRowsPerPage(Number(event.target.value));
+                    setPage(1);
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+              {dateRangeMode === "custom" && (
+                <div className="compliance-custom-range">
+                  <label>
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={customDateFrom}
+                      onChange={(event) => {
+                        setCustomDateFrom(event.target.value);
+                        setPage(1);
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={customDateTo}
+                      onChange={(event) => {
+                        setCustomDateTo(event.target.value);
+                        setPage(1);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {filteredRows.length === 0 ? (
+              <p className="empty">No compliance issues match the current filters.</p>
+            ) : (
+              <div className="compliance-register-table">
+                <div className="compliance-table__head">
+                  <span>Priority</span>
+                  <span>Issue</span>
+                  <span>Related Asset</span>
+                  <span>Due Date</span>
+                  <span>Status</span>
+                  <span>Action</span>
+                </div>
+                {visibleRows.map((row) => (
+                  <div className="compliance-table__row" key={row.id}>
+                    <span data-label="Priority">
+                      <b className={priorityBadgeClass(row.priority)}>{row.priority === "critical" ? "Critical" : row.priority[0].toUpperCase() + row.priority.slice(1)}</b>
+                    </span>
+                    <span className="compliance-issue-cell" data-label="Issue">
+                      {row.category === "documents" ? <FileText aria-hidden="true" /> : row.category === "maintenance" ? <Wrench aria-hidden="true" /> : <ClipboardCheck aria-hidden="true" />}
+                      <strong>{row.issue}</strong>
+                    </span>
+                    <span data-label="Related Asset">{row.asset}</span>
+                    <span className={row.priority === "critical" || row.status === "overdue" ? "compliance-danger-date" : ""} data-label="Due Date">
+                      {row.dueDate}
+                    </span>
+                    <span data-label="Status">
+                      <b className={statusBadgeClass(row.status)}>{row.statusLabel}</b>
+                    </span>
+                    <span className="compliance-table__actions" data-label="Action">
+                      <Link className="compliance-action-link" to={row.actionTo}>
+                        {row.actionLabel}
+                        <ChevronRight aria-hidden="true" />
+                      </Link>
+                    </span>
                   </div>
-                  <Link className="btn btn--secondary btn--compact compliance-open-btn" to="/maintenance">
-                    Review
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+                ))}
+              </div>
+            )}
 
-      <div className="compliance-alert-grid">
-        {compliancePanels.map((section) => {
-          const PanelIcon = section.icon;
-          return (
-          <section className="card compliance-alert-card" key={section.title}>
-            <div className="card__header">
-              <div className="compliance-card-title">
-                <span className="people-signal-list__icon people-signal-list__icon--info"><PanelIcon aria-hidden="true" /></span>
-                <div>
-                  <h3>{section.title}</h3>
-                  <p className="muted admin-card__subtitle">{section.subtitle}</p>
+            <div className="documents-table-footer compliance-table-footer">
+              <span>
+                Showing {filteredRows.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} to {Math.min(currentPage * rowsPerPage, filteredRows.length)} of {filteredRows.length} issues
+              </span>
+              <div className="table-pagination documents-pagination-controls">
+                <span className="table-pagination__meta">Page {currentPage} of {totalPages}</span>
+                <button
+                  className="documents-page-button"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                  Prev
+                </button>
+                <span className="documents-page-button documents-page-button--active">{currentPage}</span>
+                <button
+                  className="documents-page-button"
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <aside className="compliance-side-panel">
+            <section className="card compliance-side-card">
+              <div className="compliance-side-card__header">
+                <h3>Compliance Health Score</h3>
+                <button type="button">View report</button>
+              </div>
+              <div className="compliance-health-card">
+                <div className="compliance-health-donut" style={{ "--score": `${healthScore * 3.6}deg` } as React.CSSProperties}>
+                  <strong>{healthScore}</strong>
+                  <span>/ 100</span>
+                  <small>{healthScore >= 80 ? "Good" : healthScore >= 50 ? "At Risk" : "Critical"}</small>
+                </div>
+                <div className="compliance-health-legend">
+                  <span><i className="dot dot--green" />Good (80-100)<b>{healthSegments.good}%</b></span>
+                  <span><i className="dot dot--orange" />At Risk (50-79)<b>{healthSegments.atRisk}%</b></span>
+                  <span><i className="dot dot--red" />Critical (0-49)<b>{healthSegments.critical}%</b></span>
                 </div>
               </div>
-            </div>
-            {section.rows.length === 0 ? (
-              <p className="empty">{section.empty}</p>
-            ) : (
-              <ul className="list compliance-list">
-                {section.rows.map((row) => (
-                  <li key={row.id}>
-                    <div>
-                      <div className="list__title">{row.title}</div>
-                      <div className="list__meta">{row.meta}</div>
-                    </div>
-                    <div className="compliance-list__actions">
-                      <span className={toneClass(row.tone)}>{row.label}</span>
-                      <Link className="btn btn--secondary btn--compact compliance-open-btn" to={row.to}>
-                        Review
-                      </Link>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          );
-        })}
-      </div>
-      </>
-      )}
+            </section>
 
-      {activeTab === "register" && (
-      <section className="card admin-table-section admin-panel">
-        <div className="card__header">
-          <div>
-            <h3>Compliance Register</h3>
-            <p className="muted admin-card__subtitle">Search and route document renewals, fleet holds, and service approvals from one queue.</p>
-          </div>
-        </div>
-        <div className="table-controls">
-          <div className="table-controls__filters">
-            <label className="table-controls__label table-controls__label--search">
-              Search
-              <input
-                type="search"
-                placeholder="Document, vehicle, approval..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-            <label className="table-controls__label">
-              Category
-              <select
-                value={categoryFilter}
-                onChange={(e) => {
-                  setCategoryFilter(e.target.value as typeof categoryFilter);
-                  setPage(1);
-                }}
-              >
-                <option value="all">All</option>
-                <option value="documents">Documents</option>
-                <option value="fleet">Fleet</option>
-                <option value="approvals">Approvals</option>
-              </select>
-            </label>
-            <label className="table-controls__label">
-              Rows
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setPage(1);
-                }}
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-          </div>
-          <div className="table-pagination">
-            <span className="table-pagination__meta">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-            >
-              Prev
-            </button>
-            <button
-              className="btn btn--secondary btn--compact"
-              type="button"
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-
-        {filteredAlerts.length === 0 ? (
-          <p className="empty">No compliance alerts match the current filters.</p>
-        ) : (
-          <div className="table compliance-table" style={{ ["--table-columns" as any]: 4 }}>
-            <div className="table__head compliance-table__head">
-              <span>Category</span>
-              <span>Alert</span>
-              <span>Priority</span>
-              <span>Action</span>
-            </div>
-            {visibleAlerts.map((row) => (
-              <div className="table__row compliance-table__row" key={row.id}>
-                <span data-label="Category">
-                  <span className="pill pill--info">{categoryLabel(row.category)}</span>
-                </span>
-                <span data-label="Alert">
-                  <strong>{row.title}</strong>
-                  <small className="muted compliance-table__meta">{row.meta}</small>
-                </span>
-                <span data-label="Priority">
-                  <span className={toneClass(row.severity)}>
-                    {row.priorityLabel}
-                  </span>
-                </span>
-                <span className="table__actions compliance-table__actions" data-label="Action">
-                  <Link className="btn btn--secondary btn--compact compliance-open-btn" to={row.actionTo}>
-                    {row.actionLabel}
-                  </Link>
-                </span>
+            <section className="card compliance-side-card">
+              <div className="compliance-side-card__header">
+                <h3>Issue Breakdown</h3>
+                <button type="button">View all</button>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-      )}
+              <div className="compliance-breakdown-list">
+                <BreakdownRow icon={FileText} label="Documents" count={issueCounts.documents} total={issueTotal} tone="blue" />
+                <BreakdownRow icon={Wrench} label="Maintenance" count={issueCounts.maintenance} total={issueTotal} tone="orange" />
+                <BreakdownRow icon={ClipboardCheck} label="Bookings" count={issueCounts.bookings} total={issueTotal} tone="purple" />
+                <BreakdownRow icon={ShieldCheck} label="Other" count={issueCounts.other} total={issueTotal} tone="slate" />
+              </div>
+            </section>
+
+            <section className="card compliance-side-card">
+              <div className="compliance-side-card__header">
+                <h3>Next 7 Days</h3>
+                <button type="button">View calendar</button>
+              </div>
+              <div className="compliance-timeline-list">
+                {nextSevenDays.length === 0 ? (
+                  <p className="empty">No dated compliance work in the next 7 days.</p>
+                ) : (
+                  nextSevenDays.map((item) => {
+                    const date = compactDate(item.date);
+                    return (
+                      <div className="compliance-timeline-row" key={item.id}>
+                        <span className="compliance-date-chip"><small>{date.month}</small><b>{date.day}</b></span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <small>{item.asset}</small>
+                        </div>
+                        <b>{item.dueText}</b>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <Link className="compliance-view-all" to="/documents">
+                View all upcoming ({nextSevenDays.length})
+                <ChevronRight aria-hidden="true" />
+              </Link>
+            </section>
+          </aside>
+        </div>
       </section>
     </section>
+  );
+}
+
+function ComplianceSummaryCard(props: {
+  icon: typeof AlertTriangle;
+  title: string;
+  total: number;
+  rows: Array<[string, number]>;
+  actionLabel: string;
+  to: string;
+  tone: "danger" | "warning" | "info";
+}) {
+  const Icon = props.icon;
+  return (
+    <section className="card compliance-summary-card">
+      <div className="compliance-summary-card__title">
+        <span className={`documents-row-icon documents-row-icon--${props.tone}`}><Icon aria-hidden="true" /></span>
+        <div>
+          <h3>{props.title}</h3>
+          <strong>{props.total}</strong>
+        </div>
+      </div>
+      <div className="compliance-summary-card__rows">
+        {props.rows.map(([label, count]) => (
+          <span key={label}>
+            <b>{label}</b>
+            <em>{count}</em>
+          </span>
+        ))}
+      </div>
+      <Link className="compliance-summary-card__action" to={props.to}>{props.actionLabel}</Link>
+    </section>
+  );
+}
+
+function BreakdownRow(props: {
+  icon: typeof FileText;
+  label: string;
+  count: number;
+  total: number;
+  tone: "blue" | "orange" | "purple" | "slate";
+}) {
+  const Icon = props.icon;
+  const percent = Math.round((props.count / Math.max(1, props.total)) * 100);
+  return (
+    <div className="compliance-breakdown-row">
+      <Icon aria-hidden="true" />
+      <span>{props.label}</span>
+      <div className="compliance-breakdown-bar"><i className={`is-${props.tone}`} style={{ width: `${percent}%` }} /></div>
+      <b>{props.count} ({percent}%)</b>
+    </div>
   );
 }
