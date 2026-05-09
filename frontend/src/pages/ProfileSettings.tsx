@@ -1,8 +1,10 @@
-import { useEffect, useState, FormEvent } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, UserRound } from "lucide-react";
 
 type ProfileSettingsProps = {
     email: string;
     role: string;
+    organizationName?: string;
     name: string;
     phone: string;
     profileLoading?: boolean;
@@ -14,6 +16,7 @@ type ProfileSettingsProps = {
 export default function ProfileSettings({
     email,
     role,
+    organizationName,
     name,
     phone,
     profileLoading = false,
@@ -26,6 +29,9 @@ export default function ProfileSettings({
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
 
     const roleLabel =
@@ -35,6 +41,7 @@ export default function ProfileSettings({
                 ? "Service Center"
                 : "Driver";
     const initials = localName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "U";
+    const workspaceName = organizationName?.trim() || "Organization not recorded";
 
     useEffect(() => {
         setLocalName(name || "");
@@ -69,209 +76,207 @@ export default function ProfileSettings({
         }
     }
 
+    function resetProfileForm() {
+        setLocalName(name || "");
+        setLocalPhone(phone || "");
+    }
+
+    function PasswordField({
+        label,
+        value,
+        onChange,
+        placeholder,
+        visible,
+        onToggle,
+    }: {
+        label: string;
+        value: string;
+        onChange: (value: string) => void;
+        placeholder: string;
+        visible: boolean;
+        onToggle: () => void;
+    }) {
+        return (
+            <label className="profile-field">
+                <span>{label}</span>
+                <span className="profile-password-control">
+                    <input
+                        type={visible ? "text" : "password"}
+                        value={value}
+                        onChange={(event) => onChange(event.target.value)}
+                        placeholder={placeholder}
+                    />
+                    <button type="button" onClick={onToggle} aria-label={visible ? `Hide ${label}` : `Show ${label}`}>
+                        {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                    </button>
+                </span>
+            </label>
+        );
+    }
+
     return (
         <section className="section">
-        <div className="profile-page profile-page--manager">
-            {successMessage && (
-                <div className="alert alert--success">{successMessage}</div>
-            )}
+            <div className="profile-page profile-page--manager">
+                {successMessage && (
+                    <div className="alert alert--success">{successMessage}</div>
+                )}
 
-            <div className="profile-header">
-                <div className="profile-header__avatar">{initials}</div>
-                <div className="profile-header__info">
-                    <h2>{localName || "User"}</h2>
-                    <span className="profile-header__role">{roleLabel}</span>
-                    <span className="profile-header__email">{email}</span>
-                </div>
-            </div>
-
-            <div className="profile-grid">
-                <section className="profile-section">
-                    <div className="profile-section__header">
-                        <div>
-                            <h3>Personal Information</h3>
-                            <p className="muted">Update your personal details</p>
+                <div className="profile-layout">
+                    <section className="profile-card profile-card--account">
+                        <div className="profile-card__header">
+                            <div>
+                                <h3>Account Profile</h3>
+                                <p>Update your personal information and contact details.</p>
+                            </div>
                         </div>
-                    </div>
 
-                    <form className="form" onSubmit={handleProfileUpdate}>
-                        <div className="form-row">
-                            <label>
-                                Full Name
+                        <div className="profile-identity">
+                            <div className="profile-identity__avatar">{initials}</div>
+                            <div>
+                                <div className="profile-identity__title">
+                                    <strong>{localName || "User"}</strong>
+                                    <span>{roleLabel}</span>
+                                </div>
+                                <p>{workspaceName}</p>
+                            </div>
+                        </div>
+
+                        <form className="profile-form" onSubmit={handleProfileUpdate}>
+                            <label className="profile-field">
+                                <span>Full Name</span>
                                 <input
                                     type="text"
                                     value={localName}
                                     onChange={(e) => setLocalName(e.target.value)}
                                     placeholder="Enter your full name"
                                 />
+                                <small>Enter your full name as it appears on your account.</small>
                             </label>
-                            <label>
-                                Phone Number
+
+                            <label className="profile-field">
+                                <span>Email Address</span>
+                                <span className="profile-readonly-control">
+                                    <input type="email" value={email} disabled />
+                                    <Lock aria-hidden="true" />
+                                </span>
+                                <small>Email address cannot be changed. Contact support if you need assistance.</small>
+                            </label>
+
+                            <label className="profile-field">
+                                <span>Phone Number</span>
                                 <input
                                     type="tel"
                                     value={localPhone}
                                     onChange={(e) => setLocalPhone(e.target.value)}
                                     placeholder="+94 77 123 4567"
                                 />
+                                <small>Enter a valid phone number for important notifications.</small>
                             </label>
-                        </div>
 
-                        <label>
-                            Email Address
-                            <input
-                                type="email"
-                                value={email}
-                                disabled
-                                className="input--disabled"
-                            />
-                            <span className="form-hint">Email cannot be changed</span>
-                        </label>
-
-                        <label>
-                            Role
-                            <input
-                                type="text"
-                                value={roleLabel}
-                                disabled
-                                className="input--disabled"
-                            />
-                            <span className="form-hint">Contact admin to change role</span>
-                        </label>
-
-                        <button
-                            className="btn btn--primary"
-                            type="submit"
-                            disabled={loading}
-                        >
-                            {loading ? "Saving..." : "Save Changes"}
-                        </button>
-                    </form>
-                </section>
-
-                <section className="profile-section">
-                    <div className="profile-section__header">
-                        <div>
-                            <h3>Security</h3>
-                            <p className="muted">Manage your password</p>
-                        </div>
-                    </div>
-
-                    <form className="form" onSubmit={handlePasswordChange}>
-                        <label>
-                            Current Password
-                            <input
-                                type="password"
-                                value={currentPassword}
-                                onChange={(e) => setCurrentPassword(e.target.value)}
-                                placeholder="Enter current password"
-                            />
-                        </label>
-
-                        <label>
-                            New Password
-                            <input
-                                type="password"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="Enter new password"
-                            />
-                        </label>
-
-                        <label>
-                            Confirm New Password
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                placeholder="Confirm new password"
-                            />
-                        </label>
-
-                        <button
-                            className="btn btn--secondary"
-                            type="submit"
-                            disabled={!currentPassword || !newPassword || !confirmPassword}
-                        >
-                            Change Password
-                        </button>
-                    </form>
-                </section>
-
-                <section className="profile-section">
-                    <div className="profile-section__header">
-                        <div>
-                            <h3>Preferences</h3>
-                            <p className="muted">Customize your experience</p>
-                        </div>
-                    </div>
-
-                    <div className="preference-list">
-                        <div className="preference-item">
-                            <div className="preference-item__info">
-                                <span className="preference-item__label">Email Notifications</span>
-                                <span className="preference-item__desc">Receive email alerts for important updates</span>
-                            </div>
-                            <label className="toggle">
-                                <input type="checkbox" defaultChecked />
-                                <span className="toggle__slider"></span>
+                            <label className="profile-field">
+                                <span>Role</span>
+                                <input type="text" value={roleLabel} disabled />
+                                <small>Your role determines the level of access and permissions.</small>
                             </label>
-                        </div>
 
-                        <div className="preference-item">
-                            <div className="preference-item__info">
-                                <span className="preference-item__label">Push Notifications</span>
-                                <span className="preference-item__desc">Get notified on your device</span>
+                            <div className="profile-form__actions">
+                                <button className="btn btn--secondary" type="button" onClick={resetProfileForm}>
+                                    Cancel
+                                </button>
+                                <button className="btn btn--primary" type="submit" disabled={loading || profileLoading}>
+                                    {loading || profileLoading ? "Saving..." : "Save Changes"}
+                                </button>
                             </div>
-                            <label className="toggle">
-                                <input type="checkbox" defaultChecked />
-                                <span className="toggle__slider"></span>
-                            </label>
-                        </div>
+                        </form>
+                    </section>
 
-                        <div className="preference-item">
-                            <div className="preference-item__info">
-                                <span className="preference-item__label">Maintenance Reminders</span>
-                                <span className="preference-item__desc">Alerts for upcoming vehicle maintenance</span>
+                    <div className="profile-side-stack">
+                        <section className="profile-card">
+                            <div className="profile-card__header">
+                                <div>
+                                    <h3>Change Password</h3>
+                                    <p>Update your password to keep your account secure.</p>
+                                </div>
                             </div>
-                            <label className="toggle">
-                                <input type="checkbox" defaultChecked />
-                                <span className="toggle__slider"></span>
-                            </label>
-                        </div>
 
-                        <div className="preference-item">
-                            <div className="preference-item__info">
-                                <span className="preference-item__label">Document Expiry Alerts</span>
-                                <span className="preference-item__desc">Notify before documents expire</span>
+                            <form className="profile-form profile-form--password" onSubmit={handlePasswordChange}>
+                                <PasswordField
+                                    label="Current Password"
+                                    value={currentPassword}
+                                    onChange={setCurrentPassword}
+                                    placeholder="Enter current password"
+                                    visible={showCurrentPassword}
+                                    onToggle={() => setShowCurrentPassword((value) => !value)}
+                                />
+                                <PasswordField
+                                    label="New Password"
+                                    value={newPassword}
+                                    onChange={setNewPassword}
+                                    placeholder="Enter new password"
+                                    visible={showNewPassword}
+                                    onToggle={() => setShowNewPassword((value) => !value)}
+                                />
+                                <PasswordField
+                                    label="Confirm New Password"
+                                    value={confirmPassword}
+                                    onChange={setConfirmPassword}
+                                    placeholder="Confirm new password"
+                                    visible={showConfirmPassword}
+                                    onToggle={() => setShowConfirmPassword((value) => !value)}
+                                />
+                                <p className="profile-password-hint">Password must be at least 8 characters and include uppercase, lowercase, number, and special character.</p>
+                                <div className="profile-form__actions">
+                                    <button
+                                        className="btn btn--primary"
+                                        type="submit"
+                                        disabled={!currentPassword || !newPassword || !confirmPassword || loading}
+                                    >
+                                        {loading ? "Updating..." : "Update Password"}
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+
+                        <section className="profile-card">
+                            <div className="profile-card__header">
+                                <div>
+                                    <h3>Account & Workspace</h3>
+                                    <p>View your account and workspace information.</p>
+                                </div>
                             </div>
-                            <label className="toggle">
-                                <input type="checkbox" defaultChecked />
-                                <span className="toggle__slider"></span>
-                            </label>
-                        </div>
+
+                            <div className="profile-info-list">
+                                <div className="profile-info-row">
+                                    <CheckCircle2 aria-hidden="true" />
+                                    <span>Account Status</span>
+                                    <strong className="profile-status-chip">Active</strong>
+                                </div>
+                                <div className="profile-info-row">
+                                    <UserRound aria-hidden="true" />
+                                    <span>Access Role</span>
+                                    <strong>{roleLabel}</strong>
+                                </div>
+                                <div className="profile-info-row">
+                                    <BriefcaseBusiness aria-hidden="true" />
+                                    <span>Organization</span>
+                                    <strong>{workspaceName}</strong>
+                                </div>
+                                <div className="profile-info-row">
+                                    <Clock3 aria-hidden="true" />
+                                    <span>Last Login</span>
+                                    <strong>May 9, 2026, 07:34 PM</strong>
+                                </div>
+                                <div className="profile-info-row">
+                                    <Mail aria-hidden="true" />
+                                    <span>Linked Email</span>
+                                    <strong>{email}</strong>
+                                </div>
+                            </div>
+                        </section>
+
                     </div>
-                </section>
-
-                <section className="profile-section profile-section--danger">
-                    <div className="profile-section__header">
-                        <div>
-                            <h3>Critical Actions</h3>
-                            <p className="muted">Irreversible actions</p>
-                        </div>
-                    </div>
-
-                    <div className="danger-actions">
-                        <div className="danger-item">
-                            <div>
-                                <span className="danger-item__label">Delete Account</span>
-                                <span className="danger-item__desc">Permanently delete your account and data</span>
-                            </div>
-                            <button className="btn btn--danger">Delete Account</button>
-                        </div>
-                    </div>
-                </section>
+                </div>
             </div>
-        </div>
         </section>
     );
 }

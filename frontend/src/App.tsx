@@ -193,7 +193,7 @@ function DriverRoutes() {
 }
 
 function ManagerRoutes() {
-  const { handleSignOut, loading, email, role, fullName, phone, handleUpdateProfile, handleChangePassword, profileLoading } = useAuth();
+  const { handleSignOut, loading, email, role, fullName, phone, orgName, handleUpdateProfile, handleChangePassword, profileLoading } = useAuth();
   const data = useData();
 
   // Extract user name from email (before @)
@@ -592,10 +592,11 @@ function ManagerRoutes() {
         path="/profile"
         element={
           <>
-            <Topbar title="Profile Settings" subtitle="Manage your account" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Profile Settings" subtitle="Manage your account and security preferences." userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <ProfileSettings
               email={email}
               role={userRole}
+              organizationName={orgName}
               name={fullName}
               phone={phone}
               profileLoading={profileLoading}
@@ -618,6 +619,7 @@ function ServiceRoutes() {
     role,
     fullName,
     phone,
+    orgName,
     handleUpdateProfile,
     handleChangePassword,
     profileLoading,
@@ -665,10 +667,11 @@ function ServiceRoutes() {
         path="/profile"
         element={
           <>
-            <Topbar title="Profile Settings" subtitle="Manage your account" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Profile Settings" subtitle="Manage your account and security preferences." userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <ProfileSettings
               email={email}
               role={userRole}
+              organizationName={orgName}
               name={fullName}
               phone={phone}
               profileLoading={profileLoading}

@@ -13,6 +13,7 @@ import { apiGet, apiPatch, apiPost } from "../services/api";
 type AuthContextType = {
     accessToken: string | null;
     orgId: string | null;
+    orgName: string;
     role: string | null;
     fullName: string;
     phone: string;
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [password, setPassword] = useState("");
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [orgId, setOrgId] = useState<string | null>(null);
+    const [orgName, setOrgName] = useState(() => localStorage.getItem("fleetlanka.profile.orgName") || "");
     const [role, setRole] = useState<string | null>(null);
     const [fullName, setFullName] = useState(() => localStorage.getItem("fleetlanka.profile.name") || "");
     const [phone, setPhone] = useState(() => localStorage.getItem("fleetlanka.profile.phone") || "");
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setEmail(session?.user?.email ?? "");
             if (!session && event === "SIGNED_OUT") {
                 setOrgId(null);
+                setOrgName("");
                 setRole(null);
                 pendingSignOutRef.current = false;
             }
@@ -102,18 +105,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function fetchProfileForToken(accessTokenValue: string) {
-        return apiGet<{ org_id: string; role: string; status?: string; full_name?: string; phone?: string }>(
+        return apiGet<{ org_id: string; org_name?: string; role: string; status?: string; full_name?: string; phone?: string }>(
             "/profiles/me",
             accessTokenValue
         );
     }
 
-    async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
+    async function applyProfile(profile: { org_id: string; org_name?: string; role: string; status?: string; full_name?: string; phone?: string }) {
         if ((profile.role === "driver" || profile.role === "service") && profile.status !== "active") {
             await handleInactiveDriverSignOut();
             return false;
         }
         setOrgId(profile.org_id);
+        const orgNameValue = profile.org_name || "";
+        setOrgName(orgNameValue);
         setRole(profile.role);
         const nameValue = profile.full_name || "";
         const phoneValue = profile.phone || "";
@@ -121,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPhone(phoneValue);
         localStorage.setItem("fleetlanka.profile.name", nameValue);
         localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+        localStorage.setItem("fleetlanka.profile.orgName", orgNameValue);
         return true;
     }
 
@@ -199,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setAccessToken(data.session.access_token);
                 setEmail(data.session.user?.email ?? "");
                 setFullName(fullName);
+                setOrgName(resolvedOrgName);
             } else {
                 // Email confirmation may be required
                 setError("Account created! Please check your email to confirm.");
@@ -220,17 +227,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 full_name: name || undefined,
                 phone: phoneValue || undefined,
             };
-            const updated = await apiPatch<{ full_name?: string; phone?: string }>(
+            const updated = await apiPatch<{ full_name?: string; phone?: string; org_name?: string }>(
                 "/profiles/me",
                 payload,
                 token
             );
             const nameValue = updated.full_name || "";
             const updatedPhone = updated.phone || "";
+            const updatedOrgName = updated.org_name || orgName;
             setFullName(nameValue);
             setPhone(updatedPhone);
+            setOrgName(updatedOrgName);
             localStorage.setItem("fleetlanka.profile.name", nameValue);
             localStorage.setItem("fleetlanka.profile.phone", updatedPhone);
+            localStorage.setItem("fleetlanka.profile.orgName", updatedOrgName);
         } catch (err: any) {
             setError(err.message || "Profile update failed");
         } finally {
@@ -260,11 +270,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setAccessToken(null);
         setOrgId(null);
+        setOrgName("");
         setRole(null);
         setFullName("");
         setPhone("");
         localStorage.removeItem("fleetlanka.profile.name");
         localStorage.removeItem("fleetlanka.profile.phone");
+        localStorage.removeItem("fleetlanka.profile.orgName");
         pendingSignOutRef.current = false;
     }
 
@@ -273,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             value={{
                 accessToken,
                 orgId,
+                orgName,
                 role,
                 fullName,
                 phone,
