@@ -27,6 +27,30 @@ import {
     LiveTrip,
 } from "../types";
 
+const maintenanceEventLabels: Record<string, string> = {
+    regular_service: "Regular Service",
+    oil_change: "Oil Change",
+    tyre_change: "Tyre Change",
+    brake_service: "Brake Service",
+    battery_service: "Battery Service",
+    fuel_filter_change: "Fuel Filter Change",
+    repair: "Repair",
+    inspection: "Inspection",
+};
+
+function isComponentMaintenanceEvent(value: string) {
+    const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+    return (
+        normalized.includes("service") ||
+        normalized.includes("oil") ||
+        normalized.includes("tyre") ||
+        normalized.includes("tire") ||
+        normalized.includes("brake") ||
+        normalized.includes("battery") ||
+        (normalized.includes("fuel") && normalized.includes("filter"))
+    );
+}
+
 type DataContextType = {
     // Entity state
     vehicles: Vehicle[];
@@ -1299,8 +1323,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 engine_size_cc: engineSizeCc ? Number(engineSizeCc) : undefined,
                 accident_history_count: accidentHistoryCount ? Number(accidentHistoryCount) : undefined,
                 fuel_efficiency: fuelEfficiency ? Number(fuelEfficiency) : undefined,
-                maintenance_history: maintenanceHistory || undefined,
-                reported_issues_count: reportedIssuesCount ? Number(reportedIssuesCount) : undefined,
                 tire_condition: tireCondition || undefined,
                 brake_condition: brakeCondition || undefined,
                 battery_status: batteryStatus || undefined,
@@ -1835,11 +1857,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             if (!maintDate) throw new Error("Service date is required");
+            const eventType = maintType.trim() || maintEventType || undefined;
+            if (eventType && isComponentMaintenanceEvent(eventType) && !maintOdometer.trim()) {
+                throw new Error("Odometer is required for component maintenance events");
+            }
             const payload = {
                 vehicle_id: maintVehicle,
                 service_date: maintDate,
-                service_type: maintType || undefined,
-                event_type: maintEventType || undefined,
+                service_type: maintType || (maintEventType ? maintenanceEventLabels[maintEventType] || maintEventType : undefined),
+                event_type: eventType,
                 event_category: maintEventCategory || undefined,
                 severity: maintSeverity || undefined,
                 cost_lkr: maintCost ? Number(maintCost) : undefined,

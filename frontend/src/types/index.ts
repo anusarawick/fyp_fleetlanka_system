@@ -216,9 +216,21 @@ export type ServiceBooking = {
   completion_reviewed_at?: string;
   completion_reviewed_by?: string;
   completed_at?: string;
+  completed_odometer_km?: number;
   final_cost_lkr?: number;
   next_service_due_km?: number;
   payment_status?: string;
+  payment?: {
+    id: string;
+    status?: string;
+    amount_lkr?: number;
+    currency?: string;
+    stripe_checkout_session_id?: string;
+    stripe_payment_intent_id?: string;
+    stripe_transfer_destination?: string;
+    paid_at?: string;
+    created_at?: string;
+  } | null;
 };
 
 export type Alert = {

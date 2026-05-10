@@ -51,9 +51,21 @@ type ServicePortalBooking = {
   proposed_battery_status?: string;
   completion_review_status?: string;
   completed_at?: string;
+  completed_odometer_km?: number;
   final_cost_lkr?: number;
   next_service_due_km?: number;
   payment_status?: string;
+  payment?: {
+    id: string;
+    status?: string;
+    amount_lkr?: number;
+    currency?: string;
+    stripe_checkout_session_id?: string;
+    stripe_payment_intent_id?: string;
+    stripe_transfer_destination?: string;
+    paid_at?: string;
+    created_at?: string;
+  } | null;
   vehicle_plate_no?: string;
   vehicle_make?: string;
   vehicle_model?: string;
@@ -67,13 +79,15 @@ const statusBadgeClass: Record<string, string> = {
 };
 
 const workTypeOptions = [
+  "Regular Service",
   "Full Service",
   "Oil Change",
-  "Brake Repair",
-  "Tire Replacement",
+  "Tyre Change",
+  "Brake Service",
   "Battery Replacement",
-  "Engine Check",
-  "AC Service",
+  "Fuel Filter Change",
+  "Repair",
+  "Inspection",
 ];
 
 function vehicleLabel(booking: ServicePortalBooking) {
@@ -173,6 +187,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const [customWorkType, setCustomWorkType] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [finalCost, setFinalCost] = useState("");
+  const [completedOdometerKm, setCompletedOdometerKm] = useState("");
   const [nextServiceDueKm, setNextServiceDueKm] = useState("");
   const [proposedTireCondition, setProposedTireCondition] = useState("");
   const [proposedBrakeCondition, setProposedBrakeCondition] = useState("");
@@ -329,6 +344,18 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
       ),
     [approvedCompletedBookings]
   );
+  const paidTodayTotal = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return approvedCompletedBookings.reduce((sum, booking) => {
+      if ((booking.payment_status || "unpaid") !== "paid" || !booking.payment?.paid_at) return sum;
+      const paidAt = new Date(booking.payment.paid_at);
+      if (Number.isNaN(paidAt.getTime()) || paidAt < startOfToday || paidAt >= endOfToday) return sum;
+      const amount = Number(booking.payment.amount_lkr ?? booking.final_cost_lkr);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+  }, [approvedCompletedBookings]);
   const blockedPaymentTotal = useMemo(
     () =>
       rejectedCompletedBookings.reduce(
@@ -497,6 +524,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setCompletedOdometerKm(typeof booking.completed_odometer_km === "number" ? String(booking.completed_odometer_km) : "");
     setNextServiceDueKm(typeof booking.next_service_due_km === "number" ? String(booking.next_service_due_km) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
     setProposedBrakeCondition(booking.proposed_brake_condition || "");
@@ -512,6 +540,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType(workTypeState.custom);
     setServiceNotes(booking.service_notes || "");
     setFinalCost(typeof booking.final_cost_lkr === "number" ? String(booking.final_cost_lkr) : "");
+    setCompletedOdometerKm(typeof booking.completed_odometer_km === "number" ? String(booking.completed_odometer_km) : "");
     setNextServiceDueKm(typeof booking.next_service_due_km === "number" ? String(booking.next_service_due_km) : "");
     setProposedTireCondition(booking.proposed_tire_condition || "");
     setProposedBrakeCondition(booking.proposed_brake_condition || "");
@@ -525,6 +554,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     setCustomWorkType("");
     setServiceNotes("");
     setFinalCost("");
+    setCompletedOdometerKm("");
     setNextServiceDueKm("");
     setProposedTireCondition("");
     setProposedBrakeCondition("");
@@ -540,6 +570,14 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
     if (requiresFinalCost && !finalCost.trim()) {
       setError("Final cost is required when marking a booking as completed.");
+      return;
+    }
+    if (
+      (((editMode === "transition" && nextStatus === "completed") ||
+        (editMode === "details" && currentStatus === "completed")) &&
+        !completedOdometerKm.trim())
+    ) {
+      setError("Completed odometer is required for completed bookings.");
       return;
     }
     if (
@@ -566,6 +604,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
           ? {
               work_type: effectiveWorkType || undefined,
               service_notes: serviceNotes || undefined,
+              completed_odometer_km:
+                currentStatus === "completed" && completedOdometerKm ? Number(completedOdometerKm) : undefined,
               final_cost_lkr: currentStatus === "completed" && finalCost ? Number(finalCost) : undefined,
               next_service_due_km:
                 currentStatus === "completed" && nextServiceDueKm ? Number(nextServiceDueKm) : undefined,
@@ -577,6 +617,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               status: nextStatus,
               work_type: nextStatus === "completed" ? effectiveWorkType || undefined : undefined,
               service_notes: serviceNotes || undefined,
+              completed_odometer_km: nextStatus === "completed" && completedOdometerKm ? Number(completedOdometerKm) : undefined,
               proposed_tire_condition: nextStatus === "completed" ? proposedTireCondition || undefined : undefined,
               proposed_brake_condition: nextStatus === "completed" ? proposedBrakeCondition || undefined : undefined,
               proposed_battery_status: nextStatus === "completed" ? proposedBatteryStatus || undefined : undefined,
@@ -611,7 +652,9 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     if (status === "pending") return "Not Started";
     if (status === "confirmed") return "Ready to complete";
     if (status === "cancelled") return "Correction Required";
-    if ((booking.completion_review_status || "pending") === "approved") return "Awaiting Payment";
+    if ((booking.completion_review_status || "pending") === "approved") {
+      return (booking.payment_status || "unpaid") === "paid" ? "Paid" : "Awaiting Payment";
+    }
     if ((booking.completion_review_status || "pending") === "rejected") return "Correction Required";
     return "Awaiting Approval";
   }
@@ -619,10 +662,19 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   function reviewStateTone(booking: ServicePortalBooking) {
     const label = reviewStateLabel(booking);
     if (label === "Ready to complete") return "green";
+    if (label === "Paid") return "green";
     if (label === "Awaiting Payment") return "blue";
     if (label === "Correction Required") return "red";
     if (label === "Awaiting Approval") return "amber";
     return "muted";
+  }
+
+  function renderViewBookingAction(booking: ServicePortalBooking) {
+    return (
+      <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label={`View booking ${booking.id}`}>
+        <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
+      </button>
+    );
   }
 
   function statusTone(booking: ServicePortalBooking) {
@@ -672,11 +724,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     }
 
     if (status === "completed" && reviewStatus === "approved") {
-      return (
-        <button className="service-bookings-action service-bookings-action--secondary" type="button" onClick={() => setSelectedBooking(booking)}>
-          View Details
-        </button>
-      );
+      return renderViewBookingAction(booking);
     }
 
     if (status === "completed") {
@@ -687,11 +735,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
       );
     }
 
-    return (
-      <button className="service-bookings-action service-bookings-action--secondary" type="button" onClick={() => setSelectedBooking(booking)}>
-        View Details
-      </button>
-    );
+    return renderViewBookingAction(booking);
   }
 
   function renderBookingActions(booking: ServicePortalBooking, compact = false) {
@@ -771,23 +815,23 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
           <section className="service-dashboard-kpis" aria-label="Service dashboard summary">
             <article className="service-dashboard-kpi service-dashboard-kpi--blue">
               <span className="service-dashboard-kpi__icon"><CalendarDays aria-hidden="true" /></span>
-              <div><strong>{pendingBookings.length}</strong><span>New Bookings</span><small>Waiting for confirmation</small></div>
+              <div><span className="service-dashboard-kpi__label">New Bookings</span><strong>{pendingBookings.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--indigo">
               <span className="service-dashboard-kpi__icon"><CheckCircle2 aria-hidden="true" /></span>
-              <div><strong>{confirmedBookings.length}</strong><span>Confirmed Jobs</span><small>Scheduled & in progress</small></div>
+              <div><span className="service-dashboard-kpi__label">Confirmed Jobs</span><strong>{confirmedBookings.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--amber">
               <span className="service-dashboard-kpi__icon"><Clock3 aria-hidden="true" /></span>
-              <div><strong>{needsManagerReviewCount}</strong><span>Awaiting Manager Approval</span><small>Pending manager review</small></div>
+              <div><span className="service-dashboard-kpi__label">Awaiting Approval</span><strong>{needsManagerReviewCount}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--green">
               <span className="service-dashboard-kpi__icon"><ClipboardCheck aria-hidden="true" /></span>
-              <div><strong>{completedBookings.length}</strong><span>Completed Jobs</span><small>Ready for settlement and history</small></div>
+              <div><span className="service-dashboard-kpi__label">Completed Jobs</span><strong>{completedBookings.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--purple">
               <span className="service-dashboard-kpi__icon"><WalletCards aria-hidden="true" /></span>
-              <div><strong>{formatCurrency(awaitingPaymentTotal)}</strong><span>Awaiting Payment</span><small>Payment support coming soon</small></div>
+              <div><span className="service-dashboard-kpi__label">Awaiting Payment</span><strong>{formatCurrency(awaitingPaymentTotal)}</strong></div>
             </article>
           </section>
 
@@ -892,15 +936,15 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
             <article className="service-dashboard-card service-dashboard-card--payments">
               <div className="service-dashboard-card__header">
                 <div><WalletCards aria-hidden="true" /><h3>Payment Settlement Queue</h3></div>
-                <button type="button" disabled title="Payment support coming soon">View Payments</button>
+                <Link to="/service/bookings">View Payments</Link>
               </div>
               <div className="service-payment-summary">
                 <div><span>Awaiting Payment</span><strong>{formatCurrency(awaitingPaymentTotal)}</strong></div>
-                <div><span>Paid Today</span><strong>LKR 0</strong></div>
+                <div><span>Paid Today</span><strong>{formatCurrency(paidTodayTotal)}</strong></div>
                 <div><span>Blocked</span><strong>{formatCurrency(blockedPaymentTotal)}</strong></div>
               </div>
               {paymentRows.length === 0 ? (
-                <p className="service-dashboard-empty">Approved service payments will appear here once in-app payments are enabled.</p>
+                <p className="service-dashboard-empty">No payment-related bookings right now.</p>
               ) : (
                 <div className="service-payment-table">
                   <div className="service-payment-table__head"><span>Vehicle (Plate)</span><span>Make / Model</span><span>Work Type</span><span>Amount</span><span>Payment State</span><span>Status</span></div>
@@ -920,23 +964,23 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
           <section className="service-dashboard-kpis service-bookings-kpis" aria-label="Service bookings summary">
             <article className="service-dashboard-kpi service-dashboard-kpi--blue">
               <span className="service-dashboard-kpi__icon"><ClipboardList aria-hidden="true" /></span>
-              <div><strong>{pendingBookings.length}</strong><span>New Requests</span><small>Waiting for confirmation</small></div>
+              <div><span className="service-dashboard-kpi__label">New Requests</span><strong>{pendingBookings.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--green">
               <span className="service-dashboard-kpi__icon"><CheckCircle2 aria-hidden="true" /></span>
-              <div><strong>{confirmedBookings.length}</strong><span>Confirmed Jobs</span><small>Ready to complete</small></div>
+              <div><span className="service-dashboard-kpi__label">Confirmed Jobs</span><strong>{confirmedBookings.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--amber">
               <span className="service-dashboard-kpi__icon"><Clock3 aria-hidden="true" /></span>
-              <div><strong>{needsManagerReviewCount}</strong><span>Awaiting Approval</span><small>Manager review pending</small></div>
+              <div><span className="service-dashboard-kpi__label">Awaiting Approval</span><strong>{needsManagerReviewCount}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--red">
               <span className="service-dashboard-kpi__icon"><AlertTriangle aria-hidden="true" /></span>
-              <div><strong>{reopenedReviewRows.length}</strong><span>Reopened Reviews</span><small>Correction in progress</small></div>
+              <div><span className="service-dashboard-kpi__label">Reopened Reviews</span><strong>{reopenedReviewRows.length}</strong></div>
             </article>
             <article className="service-dashboard-kpi service-dashboard-kpi--indigo">
               <span className="service-dashboard-kpi__icon"><WalletCards aria-hidden="true" /></span>
-              <div><strong>{formatCurrency(awaitingPaymentTotal)}</strong><span>Payment Ready</span><small>Approved, awaiting payment</small></div>
+              <div><span className="service-dashboard-kpi__label">Awaiting Payment</span><strong>{formatCurrency(awaitingPaymentTotal)}</strong></div>
             </article>
           </section>
 
@@ -1118,13 +1162,13 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
               <article className="service-bookings-side-card">
                 <div className="service-bookings-side-card__header">
-                  <h3>Payment Preview</h3>
+                  <h3>Payment Status</h3>
                 </div>
                 <div className="service-bookings-payment-callout">
                   <WalletCards aria-hidden="true" />
                   <div>
                     <strong>Awaiting Payment: {formatCurrency(awaitingPaymentTotal)}</strong>
-                    <span>In-app payments coming soon.</span>
+                    <span>Approved bookings not paid yet.</span>
                   </div>
                 </div>
                 {paymentReadyRows.length === 0 ? (
@@ -1165,6 +1209,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="detail-item"><span>Status</span><strong>{formatStatus(selectedBooking.status)}</strong></div>
               <div className="detail-item"><span>Work Type</span><strong>{displayText(selectedBooking.work_type)}</strong></div>
               <div className="detail-item"><span>Completed At</span><strong>{displayText(selectedBooking.completed_at)}</strong></div>
+              <div className="detail-item"><span>Completed Odometer</span><strong>{formatOdometer(selectedBooking.completed_odometer_km)}</strong></div>
+              <div className="detail-item"><span>FleetLanka Payment ID</span><strong>{selectedBooking.payment?.id || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{displayText(selectedBooking.notes, "No notes recorded")}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{displayText(selectedBooking.service_notes, "No service notes recorded")}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{formatCurrency(selectedBooking.final_cost_lkr)}</strong></div>
@@ -1270,7 +1316,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                 <>
                   <div className="service-form-section">
                     <div className="service-form-section__header">
-                      <span>Cost & Next Service</span>
+                      <span>Cost & Odometer</span>
                     </div>
                     <div className="service-form-section__grid">
                       <label>
@@ -1280,6 +1326,15 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                           placeholder="Enter final cost"
                           value={finalCost}
                           onChange={(e) => setFinalCost(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Completed Odometer (km)
+                        <input
+                          type="number"
+                          placeholder="Enter completed odometer"
+                          value={completedOdometerKm}
+                          onChange={(e) => setCompletedOdometerKm(e.target.value)}
                         />
                       </label>
                       <label>

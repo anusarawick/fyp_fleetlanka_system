@@ -7,6 +7,7 @@ create extension if not exists "pgcrypto";
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  stripe_customer_id text,
   created_at timestamptz not null default now()
 );
 
@@ -304,6 +305,7 @@ create table if not exists public.service_bookings (
   completion_reviewed_at timestamptz,
   completion_reviewed_by uuid references public.profiles(id) on delete set null,
   completed_at timestamptz,
+  completed_odometer_km numeric,
   final_cost_lkr numeric,
   next_service_due_km numeric,
   payment_status text not null default 'unpaid',

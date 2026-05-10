@@ -76,9 +76,21 @@ type ServiceBooking = {
   completion_reviewed_at?: string;
   completion_reviewed_by?: string;
   completed_at?: string;
+  completed_odometer_km?: number;
   final_cost_lkr?: number;
   next_service_due_km?: number;
   payment_status?: string;
+  payment?: {
+    id: string;
+    status?: string;
+    amount_lkr?: number;
+    currency?: string;
+    stripe_checkout_session_id?: string;
+    stripe_payment_intent_id?: string;
+    stripe_transfer_destination?: string;
+    paid_at?: string;
+    created_at?: string;
+  } | null;
 };
 
 type MaintenanceProps = {
@@ -147,11 +159,27 @@ type MaintenanceProps = {
   onCreateBookingCheckout: (bookingId: string) => Promise<void>;
 };
 
+const maintenanceEventOptions = [
+  { value: "regular_service", label: "Regular Service" },
+  { value: "oil_change", label: "Oil Change" },
+  { value: "tyre_change", label: "Tyre Change" },
+  { value: "brake_service", label: "Brake Service" },
+  { value: "battery_service", label: "Battery Service" },
+  { value: "fuel_filter_change", label: "Fuel Filter Change" },
+  { value: "repair", label: "Repair" },
+  { value: "inspection", label: "Inspection" },
+];
+
+function isStandardMaintenanceEvent(value: string) {
+  return maintenanceEventOptions.some((option) => option.value === value);
+}
+
 type MaintenanceTab = "records" | "bookings" | "centers" | "approvals";
 
 export default function Maintenance(props: MaintenanceProps) {
   const [activeTab, setActiveTab] = useState<MaintenanceTab>("records");
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [showCustomMaintenanceType, setShowCustomMaintenanceType] = useState(false);
   const [showCenterModal, setShowCenterModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [maintenanceSearch, setMaintenanceSearch] = useState("");
@@ -292,7 +320,13 @@ export default function Maintenance(props: MaintenanceProps) {
     return matchesQuery && matchesStatus && matchesReview;
   });
 
-  const approvalBookings = props.bookings.filter((booking) => (booking.status || "pending") === "completed");
+  const approvalBookings = props.bookings.filter((booking) => {
+    if ((booking.status || "pending") !== "completed") return false;
+    const reviewStatus = booking.completion_review_status || "pending";
+    if (reviewStatus === "pending" || reviewStatus === "rejected") return true;
+    return reviewStatus === "approved" && (booking.payment_status || "unpaid") !== "paid";
+  });
+  const approvalQueueCount = approvalBookings.length;
   const filteredApprovals = approvalBookings.filter((booking) => {
     const query = approvalSearch.trim().toLowerCase();
     const review = reviewState(booking);
@@ -397,6 +431,7 @@ export default function Maintenance(props: MaintenanceProps) {
 
   function closeMaintenanceModal() {
     setShowMaintenanceModal(false);
+    setShowCustomMaintenanceType(false);
     if (props.editingMaintenanceId) {
       props.onCancelMaintenanceEdit();
     }
@@ -474,6 +509,19 @@ export default function Maintenance(props: MaintenanceProps) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function formatDateTime(value?: string) {
+    if (!value) return "--";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   function formatLkr(value?: number) {
@@ -645,7 +693,7 @@ export default function Maintenance(props: MaintenanceProps) {
         <section className="dashboard-kpis maintenance-kpi-grid">
           <article className="dashboard-kpi-card dashboard-kpi-card--orange maintenance-kpi-card">
             <div className="dashboard-kpi-card__icon"><CalendarClock aria-hidden="true" /></div>
-            <div><span className="dashboard-kpi-card__label">Open Bookings</span><strong>{openBookings.length}</strong><small className="dashboard-trend dashboard-trend--warning">{pendingApprovalCount} awaiting action</small></div>
+            <div><span className="dashboard-kpi-card__label">Open Bookings</span><strong>{openBookings.length}</strong><small className="dashboard-trend dashboard-trend--warning">{approvalQueueCount} awaiting action</small></div>
           </article>
           <article className="dashboard-kpi-card dashboard-kpi-card--red maintenance-kpi-card">
             <div className="dashboard-kpi-card__icon"><ClipboardList aria-hidden="true" /></div>
@@ -667,12 +715,12 @@ export default function Maintenance(props: MaintenanceProps) {
               {[
                 ["records", "Records"],
                 ["bookings", "Service Bookings"],
-                ["centers", "Service Centers"],
                 ["approvals", "Approval Queue"],
+                ["centers", "Service Centers"],
               ].map(([tab, label]) => (
                 <button key={tab} type="button" className={`maintenance-tab ${activeTab === tab ? "maintenance-tab--active" : ""}`} onClick={() => setActiveTab(tab as MaintenanceTab)}>
                   {label}
-                  {tab === "approvals" && pendingApprovalCount > 0 && <span className="maintenance-tab-count">{pendingApprovalCount}</span>}
+                  {tab === "approvals" && approvalQueueCount > 0 && <span className="maintenance-tab-count">{approvalQueueCount}</span>}
                 </button>
               ))}
             </nav>
@@ -684,7 +732,7 @@ export default function Maintenance(props: MaintenanceProps) {
                   <label className="maintenance-select-control"><span>Severity</span><select value={maintenanceSeverityFilter} onChange={(event) => setMaintenanceSeverityFilter(event.target.value)}><option value="all">All Severities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
                   <label className="maintenance-select-control"><span>Type</span><select value={maintenanceTypeFilter} onChange={(event) => setMaintenanceTypeFilter(event.target.value)}><option value="all">All Types</option>{maintenanceTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
                   <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={maintenanceRowsPerPage} onChange={(event) => setMaintenanceRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
-                  <button className="maintenance-table-action" type="button" onClick={() => { props.onCancelMaintenanceEdit(); setShowMaintenanceModal(true); }}><Plus aria-hidden="true" /> Log Service</button>
+                  <button className="maintenance-table-action" type="button" onClick={() => { props.onCancelMaintenanceEdit(); setShowCustomMaintenanceType(false); setShowMaintenanceModal(true); }}><Plus aria-hidden="true" /> Log Service</button>
                 </div>
                 {filteredMaintenance.length === 0 ? <div className="maintenance-empty-state"><FileText aria-hidden="true" /><div><strong>No service records found</strong><span>Log completed service work when vehicles return from maintenance.</span></div></div> : (
                   <div className="maintenance-register-table maintenance-records-table">
@@ -699,7 +747,7 @@ export default function Maintenance(props: MaintenanceProps) {
                         <span data-label="Odometer (km)">{formatOdometer(record.odometer_km)}</span>
                         <span className="maintenance-row-actions" data-label="Actions">
                           <button className="icon-action" type="button" onClick={() => setSelectedRecord(record)} title="View record" aria-label={`View maintenance ${record.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
-                          <button className="icon-action" type="button" onClick={() => { props.onEditMaintenance(record); setShowMaintenanceModal(true); }} title="Edit record" aria-label={`Edit maintenance ${record.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
+                          <button className="icon-action" type="button" onClick={() => { props.onEditMaintenance(record); setShowCustomMaintenanceType(Boolean(record.event_type && !isStandardMaintenanceEvent(record.event_type))); setShowMaintenanceModal(true); }} title="Edit record" aria-label={`Edit maintenance ${record.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
                           <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteTarget(record)} disabled={props.loading} title="Delete record" aria-label={`Delete maintenance ${record.id}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
                         </span>
                       </div>
@@ -712,7 +760,7 @@ export default function Maintenance(props: MaintenanceProps) {
 
             {activeTab === "bookings" && (
               <>
-                {pendingApprovalCount > 0 && <div className="maintenance-alert-banner"><AlertTriangle aria-hidden="true" /><strong>{pendingApprovalCount} completion reviews require manager action</strong><button type="button" onClick={() => setActiveTab("approvals")}>Go to Approval Queue</button></div>}
+                {approvalQueueCount > 0 && <div className="maintenance-alert-banner"><AlertTriangle aria-hidden="true" /><strong>{approvalQueueCount} approval queue items require manager action</strong><button type="button" onClick={() => setActiveTab("approvals")}>Go to Approval Queue</button></div>}
                 <div className="maintenance-table-controls maintenance-table-controls--bookings">
                   <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, center, or work type..." value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} /></label>
                   <label className="maintenance-select-control"><span>Status</span><select value={bookingStatusFilter} onChange={(event) => setBookingStatusFilter(event.target.value)}><option value="all">All Statuses</option><option value="scheduled">Scheduled</option><option value="in_progress">In Progress</option><option value="awaiting_review">Awaiting Review</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
@@ -739,8 +787,6 @@ export default function Maintenance(props: MaintenanceProps) {
                           <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
                           <span className="maintenance-row-actions" data-label="Actions">
                             <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label={`View booking ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
-                            {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
-                            {payment.payable && <button className="icon-action" type="button" onClick={() => props.onCreateBookingCheckout(booking.id)} disabled={props.loading} title="Pay service center" aria-label={`Pay service center for booking ${booking.id}`}><WalletCards className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
                             <button className="icon-action" type="button" onClick={() => { props.onEditBooking(booking); setShowBookingModal(true); }} disabled={!canChange} title="Edit booking" aria-label={`Edit booking ${booking.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
                             <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteBookingTarget(booking)} disabled={props.loading || !canChange} title="Delete booking" aria-label={`Delete booking ${booking.id}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
                           </span>
@@ -750,6 +796,49 @@ export default function Maintenance(props: MaintenanceProps) {
                   </div>
                 )}
                 <div className="maintenance-table-footer"><span>Showing {filteredBookings.length === 0 ? 0 : (currentBookingPage - 1) * bookingRowsPerPage + 1} to {Math.min(currentBookingPage * bookingRowsPerPage, filteredBookings.length)} of {filteredBookings.length} bookings</span><div><button type="button" onClick={() => setBookingPage((prev) => Math.max(1, prev - 1))} disabled={currentBookingPage === 1}>Prev</button><strong>{currentBookingPage}</strong><button type="button" onClick={() => setBookingPage((prev) => Math.min(bookingTotalPages, prev + 1))} disabled={currentBookingPage === bookingTotalPages}>Next</button></div></div>
+              </>
+            )}
+
+            {activeTab === "approvals" && (
+              <>
+                {pendingApprovalCount > 0 && <div className="maintenance-alert-banner maintenance-alert-banner--strong"><AlertTriangle aria-hidden="true" /><strong>Several completion reviews require your action.</strong><span>Please review and approve, reject, or request changes to proceed.</span></div>}
+                <div className="maintenance-table-controls maintenance-table-controls--approvals">
+                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, center, or work type..." value={approvalSearch} onChange={(event) => setApprovalSearch(event.target.value)} /></label>
+                  <label className="maintenance-select-control"><span>Review</span><select value={approvalReviewFilter} onChange={(event) => setApprovalReviewFilter(event.target.value)}><option value="all">All Review Statuses</option><option value="pending">Pending Review</option><option value="approved">Approved</option><option value="rejected">Needs Clarification</option></select></label>
+                  <label className="maintenance-select-control"><span>Center</span><select value={approvalCenterFilter} onChange={(event) => setApprovalCenterFilter(event.target.value)}><option value="all">All Service Centers</option>{props.centers.map((center) => <option key={center.id} value={center.id}>{center.name}</option>)}</select></label>
+                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={approvalRowsPerPage} onChange={(event) => setApprovalRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
+                </div>
+                {filteredApprovals.length === 0 ? <div className="maintenance-empty-state"><ClipboardList aria-hidden="true" /><div><strong>No completion reviews found</strong><span>Completed bookings will appear here for manager review.</span></div></div> : (
+                  <div className="maintenance-register-table maintenance-approvals-table">
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Work Type</span><span>Completed On</span><span>Review Status</span><span>Payment</span><span>Actions</span></div>
+                    {paginatedApprovals.map((booking) => {
+                      const review = reviewState(booking);
+                      const payment = getBookingPaymentState(booking);
+                      return (
+                        <div className="maintenance-table__row" key={booking.id}>
+                          <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
+                          <span data-label="Service Center">{centerLabelMap[booking.center_id || ""] || "--"}</span>
+                          <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
+                          <span data-label="Completed On">{formatDate(booking.completed_at || booking.requested_date)}</span>
+                          <span data-label="Review Status"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
+                          <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
+                          <span className="maintenance-row-actions maintenance-row-actions--review" data-label="Actions">
+                            <button className="maintenance-review-action" type="button" onClick={() => setSelectedBooking(booking)}>Review</button>
+                            {isPendingCompletionReview(booking) ? (
+                              <>
+                                <button className="maintenance-review-action maintenance-review-action--approve" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading}>Approve</button>
+                                <button className="maintenance-review-action maintenance-review-action--reject" type="button" onClick={() => { setRejectBookingTarget(booking); setRejectBookingNote(booking.completion_review_notes || ""); }} disabled={props.loading}>Reject</button>
+                              </>
+                            ) : (
+                              payment.payable && <button className="maintenance-review-action maintenance-review-action--payment" type="button" onClick={() => props.onCreateBookingCheckout(booking.id)} disabled={props.loading}>Pay</button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="maintenance-table-footer"><span>Showing {filteredApprovals.length === 0 ? 0 : (currentApprovalPage - 1) * approvalRowsPerPage + 1} to {Math.min(currentApprovalPage * approvalRowsPerPage, filteredApprovals.length)} of {filteredApprovals.length} reviews</span><div><button type="button" onClick={() => setApprovalPage((prev) => Math.max(1, prev - 1))} disabled={currentApprovalPage === 1}>Prev</button><strong>{currentApprovalPage}</strong><button type="button" onClick={() => setApprovalPage((prev) => Math.min(approvalTotalPages, prev + 1))} disabled={currentApprovalPage === approvalTotalPages}>Next</button></div></div>
               </>
             )}
 
@@ -792,46 +881,6 @@ export default function Maintenance(props: MaintenanceProps) {
                   </div>
                 )}
                 <div className="maintenance-table-footer"><span>Showing {filteredCenters.length === 0 ? 0 : (currentCenterPage - 1) * centerRowsPerPage + 1} to {Math.min(currentCenterPage * centerRowsPerPage, filteredCenters.length)} of {filteredCenters.length} service centers</span><div><button type="button" onClick={() => setCenterPage((prev) => Math.max(1, prev - 1))} disabled={currentCenterPage === 1}>Prev</button><strong>{currentCenterPage}</strong><button type="button" onClick={() => setCenterPage((prev) => Math.min(centerTotalPages, prev + 1))} disabled={currentCenterPage === centerTotalPages}>Next</button></div></div>
-              </>
-            )}
-
-            {activeTab === "approvals" && (
-              <>
-                {pendingApprovalCount > 0 && <div className="maintenance-alert-banner maintenance-alert-banner--strong"><AlertTriangle aria-hidden="true" /><strong>Several completion reviews require your action.</strong><span>Please review and approve, reject, or request changes to proceed.</span></div>}
-                <div className="maintenance-table-controls maintenance-table-controls--approvals">
-                  <label className="maintenance-search-control"><Search aria-hidden="true" /><input type="search" placeholder="Search by vehicle, center, or work type..." value={approvalSearch} onChange={(event) => setApprovalSearch(event.target.value)} /></label>
-                  <label className="maintenance-select-control"><span>Review</span><select value={approvalReviewFilter} onChange={(event) => setApprovalReviewFilter(event.target.value)}><option value="all">All Review Statuses</option><option value="pending">Pending Review</option><option value="approved">Approved</option><option value="rejected">Needs Clarification</option></select></label>
-                  <label className="maintenance-select-control"><span>Center</span><select value={approvalCenterFilter} onChange={(event) => setApprovalCenterFilter(event.target.value)}><option value="all">All Service Centers</option>{props.centers.map((center) => <option key={center.id} value={center.id}>{center.name}</option>)}</select></label>
-                  <label className="maintenance-select-control maintenance-select-control--rows"><span>Rows</span><select value={approvalRowsPerPage} onChange={(event) => setApprovalRowsPerPage(Number(event.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label>
-                </div>
-                {filteredApprovals.length === 0 ? <div className="maintenance-empty-state"><ClipboardList aria-hidden="true" /><div><strong>No completion reviews found</strong><span>Completed bookings will appear here for manager review.</span></div></div> : (
-                  <div className="maintenance-register-table maintenance-approvals-table">
-                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Work Type</span><span>Completed On</span><span>Proposed Updates</span><span>Review Status</span><span>Payment</span><span>Actions</span></div>
-                    {paginatedApprovals.map((booking) => {
-                      const review = reviewState(booking);
-                      const updates = proposedUpdates(booking);
-                      const payment = getBookingPaymentState(booking);
-                      return (
-                        <div className="maintenance-table__row" key={booking.id}>
-                          <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
-                          <span data-label="Service Center">{centerLabelMap[booking.center_id || ""] || "--"}</span>
-                          <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
-                          <span data-label="Completed On">{formatDate(booking.completed_at || booking.requested_date)}</span>
-                          <span data-label="Proposed Updates" className="maintenance-update-list">{updates.length ? updates.map((update) => <em key={update}>{update}</em>) : "--"}</span>
-                          <span data-label="Review Status"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
-                          <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
-                          <span className="maintenance-row-actions" data-label="Actions">
-                            <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View review" aria-label={`View review ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
-                            {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
-                            {payment.payable && <button className="icon-action" type="button" onClick={() => props.onCreateBookingCheckout(booking.id)} disabled={props.loading} title="Pay service center" aria-label={`Pay service center for booking ${booking.id}`}><WalletCards className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
-                            {isPendingCompletionReview(booking) && <button className="icon-action icon-action--danger" type="button" onClick={() => { setRejectBookingTarget(booking); setRejectBookingNote(booking.completion_review_notes || ""); }} disabled={props.loading} title="Reject completion" aria-label={`Reject completion ${booking.id}`}><XCircle className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="maintenance-table-footer"><span>Showing {filteredApprovals.length === 0 ? 0 : (currentApprovalPage - 1) * approvalRowsPerPage + 1} to {Math.min(currentApprovalPage * approvalRowsPerPage, filteredApprovals.length)} of {filteredApprovals.length} reviews</span><div><button type="button" onClick={() => setApprovalPage((prev) => Math.max(1, prev - 1))} disabled={currentApprovalPage === 1}>Prev</button><strong>{currentApprovalPage}</strong><button type="button" onClick={() => setApprovalPage((prev) => Math.min(approvalTotalPages, prev + 1))} disabled={currentApprovalPage === approvalTotalPages}>Next</button></div></div>
               </>
             )}
           </section>
@@ -921,22 +970,43 @@ export default function Maintenance(props: MaintenanceProps) {
                 />
               </label>
               <label>
-                Service Type
-                <input placeholder="e.g., Oil Change" value={props.maintType} onChange={(e) => props.setMaintType(e.target.value)} />
-              </label>
-              <label>
                 Event Type
-                <select value={props.maintEventType} onChange={(e) => props.setMaintEventType(e.target.value)}>
+                <select
+                  value={
+                    !showCustomMaintenanceType && isStandardMaintenanceEvent(props.maintEventType)
+                      ? props.maintEventType
+                      : showCustomMaintenanceType
+                        ? "Other"
+                        : ""
+                  }
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setShowCustomMaintenanceType(value === "Other");
+                    props.setMaintEventType(value === "Other" ? "" : value);
+                    if (value !== "Other") {
+                      props.setMaintType("");
+                    }
+                  }}
+                >
                   <option value="">Select event</option>
-                  <option value="regular_service">Regular Service</option>
-                  <option value="oil_change">Oil Change</option>
-                  <option value="tyre_change">Tyre Change</option>
-                  <option value="brake_service">Brake Service</option>
-                  <option value="battery_service">Battery Service</option>
-                  <option value="fuel_system_service">Fuel System Service</option>
-                  <option value="repair">Repair</option>
+                  {maintenanceEventOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                  <option value="Other">Other</option>
                 </select>
               </label>
+              {showCustomMaintenanceType ? (
+                <label>
+                  Custom Service Type
+                  <input
+                    placeholder="e.g., AC Service"
+                    value={props.maintType || (!isStandardMaintenanceEvent(props.maintEventType) ? props.maintEventType : "")}
+                    onChange={(e) => props.setMaintType(e.target.value)}
+                  />
+                </label>
+              ) : null}
               <div className="form-section-title">
                 <ClipboardList aria-hidden="true" />
                 <div>
@@ -1308,11 +1378,18 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Work Type</span><strong>{selectedBooking.work_type || "--"}</strong></div>
               <div className="detail-item"><span>Review Status</span><strong>{selectedBooking.completion_review_status || "--"}</strong></div>
               <div className="detail-item"><span>Payment Status</span><strong>{getBookingPaymentState(selectedBooking).label}</strong></div>
+              <div className="detail-item"><span>Payment Amount</span><strong>{typeof selectedBooking.payment?.amount_lkr === "number" ? `LKR ${formatLkr(selectedBooking.payment.amount_lkr)}` : "--"}</strong></div>
+              <div className="detail-item"><span>Payee / Service Center</span><strong>{centerLabelMap[selectedBooking.center_id || ""] || "--"}</strong></div>
+              <div className="detail-item"><span>FleetLanka Payment ID</span><strong>{selectedBooking.payment?.id || "--"}</strong></div>
+              <div className="detail-item"><span>Paid At</span><strong>{formatDateTime(selectedBooking.payment?.paid_at)}</strong></div>
+              <div className="detail-item detail-item--full"><span>Stripe Checkout Session ID</span><strong>{selectedBooking.payment?.stripe_checkout_session_id || "--"}</strong></div>
+              <div className="detail-item detail-item--full"><span>Stripe Payment Intent ID</span><strong>{selectedBooking.payment?.stripe_payment_intent_id || "--"}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedBooking.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Center</span><strong>{centerLabelMap[selectedBooking.center_id || ""] || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{selectedBooking.service_notes || "--"}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{typeof selectedBooking.final_cost_lkr === "number" ? `Rs.${selectedBooking.final_cost_lkr.toLocaleString()}` : "--"}</strong></div>
+              <div className="detail-item"><span>Completed Odometer</span><strong>{typeof selectedBooking.completed_odometer_km === "number" ? `${selectedBooking.completed_odometer_km.toLocaleString()} km` : "--"}</strong></div>
               <div className="detail-item"><span>Next Due (km)</span><strong>{typeof selectedBooking.next_service_due_km === "number" ? selectedBooking.next_service_due_km.toLocaleString() : "--"}</strong></div>
               <div className="detail-item"><span>Completed At</span><strong>{selectedBooking.completed_at || "--"}</strong></div>
               <div className="detail-item"><span>Tire Condition</span><strong>{selectedBooking.proposed_tire_condition || "--"}</strong></div>
@@ -1366,6 +1443,7 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[approveBookingTarget.vehicle_id || ""] || "Vehicle"}</strong></div>
               <div className="detail-item"><span>Workshop</span><strong>{centerLabelMap[approveBookingTarget.center_id || ""] || "Service center"}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{formatCurrency(approveBookingTarget.final_cost_lkr)}</strong></div>
+              <div className="detail-item"><span>Completed Odometer</span><strong>{typeof approveBookingTarget.completed_odometer_km === "number" ? `${approveBookingTarget.completed_odometer_km.toLocaleString()} km` : "Not recorded"}</strong></div>
               <div className="detail-item"><span>Next Due</span><strong>{typeof approveBookingTarget.next_service_due_km === "number" ? `${approveBookingTarget.next_service_due_km.toLocaleString()} km` : "Not recorded"}</strong></div>
               <div className="detail-item"><span>Tyres</span><strong>{approveBookingTarget.proposed_tire_condition || "Not recorded"}</strong></div>
               <div className="detail-item"><span>Brakes</span><strong>{approveBookingTarget.proposed_brake_condition || "Not recorded"}</strong></div>
@@ -1407,6 +1485,7 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[rejectBookingTarget.vehicle_id || ""] || "Vehicle"}</strong></div>
               <div className="detail-item"><span>Workshop</span><strong>{centerLabelMap[rejectBookingTarget.center_id || ""] || "Service center"}</strong></div>
               <div className="detail-item"><span>Final Cost</span><strong>{formatCurrency(rejectBookingTarget.final_cost_lkr)}</strong></div>
+              <div className="detail-item"><span>Completed Odometer</span><strong>{typeof rejectBookingTarget.completed_odometer_km === "number" ? `${rejectBookingTarget.completed_odometer_km.toLocaleString()} km` : "Not recorded"}</strong></div>
               <div className="detail-item"><span>Next Due</span><strong>{typeof rejectBookingTarget.next_service_due_km === "number" ? `${rejectBookingTarget.next_service_due_km.toLocaleString()} km` : "Not recorded"}</strong></div>
               <div className="detail-item detail-item--full"><span>Service Notes</span><strong>{rejectBookingTarget.service_notes || "Not recorded"}</strong></div>
             </div>

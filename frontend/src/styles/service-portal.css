@@ -26,9 +26,9 @@
   min-height: 106px;
   padding: 18px 20px;
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 70px minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 
 .service-dashboard-kpi__icon,
@@ -61,9 +61,9 @@
   overflow-wrap: anywhere;
 }
 
-.service-dashboard-kpi span:not(.service-dashboard-kpi__icon) {
+.service-dashboard-kpi__label {
   display: block;
-  color: #111827;
+  color: #1f2937;
   font-size: 13px;
   font-weight: 800;
 }
@@ -918,7 +918,7 @@
 }
 
 .service-bookings-kpis .service-dashboard-kpi {
-  min-height: 118px;
+  min-height: 106px;
 }
 
 .service-bookings-grid {
@@ -1025,7 +1025,7 @@
 .service-bookings-table__row {
   min-width: 880px;
   display: grid;
-  grid-template-columns: minmax(138px, 1.15fr) minmax(118px, 0.8fr) minmax(120px, 0.82fr) minmax(92px, 0.62fr) minmax(130px, 0.86fr) minmax(86px, 0.58fr) minmax(138px, 0.9fr);
+  grid-template-columns: minmax(138px, 1.15fr) minmax(116px, 0.82fr) minmax(120px, 0.82fr) minmax(96px, 0.66fr) minmax(128px, 0.86fr) minmax(92px, 0.62fr) minmax(118px, 0.78fr);
   align-items: center;
   border-bottom: 1px solid #e8eef4;
 }
@@ -1041,11 +1041,11 @@
 .service-bookings-table__head span,
 .service-bookings-table__row > span {
   min-width: 0;
-  padding: 11px 12px;
+  padding: 9px 12px;
 }
 
 .service-bookings-table__row {
-  min-height: 76px;
+  min-height: 58px;
   background: #ffffff;
   color: #203044;
   font-size: 12px;
@@ -1066,7 +1066,7 @@
 
 .service-bookings-table__row small {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: #314258;
   font-size: 11px;
   font-weight: 650;

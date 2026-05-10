@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.vehicles import VehicleCreate, VehicleOut, VehicleUpdate
 from app.services.supabase_client import get_supabase_client
+from app.services.vehicle_ml_defaults import fill_missing_vehicle_ml_defaults
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
@@ -88,6 +89,28 @@ def _upsert_vehicle_ml_rows(supabase, org_id: str, vehicle_id: str, operating_da
         ) from exc
 
 
+def _get_vehicle_ml_rows(supabase, vehicle_id: str) -> tuple[dict, dict]:
+    operating_rows = (
+        supabase.table("vehicle_operating_profiles")
+        .select("*")
+        .eq("vehicle_id", vehicle_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    component_rows = (
+        supabase.table("vehicle_component_state")
+        .select("*")
+        .eq("vehicle_id", vehicle_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return (operating_rows[0] if operating_rows else {}, component_rows[0] if component_rows else {})
+
+
 @router.get("", response_model=List[VehicleOut])
 def list_vehicles(token: Optional[str] = Depends(get_bearer_token)) -> List[VehicleOut]:
     if not token:
@@ -111,6 +134,11 @@ def create_vehicle(
     vehicle_data, operating_data, component_data = _split_vehicle_payload(data)
     if vehicle_data.get("odometer_km") is None and vehicle_data.get("mileage") is not None:
         vehicle_data["odometer_km"] = vehicle_data["mileage"]
+    vehicle_data, operating_data, component_data = fill_missing_vehicle_ml_defaults(
+        vehicle_data,
+        operating_data,
+        component_data,
+    )
     vehicle_data["org_id"] = profile["org_id"]
     response = supabase.table("vehicles").insert(vehicle_data).execute()
     if not response.data:
@@ -132,6 +160,26 @@ def update_vehicle(
     supabase = get_supabase_client(token)
     data = payload.model_dump(exclude_none=True)
     vehicle_data, operating_data, component_data = _split_vehicle_payload(data)
+    existing_vehicle_resp = (
+        supabase.table("vehicles")
+        .select("*")
+        .eq("id", vehicle_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    if not existing_vehicle_resp.data:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    existing_operating, existing_component = _get_vehicle_ml_rows(supabase, vehicle_id)
+    default_source_vehicle = {**existing_vehicle_resp.data, **vehicle_data}
+    vehicle_data, operating_data, component_data = fill_missing_vehicle_ml_defaults(
+        default_source_vehicle,
+        operating_data,
+        component_data,
+        existing_operating,
+        existing_component,
+    )
+    vehicle_data = {key: value for key, value in vehicle_data.items() if key in data or key == "vehicle_type"}
     if vehicle_data:
         response = (
             supabase.table("vehicles")

@@ -390,9 +390,36 @@ export default function Management(props: ManagementProps) {
       ["business_type", "business type"],
       ["road_condition_primary", "road condition"],
       ["driver_behavior_profile", "driver behavior"],
-      ["next_service_due_km", "next service due"],
     ];
     return fields.filter(([key]) => isBlankValue(vehicle[key])).map(([, label]) => label);
+  }
+
+  function getMlReadiness(vehicle: Vehicle) {
+    if (isBlankValue(vehicle.odometer_km)) {
+      return { label: "Needs odometer", tone: "warning" };
+    }
+    const operatingMissing = ["fuel_type", "business_type", "road_condition_primary", "driver_behavior_profile"]
+      .some((key) => isBlankValue(vehicle[key as keyof Vehicle]));
+    if (operatingMissing) {
+      return { label: "Needs operating profile", tone: "warning" };
+    }
+    const componentMissing = [
+      "service_interval_km",
+      "oil_interval_km",
+      "tyre_life_km",
+      "brake_life_km",
+      "battery_life_months",
+      "fuel_filter_interval_km",
+      "last_service_odometer_km",
+      "last_oil_change_odometer_km",
+      "last_tyre_change_odometer_km",
+      "last_brake_service_odometer_km",
+      "last_fuel_filter_change_odometer_km",
+    ].some((key) => isBlankValue(vehicle[key as keyof Vehicle]));
+    if (componentMissing) {
+      return { label: "Needs component baseline", tone: "info" };
+    }
+    return { label: "Complete", tone: "success" };
   }
 
   function getServiceDueText(vehicle: Vehicle, prediction?: MaintenancePrediction) {
@@ -623,11 +650,13 @@ export default function Management(props: ManagementProps) {
                       <span>Type</span>
                       <span>Odometer</span>
                       <span>Maintenance Risk</span>
+                      <span>ML Readiness</span>
                       <span>Status</span>
                       <span>Actions</span>
                     </div>
                     {paginatedVehicles.map((v) => {
                       const latestPrediction = props.maintenancePredictionMap[v.id];
+                      const readiness = getMlReadiness(v);
                       return (
                         <div className="table__row management-table__row management-table__row--vehicles" key={v.id}>
                           <span className="management-table__cell management-table__cell--plate" data-label="Plate">{v.plate_no}</span>
@@ -645,6 +674,9 @@ export default function Management(props: ManagementProps) {
                             ) : (
                               <span className="risk-pill risk-pill--neutral">Needs check</span>
                             )}
+                          </span>
+                          <span className="management-table__cell management-table__cell--readiness" data-label="ML Readiness">
+                            <span className={`risk-pill risk-pill--${readiness.tone}`}>{readiness.label}</span>
                           </span>
                           <span className="management-table__cell management-table__cell--status" data-label="Status">
                             {v.status ? (
@@ -846,13 +878,11 @@ export default function Management(props: ManagementProps) {
                   onChange={(e) => props.setVehicleType(e.target.value)}
                 >
                   <option value="">Select type</option>
-                  <option value="Car">Car</option>
-                  <option value="SUV">SUV</option>
-                  <option value="Truck">Truck</option>
-                  <option value="Bus">Bus</option>
-                  <option value="Motorcycle">Motorcycle</option>
-                  <option value="Van">Van</option>
-                  <option value="Pickup">Pickup</option>
+                  <option value="car">Car</option>
+                  <option value="van">Van / SUV</option>
+                  <option value="truck">Truck</option>
+                  <option value="bus">Bus</option>
+                  <option value="pickup">Pickup</option>
                 </select>
               </label>
               <label>
@@ -961,8 +991,8 @@ export default function Management(props: ManagementProps) {
               <div className="form-section-title">
                 <CheckCircle2 aria-hidden="true" />
                 <div>
-                  <h4>Optional Condition Notes</h4>
-                  <p>Useful workshop notes when a full service interval record is not yet available.</p>
+                  <h4>Current Component Notes</h4>
+                  <p>Optional workshop condition notes. ML timing uses the component baseline below.</p>
                 </div>
               </div>
               <label>
@@ -982,24 +1012,6 @@ export default function Management(props: ManagementProps) {
                   placeholder="e.g., 12.5"
                   value={props.fuelEfficiency}
                   onChange={(e) => props.setFuelEfficiency(e.target.value)}
-                />
-              </label>
-              <label>
-                Maintenance History
-                <select value={props.maintenanceHistory} onChange={(e) => props.setMaintenanceHistory(e.target.value)}>
-                  <option value="">Select history</option>
-                  <option value="Good">Good</option>
-                  <option value="Average">Average</option>
-                  <option value="Poor">Poor</option>
-                </select>
-              </label>
-              <label>
-                Reported Issues Count
-                <input
-                  type="number"
-                  min="0"
-                  value={props.reportedIssuesCount}
-                  onChange={(e) => props.setReportedIssuesCount(e.target.value)}
                 />
               </label>
               <label>
@@ -1175,6 +1187,7 @@ export default function Management(props: ManagementProps) {
                         <div className="detail-item"><span>Make / Model</span><strong>{formatMakeModel(viewTarget)}</strong></div>
                         <div className="detail-item"><span>Type / Year</span><strong>{viewTarget.vehicle_type || "Not recorded"} • {viewTarget.year || "Not recorded"}</strong></div>
                         <div className="detail-item"><span>Status</span><strong>{formatReadable(viewTarget.status)}</strong></div>
+                        <div className="detail-item"><span>ML Readiness</span><strong>{getMlReadiness(viewTarget).label}</strong></div>
                         <div className="detail-item"><span>Odometer</span><strong>{formatNumber(viewTarget.odometer_km)} km</strong></div>
                         <div className="detail-item"><span>Engine / Transmission</span><strong>{formatNumber(viewTarget.engine_size_cc)} cc • {viewTarget.transmission_type || "Not recorded"}</strong></div>
                       </div>

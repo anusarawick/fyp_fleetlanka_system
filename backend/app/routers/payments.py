@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Optional
 
 import stripe
@@ -13,6 +12,7 @@ from app.core.deps import (
     require_manager_profile,
     require_service_profile,
 )
+from app.services.payment_sync import mark_service_booking_payment_paid
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(tags=["payments"])
@@ -77,6 +77,56 @@ def _sync_center_account_status(admin_client: Any, center: dict) -> dict:
     if response.data:
         return response.data[0]
     return {**center, "stripe_onboarding_status": status}
+
+
+def _get_manager_email(admin_client: Any, profile_id: str) -> str | None:
+    try:
+        user = admin_client.auth.admin.get_user_by_id(profile_id)
+        return getattr(user.user, "email", None)
+    except Exception:
+        return None
+
+
+def _get_or_create_org_stripe_customer(admin_client: Any, profile: dict) -> str:
+    org_resp = (
+        admin_client.table("organizations")
+        .select("id,name,stripe_customer_id")
+        .eq("id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    org = org_resp.data
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org.get("stripe_customer_id"):
+        return org["stripe_customer_id"]
+
+    manager_email = _get_manager_email(admin_client, profile["id"])
+    org_name = (org.get("name") or "FleetLanka Organization").strip()
+    manager_name = (profile.get("full_name") or "").strip()
+    customer_payload: dict[str, Any] = {
+        "name": org_name,
+        "metadata": {
+            "org_id": profile["org_id"],
+            "org_name": org_name,
+            "manager_profile_id": profile["id"],
+        },
+    }
+    if manager_email:
+        customer_payload["email"] = manager_email
+    if manager_name:
+        customer_payload["description"] = f"FleetLanka billing contact: {manager_name}"
+
+    customer = stripe.Customer.create(**customer_payload)
+    update_resp = (
+        admin_client.table("organizations")
+        .update({"stripe_customer_id": customer.id})
+        .eq("id", profile["org_id"])
+        .execute()
+    )
+    if not update_resp.data:
+        raise HTTPException(status_code=500, detail="Failed to save organization Stripe customer")
+    return customer.id
 
 
 @router.post("/service-portal/payments/connect-account", response_model=StripeAccountStatusOut)
@@ -200,6 +250,7 @@ def create_service_booking_checkout(
         raise HTTPException(status_code=400, detail="Service center Stripe onboarding is not complete")
 
     amount_minor = _amount_to_minor_units(booking.get("final_cost_lkr"))
+    stripe_customer_id = _get_or_create_org_stripe_customer(admin_client, profile)
     payment_resp = (
         admin_client.table("service_booking_payments")
         .insert({
@@ -219,6 +270,7 @@ def create_service_booking_checkout(
     base_url = _frontend_url()
     session = stripe.checkout.Session.create(
         mode="payment",
+        customer=stripe_customer_id,
         line_items=[
             {
                 "price_data": {
@@ -235,6 +287,9 @@ def create_service_booking_checkout(
             "transfer_data": {
                 "destination": synced_center["stripe_account_id"],
             },
+        },
+        saved_payment_method_options={
+            "payment_method_save": "enabled",
         },
         metadata={
             "booking_id": booking_id,
@@ -281,16 +336,12 @@ async def handle_stripe_webhook(
         org_id = metadata.get("org_id")
         if payment_id and booking_id and org_id:
             admin_client = get_supabase_client(use_service_role=True)
-            paid_at = datetime.now(timezone.utc).isoformat()
-            admin_client.table("service_booking_payments").update(
-                {
-                    "status": "paid",
-                    "stripe_payment_intent_id": session.get("payment_intent"),
-                    "paid_at": paid_at,
-                }
-            ).eq("id", payment_id).eq("booking_id", booking_id).eq("org_id", org_id).execute()
-            admin_client.table("service_bookings").update(
-                {"payment_status": "paid"}
-            ).eq("id", booking_id).eq("org_id", org_id).execute()
+            mark_service_booking_payment_paid(
+                admin_client,
+                payment_id=payment_id,
+                booking_id=booking_id,
+                org_id=org_id,
+                payment_intent_id=session.get("payment_intent"),
+            )
 
     return {"received": True}

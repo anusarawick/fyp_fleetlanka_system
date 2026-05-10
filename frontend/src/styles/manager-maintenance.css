@@ -577,7 +577,7 @@
 
 .maintenance-bookings-table .maintenance-table__head,
 .maintenance-bookings-table .maintenance-table__row {
-  grid-template-columns: minmax(92px, 0.66fr) minmax(118px, 0.85fr) minmax(96px, 0.66fr) minmax(112px, 0.8fr) 96px 112px 118px 142px;
+  grid-template-columns: minmax(92px, 0.62fr) minmax(116px, 0.78fr) minmax(96px, 0.62fr) minmax(108px, 0.72fr) 118px 126px 118px 104px;
 }
 
 .maintenance-centers-table .maintenance-table__head,
@@ -587,7 +587,7 @@
 
 .maintenance-approvals-table .maintenance-table__head,
 .maintenance-approvals-table .maintenance-table__row {
-  grid-template-columns: minmax(92px, 0.65fr) minmax(118px, 0.82fr) minmax(104px, 0.76fr) minmax(92px, 0.64fr) minmax(112px, 0.78fr) 118px 116px 132px;
+  grid-template-columns: minmax(96px, 0.66fr) minmax(128px, 0.82fr) minmax(112px, 0.74fr) minmax(100px, 0.64fr) 126px 108px 216px;
 }
 
 .maintenance-table__head {
@@ -669,8 +669,58 @@
 }
 
 .maintenance-bookings-table .maintenance-row-actions {
-  width: 126px;
-  min-width: 126px;
+  width: 104px;
+  min-width: 104px;
+}
+
+.maintenance-approvals-table .maintenance-row-actions--review {
+  width: 216px;
+  min-width: 216px;
+  gap: 6px;
+}
+
+.maintenance-review-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #d9e2ea;
+  border-radius: 5px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.maintenance-review-action:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.maintenance-review-action--approve {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.maintenance-review-action--reject {
+  border-color: #fecaca;
+  color: #dc2626;
+  background: #fff7f7;
+}
+
+.maintenance-review-action--payment {
+  border-color: #bfdbfe;
+  color: var(--maintenance-blue);
+  background: #eff6ff;
+}
+
+.maintenance-review-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .app--manager .maintenance-page .icon-action {
@@ -699,6 +749,14 @@
 
 .app--manager .maintenance-page .icon-action--danger {
   color: #dc2626;
+}
+
+.app--manager .maintenance-page .icon-action--success {
+  color: #15803d;
+}
+
+.app--manager .maintenance-page .icon-action--payment {
+  color: var(--maintenance-blue);
 }
 
 .maintenance-badge {

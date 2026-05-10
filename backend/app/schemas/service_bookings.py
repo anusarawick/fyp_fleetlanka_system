@@ -21,9 +21,22 @@ class ServiceBookingCreate(BaseModel):
     completion_reviewed_at: Optional[str] = None
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
+    completed_odometer_km: Optional[float] = None
     final_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     payment_status: Optional[str] = None
+
+
+class ServiceBookingPaymentSummary(BaseModel):
+    id: str
+    status: Optional[str] = None
+    amount_lkr: Optional[float] = None
+    currency: Optional[str] = None
+    stripe_checkout_session_id: Optional[str] = None
+    stripe_payment_intent_id: Optional[str] = None
+    stripe_transfer_destination: Optional[str] = None
+    paid_at: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class ServiceBookingOut(BaseModel):
@@ -44,9 +57,11 @@ class ServiceBookingOut(BaseModel):
     completion_reviewed_at: Optional[str] = None
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
+    completed_odometer_km: Optional[float] = None
     final_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     payment_status: Optional[str] = "unpaid"
+    payment: Optional[ServiceBookingPaymentSummary] = None
 
 
 class ServiceBookingUpdate(BaseModel):
@@ -63,6 +78,7 @@ class ServiceBookingUpdate(BaseModel):
     completion_reviewed_at: Optional[str] = None
     completion_reviewed_by: Optional[str] = None
     completed_at: Optional[str] = None
+    completed_odometer_km: Optional[float] = None
     final_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     payment_status: Optional[str] = None
