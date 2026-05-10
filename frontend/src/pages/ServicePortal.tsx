@@ -53,6 +53,7 @@ type ServicePortalBooking = {
   completed_at?: string;
   final_cost_lkr?: number;
   next_service_due_km?: number;
+  payment_status?: string;
   vehicle_plate_no?: string;
   vehicle_make?: string;
   vehicle_model?: string;
@@ -320,7 +321,10 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const awaitingPaymentTotal = useMemo(
     () =>
       approvedCompletedBookings.reduce(
-        (sum, booking) => sum + (Number.isFinite(Number(booking.final_cost_lkr)) ? Number(booking.final_cost_lkr) : 0),
+        (sum, booking) =>
+          (booking.payment_status || "unpaid") === "paid"
+            ? sum
+            : sum + (Number.isFinite(Number(booking.final_cost_lkr)) ? Number(booking.final_cost_lkr) : 0),
         0
       ),
     [approvedCompletedBookings]
@@ -393,11 +397,12 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         .map((booking) => {
           const reviewStatus = booking.completion_review_status || "pending";
           if (reviewStatus === "approved") {
+            const paid = (booking.payment_status || "unpaid") === "paid";
             return {
               booking,
-              label: "Awaiting Payment",
-              tone: "blue",
-              status: "Approved, payment pending.",
+              label: paid ? "Paid" : "Awaiting Payment",
+              tone: paid ? "green" : "blue",
+              status: paid ? "Payment received." : "Approved, payment pending.",
             };
           }
           if (reviewStatus === "rejected") {
@@ -445,6 +450,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const paymentReadyRows = useMemo(
     () =>
       [...approvedCompletedBookings]
+        .filter((booking) => (booking.payment_status || "unpaid") !== "paid")
         .sort((a, b) => String(b.completed_at || b.requested_date).localeCompare(String(a.completed_at || a.requested_date)))
         .slice(0, 3),
     [approvedCompletedBookings]

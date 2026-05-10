@@ -220,6 +220,8 @@ type DataContextType = {
     setCenterPortalEmail: (v: string) => void;
     centerPortalPassword: string;
     setCenterPortalPassword: (v: string) => void;
+    centerPaymentAccess: boolean;
+    setCenterPaymentAccess: (v: boolean) => void;
     editingCenterId: string | null;
 
     // Booking form state
@@ -316,6 +318,7 @@ type DataContextType = {
     handleDeleteBooking: (bookingId: string) => Promise<void>;
     handleApproveBookingCompletion: (bookingId: string) => Promise<void>;
     handleRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
+    handleCreateBookingCheckout: (bookingId: string) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
@@ -530,6 +533,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [centerAddress, setCenterAddress] = useState("");
     const [centerPortalEmail, setCenterPortalEmail] = useState("");
     const [centerPortalPassword, setCenterPortalPassword] = useState("");
+    const [centerPaymentAccess, setCenterPaymentAccess] = useState(false);
     const [editingCenterId, setEditingCenterId] = useState<string | null>(null);
 
     // Booking form
@@ -2004,6 +2008,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setCenterAddress(center.address || "");
         setCenterPortalEmail("");
         setCenterPortalPassword("");
+        setCenterPaymentAccess(Boolean(center.payment_access_enabled));
     }
 
     function handleCancelCenterEdit() {
@@ -2013,6 +2018,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setCenterAddress("");
         setCenterPortalEmail("");
         setCenterPortalPassword("");
+        setCenterPaymentAccess(false);
     }
 
     async function handleAddCenter(e: FormEvent) {
@@ -2025,14 +2031,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (!editingCenterId && ((centerPortalEmail && !centerPortalPassword) || (!centerPortalEmail && centerPortalPassword))) {
                 throw new Error("Portal email and password must both be provided to create a service center login");
             }
-            const payload = {
+            const payload: {
+                name: string;
+                phone?: string;
+                address?: string;
+                portal_email?: string;
+                portal_password?: string;
+                portal_contact_name?: string;
+                payment_access_enabled: boolean;
+            } = {
                 name: centerName,
                 phone: centerPhone || undefined,
                 address: centerAddress || undefined,
                 portal_email: centerPortalEmail || undefined,
                 portal_password: centerPortalPassword || undefined,
-                portal_contact_name: centerName || undefined,
+                payment_access_enabled: centerPaymentAccess,
             };
+            if (!editingCenterId || centerPortalEmail || centerPortalPassword) {
+                payload.portal_contact_name = centerName || undefined;
+            }
             if (editingCenterId) {
                 const updated = await apiPatch<ServiceCenter>(`/service-centers/${editingCenterId}`, payload, token);
                 setServiceCenters((prev) => prev.map((center) => (center.id === updated.id ? updated : center)));
@@ -2040,6 +2057,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 const created = await apiPost<ServiceCenter>("/service-centers", payload, token);
                 setServiceCenters((prev) => [created, ...prev]);
             }
+            const refreshedCenters = await apiGet<ServiceCenter[]>("/service-centers", token);
+            setServiceCenters(refreshedCenters);
             handleCancelCenterEdit();
         } catch (err: any) {
             setError(err.message || "Create failed");
@@ -2169,6 +2188,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setServiceBookings((prev) => prev.map((booking) => (booking.id === rejected.id ? rejected : booking)));
         } catch (err: any) {
             setError(err.message || "Rejection failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleCreateBookingCheckout(bookingId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const response = await apiPost<{ checkout_url: string }>(
+                `/payments/service-bookings/${bookingId}/checkout`,
+                {},
+                token
+            );
+            window.location.href = response.checkout_url;
+        } catch (err: any) {
+            setError(err.message || "Payment checkout failed");
         } finally {
             setLoading(false);
         }
@@ -2447,6 +2484,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setCenterPortalEmail,
                 centerPortalPassword,
                 setCenterPortalPassword,
+                centerPaymentAccess,
+                setCenterPaymentAccess,
                 editingCenterId,
                 bookingVehicle,
                 setBookingVehicle,
@@ -2503,6 +2542,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleDeleteBooking,
                 handleApproveBookingCompletion,
                 handleRejectBookingCompletion,
+                handleCreateBookingCheckout,
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,

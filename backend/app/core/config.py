@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     database_url: str = ""
     openrouteservice_api_key: str = ""
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_connected_account_country: str = "US"
+    frontend_url: str = "http://localhost:5173"
 
 
 settings = Settings()

@@ -12,6 +12,9 @@ class ServicePortalCenterOut(BaseModel):
     name: str
     phone: Optional[str] = None
     address: Optional[str] = None
+    payment_access_enabled: bool = False
+    stripe_account_id: Optional[str] = None
+    stripe_onboarding_status: Optional[str] = "not_started"
 
 
 class ServicePortalSummaryOut(BaseModel):
@@ -49,6 +52,7 @@ class ServicePortalBookingOut(BaseModel):
     completed_at: Optional[str] = None
     final_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
+    payment_status: Optional[str] = "unpaid"
 
 
 class ServicePortalBookingUpdate(BaseModel):

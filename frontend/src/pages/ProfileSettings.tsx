@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, UserRound } from "lucide-react";
+import { BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, UserRound, WalletCards } from "lucide-react";
+import { apiGet, apiPost } from "../services/api";
 
 type ProfileSettingsProps = {
     email: string;
@@ -11,6 +12,17 @@ type ProfileSettingsProps = {
     onUpdateProfile?: (name: string, phone: string) => Promise<void>;
     onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
     loading?: boolean;
+    token?: string;
+};
+
+type ServicePortalMe = {
+    center: {
+        id: string;
+        name: string;
+        payment_access_enabled?: boolean;
+        stripe_account_id?: string;
+        stripe_onboarding_status?: string;
+    };
 };
 
 export default function ProfileSettings({
@@ -22,7 +34,8 @@ export default function ProfileSettings({
     profileLoading = false,
     onUpdateProfile,
     onChangePassword,
-    loading = false
+    loading = false,
+    token
 }: ProfileSettingsProps) {
     const [localName, setLocalName] = useState(name || "");
     const [localPhone, setLocalPhone] = useState(phone || "");
@@ -33,6 +46,9 @@ export default function ProfileSettings({
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [successMessage, setSuccessMessage] = useState("");
+    const [serviceCenter, setServiceCenter] = useState<ServicePortalMe["center"] | null>(null);
+    const [paymentSetupLoading, setPaymentSetupLoading] = useState(false);
+    const [paymentSetupError, setPaymentSetupError] = useState<string | null>(null);
 
     const roleLabel =
         role === "manager" || role === "owner"
@@ -50,6 +66,23 @@ export default function ProfileSettings({
     useEffect(() => {
         setLocalPhone(phone || "");
     }, [phone]);
+
+    useEffect(() => {
+        if (role !== "service" || !token) return;
+        apiGet<ServicePortalMe>("/service-portal/me", token)
+            .then(async (data) => {
+                if (data.center.payment_access_enabled) {
+                    const status = await apiGet<Partial<ServicePortalMe["center"]>>(
+                        "/service-portal/payments/account-status",
+                        token
+                    ).catch(() => null);
+                    setServiceCenter(status ? { ...data.center, ...status } : data.center);
+                    return;
+                }
+                setServiceCenter(data.center);
+            })
+            .catch(() => setServiceCenter(null));
+    }, [role, token]);
 
     async function handleProfileUpdate(e: FormEvent) {
         e.preventDefault();
@@ -79,6 +112,36 @@ export default function ProfileSettings({
     function resetProfileForm() {
         setLocalName(name || "");
         setLocalPhone(phone || "");
+    }
+
+    async function handleStripeSetup() {
+        if (!token) return;
+        setPaymentSetupLoading(true);
+        setPaymentSetupError(null);
+        try {
+            const account = await apiPost<ServicePortalMe["center"]>(
+                "/service-portal/payments/connect-account",
+                {},
+                token
+            );
+            setServiceCenter((prev) => ({ ...(prev || account), ...account }));
+            const link = await apiPost<{ url: string }>(
+                "/service-portal/payments/onboarding-link",
+                {},
+                token
+            );
+            window.location.href = link.url;
+        } catch (err: any) {
+            setPaymentSetupError(err.message || "Stripe setup failed");
+        } finally {
+            setPaymentSetupLoading(false);
+        }
+    }
+
+    function paymentSetupLabel() {
+        if (!serviceCenter?.stripe_account_id) return "Set up Stripe payments";
+        if (serviceCenter.stripe_onboarding_status === "connected") return "Payments connected";
+        return "Continue Stripe setup";
     }
 
     function PasswordField({
@@ -236,6 +299,42 @@ export default function ProfileSettings({
                                 </div>
                             </form>
                         </section>
+
+                        {role === "service" && serviceCenter?.payment_access_enabled && (
+                            <section className="profile-card">
+                                <div className="profile-card__header">
+                                    <div>
+                                        <h3>Payment Setup</h3>
+                                        <p>Connect Stripe to receive approved service booking payments.</p>
+                                    </div>
+                                </div>
+
+                                <div className="profile-info-list">
+                                    <div className="profile-info-row">
+                                        <WalletCards aria-hidden="true" />
+                                        <span>Stripe Status</span>
+                                        <strong className="profile-status-chip">
+                                            {serviceCenter.stripe_onboarding_status === "connected"
+                                                ? "Connected"
+                                                : serviceCenter.stripe_account_id
+                                                    ? "Setup Pending"
+                                                    : "Not Started"}
+                                        </strong>
+                                    </div>
+                                </div>
+                                {paymentSetupError && <div className="alert alert--error">{paymentSetupError}</div>}
+                                <div className="profile-form__actions">
+                                    <button
+                                        className="btn btn--primary"
+                                        type="button"
+                                        onClick={handleStripeSetup}
+                                        disabled={paymentSetupLoading || serviceCenter.stripe_onboarding_status === "connected"}
+                                    >
+                                        {paymentSetupLoading ? "Opening Stripe..." : paymentSetupLabel()}
+                                    </button>
+                                </div>
+                            </section>
+                        )}
 
                         <section className="profile-card">
                             <div className="profile-card__header">

@@ -193,7 +193,7 @@ function DriverRoutes() {
 }
 
 function ManagerRoutes() {
-  const { handleSignOut, loading, email, role, fullName, phone, orgName, handleUpdateProfile, handleChangePassword, profileLoading } = useAuth();
+  const { handleSignOut, loading, email, role, fullName, phone, orgName, handleUpdateProfile, handleChangePassword, profileLoading, token } = useAuth();
   const data = useData();
 
   // Extract user name from email (before @)
@@ -444,6 +444,8 @@ function ManagerRoutes() {
               setCenterPortalEmail={data.setCenterPortalEmail}
               centerPortalPassword={data.centerPortalPassword}
               setCenterPortalPassword={data.setCenterPortalPassword}
+              centerPaymentAccess={data.centerPaymentAccess}
+              setCenterPaymentAccess={data.setCenterPaymentAccess}
               editingCenterId={data.editingCenterId}
               bookingVehicle={data.bookingVehicle}
               setBookingVehicle={data.setBookingVehicle}
@@ -468,6 +470,7 @@ function ManagerRoutes() {
               onDeleteBooking={data.handleDeleteBooking}
               onApproveBookingCompletion={data.handleApproveBookingCompletion}
               onRejectBookingCompletion={data.handleRejectBookingCompletion}
+              onCreateBookingCheckout={data.handleCreateBookingCheckout}
             />
           </>
         }
@@ -601,6 +604,7 @@ function ManagerRoutes() {
               phone={phone}
               profileLoading={profileLoading}
               loading={loading}
+              token={token}
               onUpdateProfile={handleUpdateProfile}
               onChangePassword={handleChangePassword}
             />
@@ -676,6 +680,7 @@ function ServiceRoutes() {
               phone={phone}
               profileLoading={profileLoading}
               loading={loading}
+              token={token}
               onUpdateProfile={handleUpdateProfile}
               onChangePassword={handleChangePassword}
             />

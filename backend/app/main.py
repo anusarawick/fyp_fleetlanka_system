@@ -15,6 +15,7 @@ from app.routers.ml import router as ml_router
 from app.routers.vehicles import router as vehicles_router
 from app.routers.driver_scores import router as driver_scores_router
 from app.routers.saved_places import router as saved_places_router
+from app.routers.payments import router as payments_router
 
 app = FastAPI(title="FleetLanka API")
 
@@ -47,3 +48,4 @@ app.include_router(service_portal_router)
 app.include_router(ml_router)
 app.include_router(driver_scores_router)
 app.include_router(saved_places_router)
+app.include_router(payments_router)

@@ -54,6 +54,9 @@ type ServiceCenter = {
   profile_id?: string;
   phone?: string;
   address?: string;
+  payment_access_enabled?: boolean;
+  stripe_account_id?: string;
+  stripe_onboarding_status?: string;
 };
 
 type ServiceBooking = {
@@ -75,6 +78,7 @@ type ServiceBooking = {
   completed_at?: string;
   final_cost_lkr?: number;
   next_service_due_km?: number;
+  payment_status?: string;
 };
 
 type MaintenanceProps = {
@@ -114,6 +118,8 @@ type MaintenanceProps = {
   setCenterPortalEmail: (v: string) => void;
   centerPortalPassword: string;
   setCenterPortalPassword: (v: string) => void;
+  centerPaymentAccess: boolean;
+  setCenterPaymentAccess: (v: boolean) => void;
   editingCenterId: string | null;
   bookingVehicle: string;
   setBookingVehicle: (v: string) => void;
@@ -138,6 +144,7 @@ type MaintenanceProps = {
   onDeleteBooking: (bookingId: string) => Promise<void>;
   onApproveBookingCompletion: (bookingId: string) => Promise<void>;
   onRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
+  onCreateBookingCheckout: (bookingId: string) => Promise<void>;
 };
 
 type MaintenanceTab = "records" | "bookings" | "centers" | "approvals";
@@ -534,6 +541,38 @@ export default function Maintenance(props: MaintenanceProps) {
     return { key: "active", label: "Active", tone: "success" };
   }
 
+  function getPaymentAccessState(center: ServiceCenter) {
+    if (!center.payment_access_enabled) {
+      return { label: "Disabled", tone: "neutral" };
+    }
+    if (center.stripe_onboarding_status === "connected") {
+      return { label: "Connected", tone: "success" };
+    }
+    if (center.stripe_account_id) {
+      return { label: "Setup Pending", tone: "warning" };
+    }
+    return { label: "Enabled", tone: "info" };
+  }
+
+  function getBookingCenter(booking: ServiceBooking) {
+    return props.centers.find((center) => center.id === booking.center_id);
+  }
+
+  function getBookingPaymentState(booking: ServiceBooking) {
+    const status = booking.payment_status || "unpaid";
+    if (status === "paid") return { label: "Paid", tone: "success", payable: false };
+    if ((booking.status || "pending") !== "completed" || (booking.completion_review_status || "pending") !== "approved") {
+      return { label: "Not Ready", tone: "neutral", payable: false };
+    }
+    if (!booking.final_cost_lkr || booking.final_cost_lkr <= 0) {
+      return { label: "Missing Cost", tone: "warning", payable: false };
+    }
+    const center = getBookingCenter(booking);
+    if (!center?.payment_access_enabled) return { label: "Payments Off", tone: "warning", payable: false };
+    if (center.stripe_onboarding_status !== "connected") return { label: "Center Setup Needed", tone: "warning", payable: false };
+    return { label: "Payable", tone: "info", payable: true };
+  }
+
   function getCenterLocation(center: ServiceCenter) {
     const parts = (center.address || "")
       .split(",")
@@ -683,10 +722,11 @@ export default function Maintenance(props: MaintenanceProps) {
                 </div>
                 {filteredBookings.length === 0 ? <div className="maintenance-empty-state"><CalendarClock aria-hidden="true" /><div><strong>No service bookings found</strong><span>Create bookings for vehicles that need workshop attention.</span></div></div> : (
                   <div className="maintenance-register-table maintenance-bookings-table">
-                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Requested Date</span><span>Work Type</span><span>Status</span><span>Review</span><span>Actions</span></div>
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Requested Date</span><span>Work Type</span><span>Status</span><span>Review</span><span>Payment</span><span>Actions</span></div>
                     {paginatedBookings.map((booking) => {
                       const status = bookingWorkflowStatus(booking);
                       const review = reviewState(booking);
+                      const payment = getBookingPaymentState(booking);
                       const canChange = (booking.status || "pending") === "pending";
                       return (
                         <div className="maintenance-table__row" key={booking.id}>
@@ -696,9 +736,11 @@ export default function Maintenance(props: MaintenanceProps) {
                           <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
                           <span data-label="Status"><span className={`maintenance-badge maintenance-badge--${status.tone}`}>{status.label}</span></span>
                           <span data-label="Review"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
+                          <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
                           <span className="maintenance-row-actions" data-label="Actions">
                             <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label={`View booking ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
                             {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
+                            {payment.payable && <button className="icon-action" type="button" onClick={() => props.onCreateBookingCheckout(booking.id)} disabled={props.loading} title="Pay service center" aria-label={`Pay service center for booking ${booking.id}`}><WalletCards className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
                             <button className="icon-action" type="button" onClick={() => { props.onEditBooking(booking); setShowBookingModal(true); }} disabled={!canChange} title="Edit booking" aria-label={`Edit booking ${booking.id}`}><Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" /></button>
                             <button className="icon-action icon-action--danger" type="button" onClick={() => setDeleteBookingTarget(booking)} disabled={props.loading || !canChange} title="Delete booking" aria-label={`Delete booking ${booking.id}`}><Trash2 className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>
                           </span>
@@ -728,13 +770,15 @@ export default function Maintenance(props: MaintenanceProps) {
                 </div>
                 {filteredCenters.length === 0 ? <div className="maintenance-empty-state"><Building2 aria-hidden="true" /><div><strong>No service centers found</strong><span>Add workshop partners to schedule and review maintenance work.</span></div></div> : (
                   <div className="maintenance-register-table maintenance-centers-table">
-                    <div className="maintenance-table__head"><span>Center</span><span>Portal Account</span><span>Phone</span><span>Address</span><span>Actions</span></div>
+                    <div className="maintenance-table__head"><span>Center</span><span>Portal Account</span><span>Payment Access</span><span>Phone</span><span>Address</span><span>Actions</span></div>
                     {paginatedCenters.map((center) => {
                       const portal = getPortalState(center);
+                      const paymentAccess = getPaymentAccessState(center);
                       return (
                         <div className="maintenance-table__row" key={center.id}>
                           <span data-label="Center"><strong>{center.name}</strong><small>{getCenterLocation(center)}</small></span>
                           <span data-label="Portal Account"><span className={`maintenance-badge maintenance-badge--${portal.tone}`}>{portal.label}</span></span>
+                          <span data-label="Payment Access"><span className={`maintenance-badge maintenance-badge--${paymentAccess.tone}`}>{paymentAccess.label}</span></span>
                           <span data-label="Phone">{center.phone || "--"}</span>
                           <span data-label="Address">{center.address || "--"}</span>
                           <span className="maintenance-row-actions" data-label="Actions">
@@ -762,10 +806,11 @@ export default function Maintenance(props: MaintenanceProps) {
                 </div>
                 {filteredApprovals.length === 0 ? <div className="maintenance-empty-state"><ClipboardList aria-hidden="true" /><div><strong>No completion reviews found</strong><span>Completed bookings will appear here for manager review.</span></div></div> : (
                   <div className="maintenance-register-table maintenance-approvals-table">
-                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Work Type</span><span>Completed On</span><span>Proposed Updates</span><span>Review Status</span><span>Actions</span></div>
+                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Work Type</span><span>Completed On</span><span>Proposed Updates</span><span>Review Status</span><span>Payment</span><span>Actions</span></div>
                     {paginatedApprovals.map((booking) => {
                       const review = reviewState(booking);
                       const updates = proposedUpdates(booking);
+                      const payment = getBookingPaymentState(booking);
                       return (
                         <div className="maintenance-table__row" key={booking.id}>
                           <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
@@ -774,9 +819,11 @@ export default function Maintenance(props: MaintenanceProps) {
                           <span data-label="Completed On">{formatDate(booking.completed_at || booking.requested_date)}</span>
                           <span data-label="Proposed Updates" className="maintenance-update-list">{updates.length ? updates.map((update) => <em key={update}>{update}</em>) : "--"}</span>
                           <span data-label="Review Status"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
+                          <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
                           <span className="maintenance-row-actions" data-label="Actions">
                             <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View review" aria-label={`View review ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
                             {isPendingCompletionReview(booking) && <button className="icon-action" type="button" onClick={() => setApproveBookingTarget(booking)} disabled={props.loading} title="Approve completion" aria-label={`Approve completion ${booking.id}`}><CheckCircle2 className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
+                            {payment.payable && <button className="icon-action" type="button" onClick={() => props.onCreateBookingCheckout(booking.id)} disabled={props.loading} title="Pay service center" aria-label={`Pay service center for booking ${booking.id}`}><WalletCards className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>}
                             {isPendingCompletionReview(booking) && <button className="icon-action icon-action--danger" type="button" onClick={() => { setRejectBookingTarget(booking); setRejectBookingNote(booking.completion_review_notes || ""); }} disabled={props.loading} title="Reject completion" aria-label={`Reject completion ${booking.id}`}><XCircle className="icon-action__svg icon-action__svg--delete" aria-hidden="true" /></button>}
                           </span>
                         </div>
@@ -1054,6 +1101,21 @@ export default function Maintenance(props: MaintenanceProps) {
                   onChange={(e) => props.setCenterPortalPassword(e.target.value)}
                 />
               </label>
+              <div className="form-toggle-row form-toggle-row--full">
+                <label className="toggle-switch">
+                  <span className="toggle-switch__label">Payment Access</span>
+                  <input
+                    className="toggle-switch__input"
+                    type="checkbox"
+                    checked={props.centerPaymentAccess}
+                    onChange={(e) => props.setCenterPaymentAccess(e.target.checked)}
+                  />
+                  <span className="toggle-switch__track" aria-hidden="true">
+                    <span className="toggle-switch__thumb" />
+                  </span>
+                </label>
+                <small>Allow this service center to connect Stripe and receive booking payments.</small>
+              </div>
             </form>
             <div className="modal__actions">
               <button className="btn btn--secondary" type="button" onClick={closeCenterModal}>
@@ -1220,6 +1282,8 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Phone</span><strong>{selectedCenter.phone || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Address</span><strong>{selectedCenter.address || "--"}</strong></div>
               <div className="detail-item"><span>Portal Status</span><strong>{selectedCenter.profile_id ? "Linked" : "Not Linked"}</strong></div>
+              <div className="detail-item"><span>Payment Access</span><strong>{getPaymentAccessState(selectedCenter).label}</strong></div>
+              <div className="detail-item"><span>Stripe Account</span><strong>{selectedCenter.stripe_account_id || "--"}</strong></div>
               <div className="detail-item"><span>Center ID</span><strong>{selectedCenter.id}</strong></div>
             </div>
           </div>
@@ -1243,6 +1307,7 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Status</span><strong>{(selectedBooking.status || "pending") === "completed" && (selectedBooking.completion_review_status || "pending") !== "approved" ? "Completed. Pending Approval" : selectedBooking.status || "pending"}</strong></div>
               <div className="detail-item"><span>Work Type</span><strong>{selectedBooking.work_type || "--"}</strong></div>
               <div className="detail-item"><span>Review Status</span><strong>{selectedBooking.completion_review_status || "--"}</strong></div>
+              <div className="detail-item"><span>Payment Status</span><strong>{getBookingPaymentState(selectedBooking).label}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabelMap[selectedBooking.vehicle_id || ""] || "--"}</strong></div>
               <div className="detail-item"><span>Center</span><strong>{centerLabelMap[selectedBooking.center_id || ""] || "--"}</strong></div>
               <div className="detail-item detail-item--full"><span>Booking Notes</span><strong>{selectedBooking.notes || "--"}</strong></div>
@@ -1270,6 +1335,13 @@ export default function Maintenance(props: MaintenanceProps) {
                 </button>
                 <button className="btn" type="button" disabled={props.loading} onClick={() => setApproveBookingTarget(selectedBooking)}>
                   {props.loading ? "Approving..." : "Approve Vehicle Updates"}
+                </button>
+              </div>
+            )}
+            {!isPendingCompletionReview(selectedBooking) && getBookingPaymentState(selectedBooking).payable && (
+              <div className="modal__actions">
+                <button className="btn" type="button" disabled={props.loading} onClick={() => props.onCreateBookingCheckout(selectedBooking.id)}>
+                  {props.loading ? "Opening Checkout..." : "Pay Service Center"}
                 </button>
               </div>
             )}

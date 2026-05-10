@@ -98,20 +98,23 @@ def update_center(
     profile_id = existing.data.get("profile_id")
     auth_updates = {}
     user_metadata = {}
+    explicit_auth_update = (
+        payload.portal_email is not None
+        or payload.portal_password is not None
+        or payload.portal_contact_name is not None
+    )
     if payload.portal_email is not None:
         auth_updates["email"] = str(payload.portal_email)
     if payload.portal_password is not None:
         auth_updates["password"] = payload.portal_password
     if payload.portal_contact_name is not None:
         user_metadata["full_name"] = payload.portal_contact_name
-    elif payload.name is not None:
-        user_metadata["full_name"] = payload.name
-    if payload.phone is not None:
+    if payload.portal_contact_name is not None and payload.phone is not None:
         user_metadata["phone"] = payload.phone
     if user_metadata:
         auth_updates["user_metadata"] = user_metadata
 
-    if auth_updates and not profile_id:
+    if explicit_auth_update and auth_updates and not profile_id:
         raise HTTPException(status_code=400, detail="No service portal account is linked to this center")
     if auth_updates and profile_id:
         try:

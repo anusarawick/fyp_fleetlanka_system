@@ -564,6 +564,11 @@
   color: #dc2626;
 }
 
+.service-payment-badge--green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
 .service-payment-note {
   margin: 10px 0 0;
   color: #7b8b9b;

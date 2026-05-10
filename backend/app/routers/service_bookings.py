@@ -106,6 +106,7 @@ def create_booking(
         payload.completion_review_notes,
         payload.completion_reviewed_at,
         payload.completion_reviewed_by,
+        payload.payment_status,
     ]
     if any(value is not None for value in forbidden_create_fields):
         raise HTTPException(status_code=403, detail="Managers cannot set service-center completion or review data when creating bookings")
@@ -122,6 +123,7 @@ def create_booking(
             "completion_review_notes",
             "completion_reviewed_at",
             "completion_reviewed_by",
+            "payment_status",
         }
     )
     data["status"] = "pending"
@@ -167,6 +169,7 @@ def update_booking(
         "completion_review_notes",
         "completion_reviewed_at",
         "completion_reviewed_by",
+        "payment_status",
     }
     attempted_forbidden = forbidden_fields.intersection(updates.keys())
     if attempted_forbidden:

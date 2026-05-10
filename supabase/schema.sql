@@ -279,6 +279,9 @@ create table if not exists public.service_centers (
   name text not null,
   phone text,
   address text,
+  payment_access_enabled boolean not null default false,
+  stripe_account_id text,
+  stripe_onboarding_status text not null default 'not_started',
   created_at timestamptz not null default now()
 );
 
@@ -303,6 +306,23 @@ create table if not exists public.service_bookings (
   completed_at timestamptz,
   final_cost_lkr numeric,
   next_service_due_km numeric,
+  payment_status text not null default 'unpaid',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.service_booking_payments (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  booking_id uuid not null references public.service_bookings(id) on delete cascade,
+  service_center_id uuid not null references public.service_centers(id) on delete cascade,
+  amount_lkr numeric not null,
+  currency text not null default 'lkr',
+  status text not null default 'pending',
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id text,
+  stripe_transfer_destination text,
+  checkout_url text,
+  paid_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -351,6 +371,7 @@ alter table public.documents enable row level security;
 alter table public.alerts enable row level security;
 alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
+alter table public.service_booking_payments enable row level security;
 alter table public.driver_scores enable row level security;
 alter table public.maintenance_predictions enable row level security;
 alter table public.saved_places enable row level security;
@@ -407,6 +428,10 @@ create policy "centers_org" on public.service_centers
   with check (org_id = public.current_org_id());
 
 create policy "bookings_org" on public.service_bookings
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "booking_payments_org" on public.service_booking_payments
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 

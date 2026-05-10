@@ -193,6 +193,9 @@ export type ServiceCenter = {
   name: string;
   phone?: string;
   address?: string;
+  payment_access_enabled?: boolean;
+  stripe_account_id?: string;
+  stripe_onboarding_status?: string;
 };
 
 export type ServiceBooking = {
@@ -215,6 +218,7 @@ export type ServiceBooking = {
   completed_at?: string;
   final_cost_lkr?: number;
   next_service_due_km?: number;
+  payment_status?: string;
 };
 
 export type Alert = {
