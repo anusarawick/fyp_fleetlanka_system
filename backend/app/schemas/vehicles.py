@@ -23,6 +23,8 @@ class VehicleCreate(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
     last_service_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     avg_monthly_km: Optional[float] = None
@@ -67,6 +69,8 @@ class VehicleUpdate(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
     last_service_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     avg_monthly_km: Optional[float] = None
@@ -113,6 +117,8 @@ class VehicleOut(BaseModel):
     tire_condition: Optional[str] = None
     brake_condition: Optional[str] = None
     battery_status: Optional[str] = None
+    image_url: Optional[str] = None
+    image_path: Optional[str] = None
     last_service_cost_lkr: Optional[float] = None
     next_service_due_km: Optional[float] = None
     avg_monthly_km: Optional[float] = None

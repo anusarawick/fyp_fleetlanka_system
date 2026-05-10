@@ -8,7 +8,7 @@ import {
     ReactNode,
     FormEvent,
 } from "react";
-import { apiGet, apiPost, apiPatch, apiDelete } from "../services/api";
+import { apiGet, apiPost, apiPatch, apiPostForm, apiDelete } from "../services/api";
 import { useAuth } from "./AuthContext";
 import {
     Vehicle,
@@ -70,6 +70,7 @@ type DataContextType = {
     // Computed values
     activeTrips: number;
     fuelCostTotal: number;
+    fuelCostThisMonth: number;
     currency: Intl.NumberFormat;
     geoSupported: boolean;
     upcomingDocs: Document[];
@@ -272,7 +273,7 @@ type DataContextType = {
     refreshFuelForecasts: () => Promise<void>;
 
     // Handlers
-    handleSaveVehicle: (e: FormEvent) => Promise<void>;
+    handleSaveVehicle: (e: FormEvent, imageFile?: File | null, removeImage?: boolean) => Promise<void>;
     handleEditVehicle: (vehicle: Vehicle) => void;
     handleCancelVehicleEdit: () => void;
     handleDeleteVehicle: (vehicleId: string) => Promise<void>;
@@ -605,6 +606,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
     const activeTrips = trips.filter((t) => deriveTripStatus(t) === "in_progress").length;
     const fuelCostTotal = fuelLogs.reduce((sum, f) => sum + (f.cost_lkr || 0), 0);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const fuelCostThisMonth = fuelLogs.reduce((sum, f) => {
+        if (!f.fuel_date) return sum;
+        const fuelDate = new Date(f.fuel_date);
+        if (Number.isNaN(fuelDate.getTime()) || fuelDate < monthStart || fuelDate >= nextMonthStart) return sum;
+        return sum + (f.cost_lkr || 0);
+    }, 0);
 
     const upcomingDocs = documents.filter((d) => {
         if (!d.expiry_date) return false;
@@ -1299,7 +1309,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setBatteryInstalledAt("");
     }
 
-    async function handleSaveVehicle(e: FormEvent) {
+    async function uploadVehicleImage(vehicleId: string, imageFile: File) {
+        const formData = new FormData();
+        formData.append("image", imageFile);
+        return apiPostForm<Vehicle>(`/vehicles/${vehicleId}/image`, formData, token);
+    }
+
+    async function handleSaveVehicle(e: FormEvent, imageFile?: File | null, removeImage?: boolean) {
         e.preventDefault();
         if (!token || !orgId) return;
         setError(null);
@@ -1346,15 +1362,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 battery_installed_at: batteryInstalledAt || undefined,
             };
             let savedVehicleId: string;
+            let savedVehicle: Vehicle;
             if (editingVehicleId) {
                 const updated = await apiPatch<Vehicle>(`/vehicles/${editingVehicleId}`, payload, token);
-                setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+                savedVehicle = updated;
                 savedVehicleId = updated.id;
             } else {
                 const created = await apiPost<Vehicle>("/vehicles", payload, token);
-                setVehicles((prev) => [created, ...prev]);
+                savedVehicle = created;
                 savedVehicleId = created.id;
             }
+            if (imageFile) {
+                savedVehicle = await uploadVehicleImage(savedVehicleId, imageFile);
+            } else if (removeImage && editingVehicleId) {
+                savedVehicle = await apiDelete<Vehicle>(`/vehicles/${savedVehicleId}/image`, token);
+            }
+            setVehicles((prev) => {
+                const exists = prev.some((v) => v.id === savedVehicle.id);
+                return exists
+                    ? prev.map((v) => (v.id === savedVehicle.id ? savedVehicle : v))
+                    : [savedVehicle, ...prev];
+            });
             await refreshVehicleMaintenancePrediction(savedVehicleId);
             setPlateNo("");
             setMake("");
@@ -2355,6 +2383,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 maintenancePredictions,
                 activeTrips,
                 fuelCostTotal,
+                fuelCostThisMonth,
                 currency,
                 geoSupported,
                 upcomingDocs,

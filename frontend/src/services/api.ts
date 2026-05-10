@@ -50,6 +50,22 @@ export async function apiPatch<T>(
   return res.json();
 }
 
+export async function apiPostForm<T>(
+  path: string,
+  body: FormData,
+  token?: string
+): Promise<T> {
+  const res = await fetch(`${apiBaseUrl}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body,
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json();
+}
+
 export async function apiDelete<T>(path: string, token?: string): Promise<T> {
   const res = await fetch(`${apiBaseUrl}${path}`, {
     method: "DELETE",

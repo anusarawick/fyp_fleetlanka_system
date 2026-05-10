@@ -305,6 +305,71 @@
     linear-gradient(180deg, rgba(31, 111, 167, 0.045), rgba(255, 255, 255, 0.8));
 }
 
+.vehicle-image-field {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e5ebf0;
+  border-radius: 6px;
+  background: #fbfdff;
+}
+
+.vehicle-image-preview {
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe5ee;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.vehicle-image-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.vehicle-image-preview svg {
+  width: 32px;
+  height: 32px;
+}
+
+.vehicle-image-field__label {
+  display: block;
+  color: #111827;
+  font-weight: 850;
+}
+
+.vehicle-image-field p {
+  margin: 4px 0 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.vehicle-image-field__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vehicle-image-upload {
+  position: relative;
+  overflow: hidden;
+}
+
+.vehicle-image-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .fleet-page .modal--form .form-section-title svg {
   color: var(--fleet-blue);
 }
@@ -318,9 +383,17 @@
   gap: 16px;
 }
 
+.fleet-detail-top {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
 .fleet-risk-hero {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 18px;
   padding: 18px;
   border: 1px solid rgba(226, 232, 240, 0.95);
@@ -369,6 +442,8 @@
 
 .fleet-risk-hero__score {
   min-width: 112px;
+  min-height: 112px;
+  align-self: center;
   display: grid;
   place-items: center;
   align-content: center;
@@ -730,14 +805,14 @@
   display: grid;
   grid-template-columns:
     minmax(98px, 0.72fr)
-    minmax(150px, 1.04fr)
-    minmax(88px, 0.58fr)
-    minmax(112px, 0.74fr)
-    minmax(130px, 0.82fr)
-    minmax(140px, 0.95fr)
-    104px
-    104px;
-  gap: 9px;
+    minmax(118px, 0.72fr)
+    minmax(70px, 0.46fr)
+    minmax(96px, 0.58fr)
+    minmax(128px, 0.84fr)
+    minmax(112px, 0.7fr)
+    96px
+    100px;
+  gap: 7px;
   align-items: center;
   padding: 7px 8px;
   border-bottom: 1px solid #e5ebf0;
@@ -776,15 +851,50 @@
 .fleet-page .management-table__cell--plate {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   width: fit-content;
+  min-height: 32px;
+  color: #111827;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.vehicle-thumb {
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #e5ebf0;
+  background: #f8fafc;
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+.vehicle-thumb--small {
+  width: 38px;
+  height: 28px;
+  border-radius: 5px;
+}
+
+.vehicle-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.vehicle-thumb svg {
+  width: 17px;
+  height: 17px;
+}
+
+.vehicle-plate-chip {
   min-height: 24px;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 9px;
   border: 1px solid #e5ebf0;
   border-radius: 5px;
-  color: #111827;
   background: #ffffff;
-  font-weight: 850;
-  white-space: nowrap;
 }
 
 .fleet-page .management-table__cell--odometer {
@@ -833,6 +943,51 @@
 
 .fleet-page .management-table__head > span:last-child {
   text-align: right;
+}
+
+.fleet-vehicle-image-hero {
+  overflow: hidden;
+  border: 1px solid #e5ebf0;
+  border-radius: 6px;
+  background: #f8fafc;
+  min-height: 260px;
+}
+
+.fleet-vehicle-image-hero img {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  max-height: 340px;
+  display: block;
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+.fleet-vehicle-image-hero__placeholder {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.fleet-vehicle-image-hero__placeholder svg {
+  width: 38px;
+  height: 38px;
+}
+
+@media (max-width: 780px) {
+  .fleet-detail-top {
+    grid-template-columns: 1fr;
+  }
+
+  .fleet-vehicle-image-hero,
+  .fleet-vehicle-image-hero__placeholder,
+  .fleet-vehicle-image-hero img {
+    min-height: 220px;
+  }
 }
 
 .app--manager .fleet-page .icon-action {

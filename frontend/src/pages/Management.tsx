@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Eye,
   Gauge,
+  ImageIcon,
   Pencil,
   Plus,
   Search,
@@ -36,6 +37,8 @@ type Vehicle = {
   tire_condition?: string;
   brake_condition?: string;
   battery_status?: string;
+  image_url?: string;
+  image_path?: string;
   fuel_type?: string;
   business_type?: string;
   road_condition_primary?: string;
@@ -140,7 +143,7 @@ type ManagementProps = {
   setBatteryInstalledAt: (v: string) => void;
   activeTrips: number;
   editingVehicleId: string | null;
-  onSaveVehicle: (e: FormEvent) => void;
+  onSaveVehicle: (e: FormEvent, imageFile?: File | null, removeImage?: boolean) => void;
   onEditVehicle: (vehicle: Vehicle) => void;
   onCancelEdit: () => void;
   onDeleteVehicle: (vehicleId: string) => void;
@@ -167,6 +170,9 @@ export default function Management(props: ManagementProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [vehicleImageFile, setVehicleImageFile] = useState<File | null>(null);
+  const [vehicleImagePreview, setVehicleImagePreview] = useState<string | null>(null);
+  const [removeVehicleImage, setRemoveVehicleImage] = useState(false);
 
   const filteredVehicles = props.vehicles.filter((vehicle) => {
     if (statusFilter === "all") return true;
@@ -237,21 +243,43 @@ export default function Management(props: ManagementProps) {
 
   function openCreateModal() {
     props.onCancelEdit();
+    clearVehicleImageSelection();
     setShowVehicleModal(true);
   }
 
   function openEditModal(vehicle: Vehicle) {
     props.onEditVehicle(vehicle);
+    clearVehicleImageSelection(vehicle.image_url || null);
     setShowVehicleModal(true);
   }
 
   async function handleVehicleSubmit(e: FormEvent) {
-    await props.onSaveVehicle(e);
+    await props.onSaveVehicle(e, vehicleImageFile, removeVehicleImage);
   }
 
   function closeVehicleModal() {
     props.onCancelEdit();
+    clearVehicleImageSelection();
     setShowVehicleModal(false);
+  }
+
+  function clearVehicleImageSelection(nextPreview: string | null = null) {
+    setVehicleImageFile(null);
+    setVehicleImagePreview(nextPreview);
+    setRemoveVehicleImage(false);
+  }
+
+  function handleVehicleImageChange(fileList: FileList | null) {
+    const file = fileList?.[0] || null;
+    setVehicleImageFile(file);
+    setRemoveVehicleImage(false);
+    setVehicleImagePreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  function handleRemoveVehicleImage() {
+    setVehicleImageFile(null);
+    setVehicleImagePreview(null);
+    setRemoveVehicleImage(Boolean(props.editingVehicleId));
   }
 
   function handleMileageChange(nextMileage: string) {
@@ -296,6 +324,14 @@ export default function Management(props: ManagementProps) {
   function formatMakeModel(vehicle: Vehicle) {
     const parts = [vehicle.make, vehicle.model].filter((value) => value && value.trim().length > 0);
     return parts.length ? parts.join(" ") : "--";
+  }
+
+  function renderVehicleThumb(vehicle: Pick<Vehicle, "image_url" | "plate_no">) {
+    return vehicle.image_url ? (
+      <img src={vehicle.image_url} alt={`${vehicle.plate_no} vehicle`} />
+    ) : (
+      <ImageIcon aria-hidden="true" />
+    );
   }
 
   function formatNumber(value?: number | string) {
@@ -659,7 +695,10 @@ export default function Management(props: ManagementProps) {
                       const readiness = getMlReadiness(v);
                       return (
                         <div className="table__row management-table__row management-table__row--vehicles" key={v.id}>
-                          <span className="management-table__cell management-table__cell--plate" data-label="Plate">{v.plate_no}</span>
+                          <span className="management-table__cell management-table__cell--plate" data-label="Plate">
+                            <span className="vehicle-thumb vehicle-thumb--small">{renderVehicleThumb(v)}</span>
+                            <span className="vehicle-plate-chip">{v.plate_no}</span>
+                          </span>
                           <span className="management-table__cell" data-label="Make / Model">{formatMakeModel(v)}</span>
                           <span className="management-table__cell" data-label="Type">{v.vehicle_type || "--"}</span>
                           <span className="management-table__cell management-table__cell--odometer" data-label="Odometer">
@@ -844,6 +883,34 @@ export default function Management(props: ManagementProps) {
                 <div>
                   <h4>Vehicle Details</h4>
                   <p>Core record used across trips, documents, fuel, and maintenance workflows.</p>
+                </div>
+              </div>
+              <div className="vehicle-image-field">
+                <div className="vehicle-image-preview">
+                  {vehicleImagePreview ? (
+                    <img src={vehicleImagePreview} alt="Selected vehicle" />
+                  ) : (
+                    <ImageIcon aria-hidden="true" />
+                  )}
+                </div>
+                <div>
+                  <span className="vehicle-image-field__label">Vehicle Image</span>
+                  <p>Optional primary image shown in the vehicle register and details.</p>
+                  <div className="vehicle-image-field__actions">
+                    <label className="btn btn--secondary vehicle-image-upload">
+                      Choose Image
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(e) => handleVehicleImageChange(e.target.files)}
+                      />
+                    </label>
+                    {(vehicleImagePreview || props.editingVehicleId) && (
+                      <button className="btn btn--secondary" type="button" onClick={handleRemoveVehicleImage}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <label>
@@ -1161,21 +1228,33 @@ export default function Management(props: ManagementProps) {
                 const components = componentRows(viewTarget, prediction);
                 return (
                   <>
-                    <section className={`fleet-risk-hero fleet-risk-hero--${prediction?.risk_level || "neutral"}`}>
-                      <div>
-                        <span className="fleet-panel__eyebrow">Maintenance risk</span>
-                        <h4>{prediction ? formatRiskLabel(prediction.risk_level) : "No maintenance check yet"}</h4>
-                        <p>
-                          {prediction
-                            ? getRiskSummary(viewTarget, prediction)
-                            : "Run a maintenance check before using this vehicle for service planning."}
-                        </p>
-                      </div>
-                      <div className="fleet-risk-hero__score">
-                        <strong>{probability ?? "--"}{probability !== null ? "%" : ""}</strong>
-                        <span>{prediction?.predicted_at ? formatShortDate(prediction.predicted_at) : "Latest check"}</span>
-                      </div>
-                    </section>
+                    <div className="fleet-detail-top">
+                      <section className="fleet-vehicle-image-hero">
+                        {viewTarget.image_url ? (
+                          <img src={viewTarget.image_url} alt={`${viewTarget.plate_no} vehicle`} />
+                        ) : (
+                          <div className="fleet-vehicle-image-hero__placeholder">
+                            <ImageIcon aria-hidden="true" />
+                            <span>No image uploaded</span>
+                          </div>
+                        )}
+                      </section>
+                      <section className={`fleet-risk-hero fleet-risk-hero--${prediction?.risk_level || "neutral"}`}>
+                        <div>
+                          <span className="fleet-panel__eyebrow">Maintenance risk</span>
+                          <h4>{prediction ? formatRiskLabel(prediction.risk_level) : "No maintenance check yet"}</h4>
+                          <p>
+                            {prediction
+                              ? getRiskSummary(viewTarget, prediction)
+                              : "Run a maintenance check before using this vehicle for service planning."}
+                          </p>
+                        </div>
+                        <div className="fleet-risk-hero__score">
+                          <strong>{probability ?? "--"}{probability !== null ? "%" : ""}</strong>
+                          <span>{prediction?.predicted_at ? formatShortDate(prediction.predicted_at) : "Latest check"}</span>
+                        </div>
+                      </section>
+                    </div>
 
                     <section className="fleet-detail-section">
                       <div className="fleet-detail-section__header">

@@ -108,6 +108,8 @@ create table if not exists public.vehicles (
   tire_condition text,
   brake_condition text,
   battery_status text,
+  image_url text,
+  image_path text,
   last_service_cost_lkr numeric,
   next_service_due_km numeric,
   avg_monthly_km numeric,

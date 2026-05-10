@@ -20,6 +20,8 @@ export type Vehicle = {
   tire_condition?: string;
   brake_condition?: string;
   battery_status?: string;
+  image_url?: string;
+  image_path?: string;
   last_service_cost_lkr?: number;
   next_service_due_km?: number;
   avg_monthly_km?: number;

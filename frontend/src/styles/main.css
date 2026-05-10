@@ -4180,6 +4180,10 @@ textarea {
   padding: var(--manager-page-y) var(--manager-page-x) 22px;
 }
 
+.main--manager > .section {
+  margin-top: 0;
+}
+
 .app--manager .sidebar,
 .app--service .sidebar {
   width: var(--manager-sidebar-width);

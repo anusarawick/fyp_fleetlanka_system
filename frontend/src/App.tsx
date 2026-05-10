@@ -219,7 +219,7 @@ function ManagerRoutes() {
             <Dashboard
               vehicleCount={data.vehicles.length}
               activeTrips={data.activeTrips}
-              fuelCostTotal={data.currency.format(data.fuelCostTotal)}
+              fuelCostTotal={data.currency.format(data.fuelCostThisMonth)}
               maintenance={data.maintenance}
               vehicles={data.vehicles}
               driverScores={data.driverScores}

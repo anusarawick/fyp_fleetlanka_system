@@ -812,6 +812,16 @@
   gap: 12px;
 }
 
+.people-page--compliance .dashboard-kpi-card--red .dashboard-kpi-card__icon {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.people-page--compliance .dashboard-kpi-card--amber .dashboard-kpi-card__icon {
+  color: #f97316;
+  background: #ffedd5;
+}
+
 .people-page--compliance .dashboard-kpi-card--orange .dashboard-kpi-card__icon {
   color: #f97316;
   background: #ffedd5;
