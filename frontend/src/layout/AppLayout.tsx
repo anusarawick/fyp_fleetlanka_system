@@ -27,7 +27,7 @@ export default function AppLayout({
   const isDriver = role === "driver";
   const isService = role === "service";
   const shellClass = isDriver ? "app--driver" : isService ? "app--service" : "app--manager";
-  const mainClass = isDriver ? "main--driver" : !isService ? "main--manager" : "";
+  const mainClass = isDriver ? "main--driver" : "main--manager";
   const canUseSidebar = showSidebar && !isDriver;
   const appClass = [
     "app",

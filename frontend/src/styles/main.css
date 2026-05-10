@@ -2999,7 +2999,8 @@ textarea {
 }
 
 /* ===== MANAGER BASELINE REDESIGN ===== */
-.app--manager {
+.app--manager,
+.app--service {
   grid-template-columns: 284px minmax(0, 1fr);
   background: #f4f7f9;
 }
@@ -3011,7 +3012,8 @@ textarea {
     #f4f7f9;
 }
 
-.app--manager .sidebar {
+.app--manager .sidebar,
+.app--service .sidebar {
   background:
     radial-gradient(circle at 0% 0%, rgba(18, 190, 190, 0.18), transparent 34%),
     linear-gradient(180deg, #063f45 0%, #04333c 45%, #032d36 100%);
@@ -3019,13 +3021,15 @@ textarea {
   color: #eef9fb;
 }
 
-.app--manager .sidebar__brand {
+.app--manager .sidebar__brand,
+.app--service .sidebar__brand {
   padding: 0 8px 22px;
   margin-bottom: 20px;
   border-bottom: none;
 }
 
-.app--manager .sidebar__brand-icon {
+.app--manager .sidebar__brand-icon,
+.app--service .sidebar__brand-icon {
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -3034,18 +3038,21 @@ textarea {
   box-shadow: none;
 }
 
-.app--manager .sidebar__brand-icon img {
+.app--manager .sidebar__brand-icon img,
+.app--service .sidebar__brand-icon img {
   width: 38px;
   height: 38px;
 }
 
-.app--manager .sidebar__brand-copy strong {
+.app--manager .sidebar__brand-copy strong,
+.app--service .sidebar__brand-copy strong {
   color: #ffffff;
   font-size: 24px;
   letter-spacing: -0.02em;
 }
 
-.app--manager .sidebar__brand-copy span {
+.app--manager .sidebar__brand-copy span,
+.app--service .sidebar__brand-copy span {
   margin-top: 8px;
   color: rgba(238, 249, 251, 0.78);
   font-size: 14px;
@@ -3054,23 +3061,27 @@ textarea {
   text-transform: none;
 }
 
-.app--manager .sidebar__nav {
+.app--manager .sidebar__nav,
+.app--service .sidebar__nav {
   flex: 0 0 auto;
   gap: 18px;
 }
 
-.app--manager .sidebar__nav-section {
+.app--manager .sidebar__nav-section,
+.app--service .sidebar__nav-section {
   gap: 5px;
 }
 
-.app--manager .sidebar__nav-label {
+.app--manager .sidebar__nav-label,
+.app--service .sidebar__nav-label {
   padding: 0 12px 5px;
   color: rgba(238, 249, 251, 0.62);
   font-size: 11px;
   letter-spacing: 0.06em;
 }
 
-.app--manager .nav-item {
+.app--manager .nav-item,
+.app--service .nav-item {
   min-height: 38px;
   padding: 8px 12px;
   border-radius: 8px;
@@ -3080,7 +3091,8 @@ textarea {
   gap: 12px;
 }
 
-.app--manager .nav-item__icon {
+.app--manager .nav-item__icon,
+.app--service .nav-item__icon {
   width: 24px;
   height: 24px;
   flex-basis: 24px;
@@ -3088,16 +3100,19 @@ textarea {
   border-radius: 6px;
 }
 
-.app--manager .nav-item__icon svg {
+.app--manager .nav-item__icon svg,
+.app--service .nav-item__icon svg {
   width: 18px;
   height: 18px;
 }
 
-.app--manager .nav-item:hover {
+.app--manager .nav-item:hover,
+.app--service .nav-item:hover {
   background: rgba(18, 150, 151, 0.38);
 }
 
-.app--manager .nav-item.active {
+.app--manager .nav-item.active,
+.app--service .nav-item.active {
   background: linear-gradient(90deg, rgba(20, 160, 158, 0.94), rgba(18, 128, 134, 0.92));
   border-color: transparent;
   box-shadow: 0 10px 20px rgba(0, 28, 34, 0.22);
@@ -3153,7 +3168,8 @@ textarea {
   flex: 0 0 auto;
 }
 
-.app--manager .topbar {
+.app--manager .topbar,
+.app--service .topbar {
   padding: 0;
   margin-bottom: 18px;
   border: 0;
@@ -3163,18 +3179,21 @@ textarea {
   backdrop-filter: none;
 }
 
-.app--manager .topbar h1 {
+.app--manager .topbar h1,
+.app--service .topbar h1 {
   font-size: 22px;
   letter-spacing: -0.02em;
 }
 
-.app--manager .topbar p {
+.app--manager .topbar p,
+.app--service .topbar p {
   margin-top: 3px;
   color: #64748b;
   font-size: 13px;
 }
 
-.app--manager .topbar__icon-btn {
+.app--manager .topbar__icon-btn,
+.app--service .topbar__icon-btn {
   width: 38px;
   height: 38px;
   border: 0;
@@ -3182,7 +3201,8 @@ textarea {
   color: #0f3442;
 }
 
-.app--manager .topbar__badge {
+.app--manager .topbar__badge,
+.app--service .topbar__badge {
   top: 3px;
   right: 2px;
   min-width: 16px;
@@ -3190,13 +3210,15 @@ textarea {
   font-size: 9px;
 }
 
-.app--manager .topbar__profile-btn {
+.app--manager .topbar__profile-btn,
+.app--service .topbar__profile-btn {
   background: transparent;
   border: 0;
   padding: 0;
 }
 
-.app--manager .topbar__avatar {
+.app--manager .topbar__avatar,
+.app--service .topbar__avatar {
   width: 44px;
   height: 44px;
   border-radius: 999px;

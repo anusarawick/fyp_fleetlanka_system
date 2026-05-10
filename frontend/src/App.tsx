@@ -638,8 +638,8 @@ function ServiceRoutes() {
         element={
           <>
             <Topbar
-              title="Service Center Dashboard"
-              subtitle="Booking queue and workshop workload"
+              title="Service Dashboard"
+              subtitle="Today's workshop queue and booking status."
               userName={userName}
               userRole={userRole}
               onSignOut={handleSignOut}
@@ -654,7 +654,7 @@ function ServiceRoutes() {
           <>
             <Topbar
               title="Service Bookings"
-              subtitle="Accept, complete, and update service jobs"
+              subtitle="Confirm bookings, complete jobs, and track manager approval."
               userName={userName}
               userRole={userRole}
               onSignOut={handleSignOut}

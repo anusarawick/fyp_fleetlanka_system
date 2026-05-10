@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ClipboardCheck, Clock3, Eye, Pencil, RotateCcw, Wrench } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  Clock3,
+  Eye,
+  Hourglass,
+  Pencil,
+  RotateCcw,
+  WalletCards,
+  Wrench,
+} from "lucide-react";
 import { apiGet, apiPatch } from "../services/api";
 
 type ServicePortalProps = {
@@ -91,13 +105,27 @@ function formatReviewStatus(value?: string) {
 function formatCurrency(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "Not recorded";
-  return `Rs. ${number.toLocaleString()}`;
+  return `LKR ${number.toLocaleString()}`;
 }
 
 function formatOdometer(value: unknown) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "Not recorded";
   return `${number.toLocaleString()} km`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Not recorded";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatTime(value?: string) {
+  if (!value) return "Time not set";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Time not set";
+  return parsed.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 function resolveWorkTypeSelection(value?: string) {
@@ -132,6 +160,8 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "completed" | "cancelled">("all");
+  const [workTypeFilter, setWorkTypeFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week">("week");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selectedBooking, setSelectedBooking] = useState<ServicePortalBooking | null>(null);
@@ -171,17 +201,33 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, rowsPerPage, bookings.length]);
+  }, [search, statusFilter, workTypeFilter, dateFilter, rowsPerPage, bookings.length]);
 
   const filteredBookings = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
     return bookings.filter((booking) => {
       const statusMatches = statusFilter === "all" ? true : (booking.status || "pending") === statusFilter;
       if (!statusMatches) return false;
+      if (workTypeFilter !== "all" && bookingWork(booking) !== workTypeFilter) return false;
+      if (dateFilter !== "all") {
+        const requestedDate = new Date(booking.requested_date);
+        if (Number.isNaN(requestedDate.getTime())) return false;
+        const dateMatches =
+          dateFilter === "today"
+            ? requestedDate >= startOfToday && requestedDate < endOfToday
+            : requestedDate >= startOfToday && requestedDate < endOfWeek;
+        if (!dateMatches) return false;
+      }
       if (!query) return true;
       return [
+        booking.id,
         booking.requested_date,
         booking.status,
+        booking.completion_review_status,
         booking.notes,
         booking.work_type,
         booking.service_notes,
@@ -192,7 +238,7 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
-  }, [bookings, search, statusFilter]);
+  }, [bookings, search, statusFilter, workTypeFilter, dateFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -253,6 +299,182 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     () => [...confirmedBookings].sort((a, b) => String(a.requested_date).localeCompare(String(b.requested_date))).slice(0, 5),
     [confirmedBookings]
   );
+  const cancelledBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === "cancelled"),
+    [bookings]
+  );
+  const approvedCompletedBookings = useMemo(
+    () =>
+      completedBookings.filter(
+        (booking) => (booking.completion_review_status || "pending") === "approved"
+      ),
+    [completedBookings]
+  );
+  const rejectedCompletedBookings = useMemo(
+    () =>
+      completedBookings.filter(
+        (booking) => (booking.completion_review_status || "pending") === "rejected"
+      ),
+    [completedBookings]
+  );
+  const awaitingPaymentTotal = useMemo(
+    () =>
+      approvedCompletedBookings.reduce(
+        (sum, booking) => sum + (Number.isFinite(Number(booking.final_cost_lkr)) ? Number(booking.final_cost_lkr) : 0),
+        0
+      ),
+    [approvedCompletedBookings]
+  );
+  const blockedPaymentTotal = useMemo(
+    () =>
+      rejectedCompletedBookings.reduce(
+        (sum, booking) => sum + (Number.isFinite(Number(booking.final_cost_lkr)) ? Number(booking.final_cost_lkr) : 0),
+        0
+      ),
+    [rejectedCompletedBookings]
+  );
+  const todayScheduleRows = useMemo(
+    () =>
+      bookings
+        .filter((booking) => (booking.status || "pending") !== "cancelled")
+        .sort((a, b) => String(a.requested_date).localeCompare(String(b.requested_date)))
+        .slice(0, 5),
+    [bookings]
+  );
+  const attentionQueue = useMemo(() => {
+    const rows: Array<{
+      booking: ServicePortalBooking;
+      title: string;
+      action: string;
+      tone: "blue" | "green" | "amber" | "red";
+      icon: "calendar" | "check" | "hourglass" | "reopen";
+      onClick: () => void;
+    }> = [];
+
+    pendingBookings.slice(0, 2).forEach((booking) => {
+      rows.push({
+        booking,
+        title: "New booking waiting for confirmation",
+        action: "Confirm",
+        tone: "blue",
+        icon: "calendar",
+        onClick: () => openActionModal(booking, "confirmed"),
+      });
+    });
+    confirmedBookings.slice(0, 2).forEach((booking) => {
+      rows.push({
+        booking,
+        title: "Confirmed job ready for completion review",
+        action: "Review",
+        tone: "green",
+        icon: "check",
+        onClick: () => openActionModal(booking, "completed"),
+      });
+    });
+    completedAwaitingReview.slice(0, 2).forEach((booking) => {
+      const isRejected = (booking.completion_review_status || "pending") === "rejected";
+      rows.push({
+        booking,
+        title: isRejected ? "Reopened job needs correction" : "Completion review submitted",
+        action: isRejected ? "Fix & Resubmit" : "Track Approval",
+        tone: isRejected ? "red" : "amber",
+        icon: isRejected ? "reopen" : "hourglass",
+        onClick: () => openDetailsModal(booking),
+      });
+    });
+
+    return rows.slice(0, 4);
+  }, [pendingBookings, confirmedBookings, completedAwaitingReview]);
+  const paymentRows = useMemo(
+    () =>
+      [...completedBookings]
+        .sort((a, b) => String(b.completed_at || b.requested_date).localeCompare(String(a.completed_at || a.requested_date)))
+        .slice(0, 4)
+        .map((booking) => {
+          const reviewStatus = booking.completion_review_status || "pending";
+          if (reviewStatus === "approved") {
+            return {
+              booking,
+              label: "Awaiting Payment",
+              tone: "blue",
+              status: "Approved, payment pending.",
+            };
+          }
+          if (reviewStatus === "rejected") {
+            return {
+              booking,
+              label: "Blocked",
+              tone: "red",
+              status: "Review reopened, fix required.",
+            };
+          }
+          return {
+            booking,
+            label: "Approval Pending",
+            tone: "amber",
+            status: "Waiting for manager approval.",
+          };
+        }),
+    [completedBookings]
+  );
+  const statusBreakdown = useMemo(
+    () => [
+      { label: "New", value: pendingBookings.length, tone: "blue" },
+      { label: "Confirmed", value: confirmedBookings.length, tone: "sky" },
+      { label: "Awaiting Approval", value: needsManagerReviewCount, tone: "amber" },
+      { label: "Completed", value: approvedCompletedBookings.length, tone: "green" },
+      { label: "Reopened", value: rejectedCompletedBookings.length + cancelledBookings.length, tone: "red" },
+    ],
+    [
+      pendingBookings.length,
+      confirmedBookings.length,
+      needsManagerReviewCount,
+      approvedCompletedBookings.length,
+      rejectedCompletedBookings.length,
+      cancelledBookings.length,
+    ]
+  );
+  const totalStatusCount = statusBreakdown.reduce((sum, item) => sum + item.value, 0);
+  const availableWorkTypes = useMemo(
+    () =>
+      Array.from(new Set(bookings.map((booking) => bookingWork(booking)).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [bookings]
+  );
+  const paymentReadyRows = useMemo(
+    () =>
+      [...approvedCompletedBookings]
+        .sort((a, b) => String(b.completed_at || b.requested_date).localeCompare(String(a.completed_at || a.requested_date)))
+        .slice(0, 3),
+    [approvedCompletedBookings]
+  );
+  const approvalQueueRows = useMemo(
+    () =>
+      [...completedAwaitingReview]
+        .filter((booking) => (booking.completion_review_status || "pending") !== "rejected")
+        .slice(0, 3),
+    [completedAwaitingReview]
+  );
+  const reopenedReviewRows = useMemo(
+    () =>
+      [...rejectedCompletedBookings, ...cancelledBookings]
+        .sort((a, b) => String(b.completed_at || b.requested_date).localeCompare(String(a.completed_at || a.requested_date)))
+        .slice(0, 3),
+    [rejectedCompletedBookings, cancelledBookings]
+  );
+  const todayBookings = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return bookings.filter((booking) => {
+      const requestedDate = new Date(booking.requested_date);
+      return !Number.isNaN(requestedDate.getTime()) && requestedDate >= startOfToday && requestedDate < endOfToday;
+    });
+  }, [bookings]);
+  const stillPendingToday = todayBookings.filter((booking) =>
+    ["pending", "confirmed"].includes(booking.status || "pending")
+  ).length;
   const nextActionLabel =
     (me?.summary.pending_count ?? 0) > 0
       ? "Review pending bookings"
@@ -378,6 +600,94 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
     return displayText(booking.work_type, "Work type not recorded");
   }
 
+  function reviewStateLabel(booking: ServicePortalBooking) {
+    const status = booking.status || "pending";
+    if (status === "pending") return "Not Started";
+    if (status === "confirmed") return "Ready to complete";
+    if (status === "cancelled") return "Correction Required";
+    if ((booking.completion_review_status || "pending") === "approved") return "Awaiting Payment";
+    if ((booking.completion_review_status || "pending") === "rejected") return "Correction Required";
+    return "Awaiting Approval";
+  }
+
+  function reviewStateTone(booking: ServicePortalBooking) {
+    const label = reviewStateLabel(booking);
+    if (label === "Ready to complete") return "green";
+    if (label === "Awaiting Payment") return "blue";
+    if (label === "Correction Required") return "red";
+    if (label === "Awaiting Approval") return "amber";
+    return "muted";
+  }
+
+  function statusTone(booking: ServicePortalBooking) {
+    const status = booking.status || "pending";
+    if (status === "pending") return "blue";
+    if (status === "confirmed") return "green";
+    if (status === "completed") {
+      const reviewStatus = booking.completion_review_status || "pending";
+      if (reviewStatus === "approved") return "green";
+      if (reviewStatus === "rejected") return "red";
+      return "blue";
+    }
+    return "red";
+  }
+
+  function renderBookingTableAction(booking: ServicePortalBooking) {
+    const status = booking.status || "pending";
+    const reviewStatus = booking.completion_review_status || "pending";
+
+    if (status === "pending") {
+      return (
+        <span className="service-bookings-row-actions service-bookings-row-actions--pair">
+          <button className="service-bookings-action service-bookings-action--primary" type="button" onClick={() => openActionModal(booking, "confirmed")}>
+            Confirm
+          </button>
+          <button className="service-bookings-action service-bookings-action--danger" type="button" onClick={() => openActionModal(booking, "cancelled")}>
+            Reject
+          </button>
+        </span>
+      );
+    }
+
+    if (status === "confirmed") {
+      return (
+        <button className="service-bookings-action service-bookings-action--primary" type="button" onClick={() => openActionModal(booking, "completed")}>
+          Complete Job
+        </button>
+      );
+    }
+
+    if (status === "completed" && reviewStatus === "rejected") {
+      return (
+        <button className="service-bookings-action service-bookings-action--danger" type="button" onClick={() => openDetailsModal(booking)}>
+          Fix & Resubmit
+        </button>
+      );
+    }
+
+    if (status === "completed" && reviewStatus === "approved") {
+      return (
+        <button className="service-bookings-action service-bookings-action--secondary" type="button" onClick={() => setSelectedBooking(booking)}>
+          View Details
+        </button>
+      );
+    }
+
+    if (status === "completed") {
+      return (
+        <button className="service-bookings-action service-bookings-action--secondary" type="button" onClick={() => openDetailsModal(booking)}>
+          Track Approval
+        </button>
+      );
+    }
+
+    return (
+      <button className="service-bookings-action service-bookings-action--secondary" type="button" onClick={() => setSelectedBooking(booking)}>
+        View Details
+      </button>
+    );
+  }
+
   function renderBookingActions(booking: ServicePortalBooking, compact = false) {
     const status = booking.status || "pending";
     return (
@@ -452,164 +762,223 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
       <section className="service-portal-page admin-page service-workspace">
       {isOverviewTab ? (
         <>
-          <section className="service-command-panel">
-            <div className="service-command-panel__header">
-              <div>
-                <span className="service-command-panel__eyebrow">Workshop operations</span>
-                <h3>Today&apos;s Workshop Queue</h3>
-                <p>Accept incoming requests, complete active jobs, and keep finished work ready for manager review.</p>
-              </div>
-              <div className="service-command-panel__status">
-                <strong>{nextActionLabel}</strong>
-                <span>Next action</span>
-              </div>
-            </div>
-            <div className="service-command-panel__metrics" aria-label="Workshop queue summary">
-              <div className="service-command-metric service-command-metric--amber">
-                <ServicePortalIcon name="pending" />
-                <span>New Requests</span>
-                <strong>{me?.summary.pending_count ?? 0}</strong>
-              </div>
-              <div className="service-command-metric service-command-metric--blue">
-                <ServicePortalIcon name="confirmed" />
-                <span>Accepted Jobs</span>
-                <strong>{me?.summary.confirmed_count ?? 0}</strong>
-              </div>
-              <div className="service-command-metric service-command-metric--green">
-                <ServicePortalIcon name="completedToday" />
-                <span>Closed Today</span>
-                <strong>{me?.summary.completed_today_count ?? 0}</strong>
-              </div>
-              <div className="service-command-metric service-command-metric--purple">
-                <ServicePortalIcon name="completedTotal" />
-                <span>Manager Review</span>
-                <strong>{needsManagerReviewCount}</strong>
-              </div>
-            </div>
+          <section className="service-dashboard-kpis" aria-label="Service dashboard summary">
+            <article className="service-dashboard-kpi service-dashboard-kpi--blue">
+              <span className="service-dashboard-kpi__icon"><CalendarDays aria-hidden="true" /></span>
+              <div><strong>{pendingBookings.length}</strong><span>New Bookings</span><small>Waiting for confirmation</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--indigo">
+              <span className="service-dashboard-kpi__icon"><CheckCircle2 aria-hidden="true" /></span>
+              <div><strong>{confirmedBookings.length}</strong><span>Confirmed Jobs</span><small>Scheduled & in progress</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--amber">
+              <span className="service-dashboard-kpi__icon"><Clock3 aria-hidden="true" /></span>
+              <div><strong>{needsManagerReviewCount}</strong><span>Awaiting Manager Approval</span><small>Pending manager review</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--green">
+              <span className="service-dashboard-kpi__icon"><ClipboardCheck aria-hidden="true" /></span>
+              <div><strong>{completedBookings.length}</strong><span>Completed Jobs</span><small>Ready for settlement and history</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--purple">
+              <span className="service-dashboard-kpi__icon"><WalletCards aria-hidden="true" /></span>
+              <div><strong>{formatCurrency(awaitingPaymentTotal)}</strong><span>Awaiting Payment</span><small>Payment support coming soon</small></div>
+            </article>
           </section>
 
-          <section className="card service-pipeline-card">
-            <div className="card__header">
-              <div>
-                <h3>Job Pipeline</h3>
-                <p className="muted admin-card__subtitle">Bookings grouped by the action the workshop team needs to take next.</p>
-              </div>
-            </div>
-            <div className="service-pipeline-grid">
-              <div className="service-pipeline-column">
-                <div className="service-pipeline-column__header">
-                  <span>New Requests</span>
-                  <strong>{pendingBookings.length}</strong>
+          <section className="service-dashboard-main-grid">
+            <article className="service-dashboard-card service-dashboard-card--schedule">
+              <div className="service-dashboard-card__header">
+                <div><CalendarDays aria-hidden="true" /><h3>Today&apos;s Schedule</h3></div>
+                <div className="service-dashboard-controls">
+                  <span>{new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                  <span>All Work Types</span>
                 </div>
-                {sortedPendingBookings.length === 0 ? (
-                  <p className="empty">No new service requests waiting.</p>
-                ) : (
-                  <ul className="service-job-list">{sortedPendingBookings.map(renderJobCard)}</ul>
-                )}
               </div>
-              <div className="service-pipeline-column">
-                <div className="service-pipeline-column__header">
-                  <span>Accepted Jobs</span>
-                  <strong>{confirmedBookings.length}</strong>
+              {todayScheduleRows.length === 0 ? (
+                <p className="service-dashboard-empty">No service bookings scheduled.</p>
+              ) : (
+                <div className="service-schedule-table">
+                  <div className="service-schedule-table__head">
+                    <span>Vehicle (Plate)</span><span>Make / Model</span><span>Scheduled Time</span><span>Work Type</span><span>Status</span>
+                  </div>
+                  {todayScheduleRows.map((booking) => (
+                    <button className="service-schedule-table__row" type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
+                      <span data-label="Vehicle (Plate)">{vehiclePlate(booking)}</span>
+                      <span data-label="Make / Model">{vehicleName(booking)}</span>
+                      <span data-label="Scheduled Time">{formatTime(booking.requested_date)}</span>
+                      <span data-label="Work Type">{bookingWork(booking)}</span>
+                      <span data-label="Status"><span className={`service-status-badge service-status-badge--${booking.status || "pending"}`}>{formatStatus(booking.status)}</span></span>
+                    </button>
+                  ))}
                 </div>
-                {sortedConfirmedBookings.length === 0 ? (
-                  <p className="empty">No accepted jobs in progress.</p>
-                ) : (
-                  <ul className="service-job-list">{sortedConfirmedBookings.map(renderJobCard)}</ul>
-                )}
+              )}
+              <Link className="service-dashboard-link" to="/service/bookings">View Full Schedule</Link>
+            </article>
+
+            <article className="service-dashboard-card service-dashboard-card--attention">
+              <div className="service-dashboard-card__header">
+                <div><AlertTriangle aria-hidden="true" /><h3>Attention Queue</h3><span className="service-dashboard-count">{attentionQueue.length}</span></div>
+                <Link to="/service/bookings">View All Queue</Link>
               </div>
-              <div className="service-pipeline-column">
-                <div className="service-pipeline-column__header">
-                  <span>Completed Awaiting Review</span>
-                  <strong>{needsManagerReviewCount}</strong>
+              {attentionQueue.length === 0 ? (
+                <p className="service-dashboard-empty">No urgent service actions. Great! All clear for now.</p>
+              ) : (
+                <div className="service-attention-list">
+                  {attentionQueue.map((item) => {
+                    const Icon = item.icon === "calendar" ? CalendarDays : item.icon === "check" ? CheckCircle2 : item.icon === "hourglass" ? Hourglass : RotateCcw;
+                    return (
+                      <article className={`service-attention-item service-attention-item--${item.tone}`} key={`${item.booking.id}-${item.title}`}>
+                        <span className="service-attention-item__icon"><Icon aria-hidden="true" /></span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <span>{vehiclePlate(item.booking)} · {vehicleName(item.booking)}</span>
+                          <small>{bookingWork(item.booking)} · Scheduled {formatTime(item.booking.requested_date)}</small>
+                        </div>
+                        <button className="service-attention-item__action" type="button" onClick={item.onClick}>{item.action}</button>
+                      </article>
+                    );
+                  })}
                 </div>
-                {completedAwaitingReview.length === 0 ? (
-                  <p className="empty">No completed jobs waiting for review.</p>
-                ) : (
-                  <ul className="service-job-list">{completedAwaitingReview.map(renderJobCard)}</ul>
-                )}
-              </div>
-            </div>
+              )}
+            </article>
           </section>
 
-          <section className="card service-recent-card">
-            <div className="card__header">
-              <div>
-                <h3>Recently Completed</h3>
-                <p className="muted admin-card__subtitle">Latest closed jobs with cost and manager-review status.</p>
+          <section className="service-dashboard-bottom-grid">
+            <article className="service-dashboard-card">
+              <div className="service-dashboard-card__header">
+                <div><ClipboardCheck aria-hidden="true" /><h3>Recent Completed Work</h3></div>
+                <Link to="/service/bookings">View All</Link>
               </div>
-            </div>
-            {latestCompleted.length === 0 ? (
-              <p className="empty">No completed service jobs recorded yet.</p>
-            ) : (
-              <ul className="service-recent-list">
-                {latestCompleted.map((booking) => (
-                  <li className="service-recent-row" key={booking.id}>
-                    <div>
-                      <strong>{vehicleLabel(booking)}</strong>
-                      <span>{booking.completed_at || booking.requested_date}</span>
+              {latestCompleted.length === 0 ? (
+                <p className="service-dashboard-empty">No completed service jobs recorded yet.</p>
+              ) : (
+                <div className="service-mini-table">
+                  <div className="service-mini-table__head"><span>Vehicle (Plate)</span><span>Work Type</span><span>Completed At</span><span>Amount (LKR)</span></div>
+                  {latestCompleted.slice(0, 5).map((booking) => (
+                    <button className="service-mini-table__row" type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
+                      <span>{vehiclePlate(booking)}</span><span>{bookingWork(booking)}</span><span>{formatTime(booking.completed_at || booking.requested_date)}</span><span>{formatCurrency(booking.final_cost_lkr)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Link className="service-dashboard-link" to="/service/bookings">View All Completed Work</Link>
+            </article>
+
+            <article className="service-dashboard-card">
+              <div className="service-dashboard-card__header">
+                <div><ClipboardList aria-hidden="true" /><h3>Booking Status Breakdown</h3></div>
+                <Link to="/service/bookings">View Report</Link>
+              </div>
+              <div className="service-breakdown">
+                <div className="service-breakdown-donut" aria-label="Booking status breakdown"><strong>{totalStatusCount}</strong><span>Total</span></div>
+                <div className="service-breakdown-list">
+                  {statusBreakdown.map((item) => (
+                    <div className="service-breakdown-row" key={item.label}>
+                      <span><i className={`service-breakdown-dot service-breakdown-dot--${item.tone}`} />{item.label}</span>
+                      <strong>{item.value} {totalStatusCount > 0 ? `(${Math.round((item.value / totalStatusCount) * 100)}%)` : "(0%)"}</strong>
                     </div>
-                    <div>
-                      <strong>{formatCurrency(booking.final_cost_lkr)}</strong>
-                      <span>{formatReviewStatus(booking.completion_review_status)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  ))}
+                </div>
+              </div>
+              <div className="service-clear-state"><CheckCircle2 aria-hidden="true" /><div><strong>{attentionQueue.length === 0 ? "No urgent escalations. Great!" : `${attentionQueue.length} queue item${attentionQueue.length === 1 ? "" : "s"} need attention`}</strong><span>{attentionQueue.length === 0 ? "All clear for now." : "Open the queue to complete the next actions."}</span></div></div>
+            </article>
+
+            <article className="service-dashboard-card service-dashboard-card--payments">
+              <div className="service-dashboard-card__header">
+                <div><WalletCards aria-hidden="true" /><h3>Payment Settlement Queue</h3></div>
+                <button type="button" disabled title="Payment support coming soon">View Payments</button>
+              </div>
+              <div className="service-payment-summary">
+                <div><span>Awaiting Payment</span><strong>{formatCurrency(awaitingPaymentTotal)}</strong></div>
+                <div><span>Paid Today</span><strong>LKR 0</strong></div>
+                <div><span>Blocked</span><strong>{formatCurrency(blockedPaymentTotal)}</strong></div>
+              </div>
+              {paymentRows.length === 0 ? (
+                <p className="service-dashboard-empty">Approved service payments will appear here once in-app payments are enabled.</p>
+              ) : (
+                <div className="service-payment-table">
+                  <div className="service-payment-table__head"><span>Vehicle (Plate)</span><span>Make / Model</span><span>Work Type</span><span>Amount</span><span>Payment State</span><span>Status</span></div>
+                  {paymentRows.map((item) => (
+                    <button className="service-payment-table__row" type="button" key={item.booking.id} onClick={() => setSelectedBooking(item.booking)}>
+                      <span>{vehiclePlate(item.booking)}</span><span>{vehicleName(item.booking)}</span><span>{bookingWork(item.booking)}</span><span>{formatCurrency(item.booking.final_cost_lkr)}</span><span><span className={`service-payment-badge service-payment-badge--${item.tone}`}>{item.label}</span></span><span>{item.status}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="service-payment-note">Payment actions are disabled until in-app payments are implemented.</p>
+            </article>
           </section>
         </>
       ) : (
         <>
-          <div className="stats stats--three admin-stats">
-            <div className="stat-card stat-card--blue">
-              <div className="stat-value">{filteredBookings.length}</div>
-              <div className="stat-label">Current View</div>
-              <div className="stat-sub">Bookings in the current working set</div>
-            </div>
-            <div className="stat-card stat-card--amber">
-              <div className="stat-value">{me?.summary.pending_count ?? 0}</div>
-              <div className="stat-label">New Requests</div>
-              <div className="stat-sub">Still need accept or cancel action</div>
-            </div>
-            <div className="stat-card stat-card--purple">
-              <div className="stat-value">{needsManagerReviewCount}</div>
-              <div className="stat-label">Awaiting Review</div>
-              <div className="stat-sub">Completed bookings still pending manager approval</div>
-            </div>
-          </div>
+          <section className="service-dashboard-kpis service-bookings-kpis" aria-label="Service bookings summary">
+            <article className="service-dashboard-kpi service-dashboard-kpi--blue">
+              <span className="service-dashboard-kpi__icon"><ClipboardList aria-hidden="true" /></span>
+              <div><strong>{pendingBookings.length}</strong><span>New Requests</span><small>Waiting for confirmation</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--green">
+              <span className="service-dashboard-kpi__icon"><CheckCircle2 aria-hidden="true" /></span>
+              <div><strong>{confirmedBookings.length}</strong><span>Confirmed Jobs</span><small>Ready to complete</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--amber">
+              <span className="service-dashboard-kpi__icon"><Clock3 aria-hidden="true" /></span>
+              <div><strong>{needsManagerReviewCount}</strong><span>Awaiting Approval</span><small>Manager review pending</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--red">
+              <span className="service-dashboard-kpi__icon"><AlertTriangle aria-hidden="true" /></span>
+              <div><strong>{reopenedReviewRows.length}</strong><span>Reopened Reviews</span><small>Correction in progress</small></div>
+            </article>
+            <article className="service-dashboard-kpi service-dashboard-kpi--indigo">
+              <span className="service-dashboard-kpi__icon"><WalletCards aria-hidden="true" /></span>
+              <div><strong>{formatCurrency(awaitingPaymentTotal)}</strong><span>Payment Ready</span><small>Approved, awaiting payment</small></div>
+            </article>
+          </section>
 
-          <section className="card service-portal-table-card">
-            <div className="card__header">
-              <div>
+          <section className="service-bookings-grid">
+            <article className="service-bookings-card service-bookings-table-card">
+              <div className="service-bookings-card__header">
                 <h3>Booking Queue</h3>
-                <p className="muted admin-card__subtitle">Accept requests, close completed work, and update assigned service jobs.</p>
               </div>
-            </div>
 
-            <div className="table-controls">
-              <div className="table-controls__filters">
-                <label className="table-controls__label table-controls__label--search">
-                  Search
+              <div className="service-bookings-controls">
+                <label className="service-bookings-control service-bookings-control--search">
+                  <span>Search</span>
                   <input
                     type="search"
-                    placeholder="Vehicle, date, work, notes..."
+                    placeholder="Search by plate, vehicle, or work type..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </label>
-                <label className="table-controls__label">
-                  Status
+                <label className="service-bookings-control">
+                  <span>Status</span>
                   <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
-                    <option value="all">All</option>
+                    <option value="all">All Statuses</option>
                     <option value="pending">Pending</option>
                     <option value="confirmed">Confirmed</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </label>
-                <label className="table-controls__label">
-                  Rows
+                <label className="service-bookings-control">
+                  <span>Work Type</span>
+                  <select value={workTypeFilter} onChange={(e) => setWorkTypeFilter(e.target.value)}>
+                    <option value="all">All Work Types</option>
+                    {availableWorkTypes.map((workType) => (
+                      <option key={workType} value={workType}>{workType}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="service-bookings-control">
+                  <span>Date</span>
+                  <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}>
+                    <option value="week">Next 7 Days</option>
+                    <option value="today">Today</option>
+                    <option value="all">All Dates</option>
+                  </select>
+                </label>
+                <label className="service-bookings-control service-bookings-control--rows">
+                  <span>Rows</span>
                   <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
                     <option value={10}>10</option>
                     <option value={20}>20</option>
@@ -617,109 +986,156 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
                   </select>
                 </label>
               </div>
-              <div className="table-pagination">
-                <span className="table-pagination__meta">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Prev
-                </button>
-                <button
-                  className="btn btn--secondary btn--compact"
-                  type="button"
-                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
 
-            {loading ? (
-              <p className="empty">Loading bookings...</p>
-            ) : filteredBookings.length === 0 ? (
-              <p className="empty">No bookings match the current search/filter.</p>
-            ) : (
-              <div className="table service-portal-table" style={{ ["--table-columns" as any]: 6 }}>
-                <div className="table__head service-portal-table__head">
-                  <span>Date</span>
-                  <span>Vehicle</span>
-                  <span>Plate</span>
-                  <span>Status</span>
-                  <span>Notes</span>
-                  <span>Actions</span>
-                </div>
-                {visibleBookings.map((booking) => (
-                  <div key={booking.id} className="table__row service-portal-table__row">
-                    <span className="service-portal-table__cell" data-label="Date">{booking.requested_date}</span>
-                    <span className="service-portal-table__cell" data-label="Vehicle">{vehicleName(booking)}</span>
-                    <span className="service-portal-table__cell" data-label="Plate">{vehiclePlate(booking)}</span>
-                    <span className="service-portal-table__cell" data-label="Status">
-                      <span className={`pill pill--${statusBadgeClass[booking.status || "pending"] || "warning"}`}>
-                        {formatStatus(booking.status)}
-                      </span>
-                    </span>
-                    <span className="service-portal-table__cell" data-label="Notes">
-                      {booking.service_notes || booking.notes ? (
-                        <span className="service-portal-table__notes">
-                          {String(booking.service_notes || booking.notes).length > 48
-                            ? `${String(booking.service_notes || booking.notes).slice(0, 48)}...`
-                            : String(booking.service_notes || booking.notes)}
-                        </span>
-                      ) : (
-                        <span className="service-portal-table__empty">No notes recorded</span>
-                      )}
-                    </span>
-                    <span className="table__actions service-portal-table__actions" data-label="Actions">
-                      <span className="service-portal-table__icon-group">
-                        <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label="View booking">
-                          <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
-                        </button>
-                        {(booking.status === "confirmed" || (booking.status === "completed" && booking.completion_review_status !== "approved")) && (
-                          <button className="icon-action" type="button" onClick={() => openDetailsModal(booking)} title="Update details" aria-label="Update details">
-                            <Pencil className="icon-action__svg icon-action__svg--edit" aria-hidden="true" />
-                          </button>
-                        )}
-                        {booking.status === "confirmed" && (
-                          <button className="icon-action" type="button" onClick={() => openActionModal(booking, "pending")} title="Mark pending" aria-label="Mark pending">
-                            <RotateCcw className="icon-action__svg icon-action__svg--undo" aria-hidden="true" />
-                          </button>
-                        )}
-                      </span>
-                      {(booking.status || "pending") === "pending" && (
-                        <span className="service-portal-table__action-group service-portal-table__action-group--pending">
-                          <button className="btn btn--secondary btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "confirmed")}>
-                            Accept
-                          </button>
-                          <button className="btn btn--danger btn--compact service-portal-table__action-btn service-portal-table__action-btn--pending" type="button" onClick={() => openActionModal(booking, "cancelled")}>
-                            Cancel
-                          </button>
-                        </span>
-                      )}
-                      {booking.status === "confirmed" && (
-                        <span className="service-portal-table__action-group service-portal-table__action-group--single">
-                          <button className="btn btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "completed")}>
-                            Complete Job
-                          </button>
-                        </span>
-                      )}
-                      {booking.status === "completed" && (
-                        <span className="service-portal-table__action-group service-portal-table__action-group--single">
-                          <button className="btn btn--secondary btn--compact service-portal-table__action-btn" type="button" onClick={() => openActionModal(booking, "confirmed")}>
-                            Reopen
-                          </button>
-                        </span>
-                      )}
-                    </span>
+              {loading ? (
+                <p className="service-bookings-empty">Loading bookings...</p>
+              ) : filteredBookings.length === 0 ? (
+                <p className="service-bookings-empty">No bookings match the current search/filter.</p>
+              ) : (
+                <div className="service-bookings-table">
+                  <div className="service-bookings-table__head">
+                    <span>Vehicle</span>
+                    <span>Scheduled Date</span>
+                    <span>Work Type</span>
+                    <span>Status</span>
+                    <span>Review State</span>
+                    <span>Amount</span>
+                    <span>Actions</span>
                   </div>
-                ))}
+                  {visibleBookings.map((booking) => (
+                    <div key={booking.id} className="service-bookings-table__row">
+                      <span className="service-bookings-table__booking" data-label="Vehicle">
+                        <strong>{vehiclePlate(booking)}</strong>
+                        <small>{vehicleName(booking)}</small>
+                      </span>
+                      <span data-label="Scheduled Date">
+                        <strong>{formatDate(booking.requested_date)}</strong>
+                        <small>{formatTime(booking.requested_date)}</small>
+                      </span>
+                      <span data-label="Work Type">{bookingWork(booking)}</span>
+                      <span data-label="Status">
+                        <span className={`service-bookings-badge service-bookings-badge--${statusTone(booking)}`}>
+                          {(booking.status || "pending") === "pending" ? "New" : formatStatus(booking.status)}
+                        </span>
+                      </span>
+                      <span data-label="Review State">
+                        <span className={`service-bookings-review service-bookings-review--${reviewStateTone(booking)}`}>
+                          {reviewStateLabel(booking)}
+                        </span>
+                      </span>
+                      <span data-label="Amount">{formatCurrency(booking.final_cost_lkr)}</span>
+                      <span className="service-bookings-table__actions" data-label="Actions">
+                        {renderBookingTableAction(booking)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="service-bookings-footer">
+                <span>
+                  Showing {filteredBookings.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1} to{" "}
+                  {Math.min(currentPage * rowsPerPage, filteredBookings.length)} of {filteredBookings.length} bookings
+                </span>
+                <div className="service-bookings-pagination">
+                  <label>
+                    Rows per page:
+                    <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))}>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </label>
+                  <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+                    Prev
+                  </button>
+                  <strong>{currentPage}</strong>
+                  <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+                    Next
+                  </button>
+                </div>
               </div>
-            )}
+            </article>
+
+            <aside className="service-bookings-side">
+              <article className="service-bookings-side-card">
+                <div className="service-bookings-side-card__header">
+                  <h3>Today&apos;s Workload</h3>
+                </div>
+                <div className="service-bookings-workload">
+                  <div><CalendarDays aria-hidden="true" /><span>Total Assigned Today</span><strong>{todayBookings.length}</strong></div>
+                  <div><ClipboardList aria-hidden="true" /><span>New Requests</span><strong>{pendingBookings.length}</strong></div>
+                  <div><CheckCircle2 aria-hidden="true" /><span>Completed Today</span><strong>{me?.summary.completed_today_count ?? 0}</strong></div>
+                  <div><Clock3 aria-hidden="true" /><span>Still Pending</span><strong>{stillPendingToday}</strong></div>
+                </div>
+              </article>
+
+              <article className="service-bookings-side-card">
+                <div className="service-bookings-side-card__header">
+                  <h3>Approval Queue</h3>
+                  <button type="button" onClick={() => setStatusFilter("completed")}>View all</button>
+                </div>
+                {approvalQueueRows.length === 0 ? (
+                  <p className="service-bookings-side-empty">No bookings waiting for manager approval.</p>
+                ) : (
+                  <div className="service-bookings-mini-list">
+                    {approvalQueueRows.map((booking) => (
+                      <button type="button" key={booking.id} onClick={() => openDetailsModal(booking)}>
+                        <span><strong>{vehiclePlate(booking)}</strong><small>{bookingWork(booking)}</small></span>
+                        <span>{formatCurrency(booking.final_cost_lkr)}</span>
+                        <em>Awaiting Approval</em>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="service-bookings-side-card">
+                <div className="service-bookings-side-card__header">
+                  <h3>Reopened Reviews</h3>
+                  <button type="button" onClick={() => setStatusFilter("completed")}>View all</button>
+                </div>
+                {reopenedReviewRows.length === 0 ? (
+                  <p className="service-bookings-side-empty">No correction requests right now.</p>
+                ) : (
+                  <div className="service-bookings-mini-list service-bookings-mini-list--reopened">
+                    {reopenedReviewRows.map((booking) => (
+                      <button type="button" key={booking.id} onClick={() => openDetailsModal(booking)}>
+                        <span><strong>{vehiclePlate(booking)}</strong><small>{bookingWork(booking)}</small></span>
+                        <span>{formatCurrency(booking.final_cost_lkr)}</span>
+                        <em>Correction Required</em>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="service-bookings-side-card">
+                <div className="service-bookings-side-card__header">
+                  <h3>Payment Preview</h3>
+                </div>
+                <div className="service-bookings-payment-callout">
+                  <WalletCards aria-hidden="true" />
+                  <div>
+                    <strong>Awaiting Payment: {formatCurrency(awaitingPaymentTotal)}</strong>
+                    <span>In-app payments coming soon.</span>
+                  </div>
+                </div>
+                {paymentReadyRows.length === 0 ? (
+                  <p className="service-bookings-side-empty">Approved service payments will appear here.</p>
+                ) : (
+                  <div className="service-bookings-payment-list">
+                    {paymentReadyRows.map((booking) => (
+                      <button type="button" key={booking.id} onClick={() => setSelectedBooking(booking)}>
+                        <span><strong>{vehiclePlate(booking)}</strong><small>{bookingWork(booking)}</small></span>
+                        <span>{formatCurrency(booking.final_cost_lkr)}</span>
+                        <em>Approved</em>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </aside>
           </section>
         </>
       )}

@@ -92,6 +92,10 @@ const serviceNav: NavItemConfig[] = [
   { to: "/service/bookings", label: "Service Bookings", icon: "bookings" },
 ];
 
+const serviceNavGroups = [
+  { label: "Operations", items: serviceNav },
+];
+
 export default function Sidebar({
   role,
   collapsed = false,
@@ -100,7 +104,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const isDriver = role === "driver";
   const isService = role === "service";
-  const shellLabel = isDriver ? "Driver Console" : isService ? "Service Console" : "Manager Console";
+  const shellLabel = isDriver ? "Driver Console" : isService ? "Service Portal" : "Manager Console";
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   function navClass(isActive: boolean) {
@@ -128,20 +132,25 @@ export default function Sidebar({
             <span className="nav-item__label">Driver Trips</span>
           </NavLink>
         ) : isService ? (
-          serviceNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => navClass(isActive)}
-              onClick={onCloseMobile}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="nav-item__icon">
-                <NavIcon name={item.icon} />
-              </span>
-              <span className="nav-item__label">{item.label}</span>
-            </NavLink>
+          serviceNavGroups.map((group) => (
+            <div className="sidebar__nav-section" key={group.label}>
+              <div className="sidebar__nav-label">{group.label}</div>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => navClass(isActive)}
+                  onClick={onCloseMobile}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <span className="nav-item__icon">
+                    <NavIcon name={item.icon} />
+                  </span>
+                  <span className="nav-item__label">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))
         ) : (
           managerNavGroups.map((group) => (
