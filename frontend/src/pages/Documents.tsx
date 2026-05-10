@@ -7,6 +7,8 @@ import {
   Clock3,
   Eye,
   FileText,
+  ExternalLink,
+  Paperclip,
   Plus,
   Search,
   ShieldCheck,
@@ -33,6 +35,10 @@ type Document = {
   doc_number?: string;
   expiry_date?: string;
   file_url?: string;
+  file_path?: string;
+  file_name?: string;
+  file_mime_type?: string;
+  file_size_bytes?: number;
 };
 
 type DocumentsProps = {
@@ -53,10 +59,11 @@ type DocumentsProps = {
   docExpiry: string;
   setDocExpiry: (v: string) => void;
   editingDocumentId: string | null;
-  onAddDocument: (e: FormEvent) => void;
+  onAddDocument: (e: FormEvent, file?: File | null, removeFile?: boolean) => void;
   onEditDocument: (document: Document) => void;
   onCancelDocumentEdit: () => void;
   onDeleteDocument: (documentId: string) => Promise<void>;
+  onGetDocumentFileUrl: (documentId: string) => Promise<string>;
 };
 
 type DocumentRegisterTab = "vehicle" | "driver";
@@ -80,6 +87,13 @@ export default function Documents(props: DocumentsProps) {
   const [documentRowsPerPage, setDocumentRowsPerPage] = useState(10);
   const [documentPage, setDocumentPage] = useState(1);
   const [useCustomDocumentType, setUseCustomDocumentType] = useState(false);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [removeDocumentFile, setRemoveDocumentFile] = useState(false);
+  const [documentFileError, setDocumentFileError] = useState("");
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
+
+  const allowedDocumentFileTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+  const maxDocumentFileBytes = 10 * 1024 * 1024;
 
   const vehicleDocumentTypes = [
     "Insurance",
@@ -233,6 +247,7 @@ export default function Documents(props: DocumentsProps) {
       doc.doc_number,
       doc.expiry_date,
       doc.file_url,
+      doc.file_name,
       doc.vehicle_id ? vehicleLabelMap[doc.vehicle_id] : "",
       doc.driver_id ? driverLabelMap[doc.driver_id] : "",
       doc.vehicle_id ? "vehicle" : doc.driver_id ? "driver" : "",
@@ -247,6 +262,9 @@ export default function Documents(props: DocumentsProps) {
     (currentDocumentPage - 1) * documentRowsPerPage,
     currentDocumentPage * documentRowsPerPage
   );
+  const editingDocument = props.editingDocumentId
+    ? props.documents.find((doc) => doc.id === props.editingDocumentId)
+    : undefined;
 
   useEffect(() => {
     setDocumentPage(1);
@@ -256,8 +274,110 @@ export default function Documents(props: DocumentsProps) {
     if (!props.loading) {
       setShowDocumentModal(false);
       setUseCustomDocumentType(false);
+      resetDocumentFileState();
     }
   }, [props.loading]);
+
+  useEffect(() => {
+    if (!selectedDocument) return;
+    const latest = props.documents.find((doc) => doc.id === selectedDocument.id);
+    if (latest && latest !== selectedDocument) {
+      setSelectedDocument(latest);
+    }
+  }, [props.documents, selectedDocument]);
+
+  function resetDocumentFileState() {
+    setDocumentFile(null);
+    setRemoveDocumentFile(false);
+    setDocumentFileError("");
+  }
+
+  function hasDocumentFile(doc: Document) {
+    return Boolean(doc.file_path || doc.file_url);
+  }
+
+  function isExternalFileUrl(value?: string) {
+    return Boolean(value && /^https?:\/\//i.test(value));
+  }
+
+  function getDocumentFileReference(doc: Document) {
+    const fileUrl = doc.file_url || "";
+    if (!fileUrl.startsWith("document-files://")) return {};
+    try {
+      const url = new URL(fileUrl);
+      return {
+        name: url.searchParams.get("name") || undefined,
+        type: url.searchParams.get("type") || undefined,
+        size: url.searchParams.get("size") ? Number(url.searchParams.get("size")) : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  function formatFileSize(bytes?: number) {
+    if (!bytes) return "--";
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function getDocumentFileName(doc: Document) {
+    if (!hasDocumentFile(doc)) return "No file uploaded";
+    return doc.file_name || getDocumentFileReference(doc).name || "Uploaded file";
+  }
+
+  function getDocumentFileSize(doc: Document) {
+    const referenceSize = getDocumentFileReference(doc).size;
+    return doc.file_size_bytes || (Number.isFinite(referenceSize) ? referenceSize : undefined);
+  }
+
+  function getDocumentFileType(doc: Document) {
+    const referenceType = getDocumentFileReference(doc).type;
+    if (referenceType) return referenceType;
+    if (doc.file_mime_type) return doc.file_mime_type;
+    const path = doc.file_path || doc.file_url || doc.file_name || "";
+    const extension = path.includes(".") ? path.split(".").pop()?.toLowerCase() : "";
+    if (extension === "pdf") return "application/pdf";
+    if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+    if (extension === "png") return "image/png";
+    if (extension === "webp") return "image/webp";
+    return "--";
+  }
+
+  function handleDocumentFileChange(file?: File) {
+    setDocumentFileError("");
+    if (!file) {
+      setDocumentFile(null);
+      return;
+    }
+    if (!allowedDocumentFileTypes.includes(file.type)) {
+      setDocumentFile(null);
+      setDocumentFileError("Upload a PDF, JPG, PNG, or WebP file.");
+      return;
+    }
+    if (file.size > maxDocumentFileBytes) {
+      setDocumentFile(null);
+      setDocumentFileError("Document file must be 10MB or smaller.");
+      return;
+    }
+    setDocumentFile(file);
+    setRemoveDocumentFile(false);
+  }
+
+  async function openDocumentFile(doc: Document) {
+    if (doc.file_url && !doc.file_path && isExternalFileUrl(doc.file_url)) {
+      window.open(doc.file_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!doc.file_path && !doc.file_url) return;
+    setOpeningDocumentId(doc.id);
+    try {
+      const url = await props.onGetDocumentFileUrl(doc.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setOpeningDocumentId(null);
+    }
+  }
 
   function closeDocumentModal() {
     setShowDocumentModal(false);
@@ -265,6 +385,7 @@ export default function Documents(props: DocumentsProps) {
       props.onCancelDocumentEdit();
     }
     setUseCustomDocumentType(false);
+    resetDocumentFileState();
   }
 
   async function confirmDelete() {
@@ -321,6 +442,7 @@ export default function Documents(props: DocumentsProps) {
                 onClick={() => {
                   props.onCancelDocumentEdit();
                   setUseCustomDocumentType(false);
+                  resetDocumentFileState();
                   setShowDocumentModal(true);
                 }}
               >
@@ -425,6 +547,11 @@ export default function Documents(props: DocumentsProps) {
                       <span data-label="Expiry Date">{formatDisplayDate(doc.expiry_date)}</span>
                       <span data-label="Status"><span className={`documents-status-badge documents-status-badge--${status.tone}`}>{status.label}</span></span>
                       <span className="documents-table__actions" data-label="Actions">
+                        {hasDocumentFile(doc) && (
+                          <span className="documents-attachment-indicator" title="File attached" aria-label="File attached">
+                            <Paperclip aria-hidden="true" />
+                          </span>
+                        )}
                         <button className="icon-action" type="button" onClick={() => setSelectedDocument(doc)} aria-label={`View document ${doc.id}`} title="View document">
                           <Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" />
                         </button>
@@ -434,6 +561,7 @@ export default function Documents(props: DocumentsProps) {
                           onClick={() => {
                             props.onEditDocument(doc);
                             setUseCustomDocumentType(false);
+                            resetDocumentFileState();
                             setShowDocumentModal(true);
                           }}
                           aria-label={`Edit document ${doc.id}`}
@@ -541,7 +669,11 @@ export default function Documents(props: DocumentsProps) {
                 ✕
               </button>
             </div>
-            <form id="document-form" className="form form--scroll" onSubmit={props.onAddDocument}>
+            <form
+              id="document-form"
+              className="form form--scroll"
+              onSubmit={(event) => props.onAddDocument(event, documentFile, removeDocumentFile)}
+            >
               <div className="form-section-title">
                 <div>
                   <h4>Owner</h4>
@@ -662,6 +794,60 @@ export default function Documents(props: DocumentsProps) {
                   onChange={(e) => props.setDocExpiry(e.target.value)}
                 />
               </label>
+              <div className="form-section-title">
+                <div>
+                  <h4>File</h4>
+                  <p>Attach a PDF or image copy for private storage.</p>
+                </div>
+              </div>
+              <div className="documents-file-field">
+                <div>
+                  <span className="documents-file-field__label">Document File</span>
+                  <strong>
+                    {documentFile
+                      ? documentFile.name
+                      : props.editingDocumentId && !removeDocumentFile
+                        ? editingDocument && hasDocumentFile(editingDocument)
+                          ? getDocumentFileName(editingDocument)
+                          : "No file selected"
+                        : "No file selected"}
+                  </strong>
+                  <small>
+                    {documentFile
+                      ? formatFileSize(documentFile.size)
+                      : props.editingDocumentId && !removeDocumentFile
+                        ? editingDocument && hasDocumentFile(editingDocument)
+                          ? formatFileSize(getDocumentFileSize(editingDocument))
+                          : "PDF, JPG, PNG, or WebP up to 10MB"
+                        : "PDF, JPG, PNG, or WebP up to 10MB"}
+                  </small>
+                  {removeDocumentFile && <small>Current file will be removed when saved.</small>}
+                  {documentFileError && <small className="documents-file-field__error">{documentFileError}</small>}
+                </div>
+                <div className="documents-file-field__actions">
+                  <label className="btn btn--secondary documents-file-upload">
+                    Choose File
+                    <input
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      onChange={(event) => handleDocumentFileChange(event.target.files?.[0])}
+                    />
+                  </label>
+                  {(documentFile || (editingDocument && hasDocumentFile(editingDocument))) && (
+                    <button
+                      className="btn btn--secondary"
+                      type="button"
+                      onClick={() => {
+                        setDocumentFile(null);
+                        setRemoveDocumentFile(Boolean(props.editingDocumentId));
+                        setDocumentFileError("");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
             </form>
             <div className="modal__actions">
               <button className="btn btn--secondary" type="button" onClick={closeDocumentModal}>
@@ -707,7 +893,24 @@ export default function Documents(props: DocumentsProps) {
                   </span>
                 </strong>
               </div>
-              <div className="detail-item detail-item--full"><span>File Link</span><strong>{selectedDocument.file_url || "No file link recorded"}</strong></div>
+              <div className="detail-item"><span>File</span><strong>{getDocumentFileName(selectedDocument)}</strong></div>
+              <div className="detail-item"><span>File Type</span><strong>{getDocumentFileType(selectedDocument)}</strong></div>
+              <div className="detail-item"><span>File Size</span><strong>{formatFileSize(getDocumentFileSize(selectedDocument))}</strong></div>
+              <div className="detail-item detail-item--full documents-file-open-row">
+                <span>File Access</span>
+                <strong>{hasDocumentFile(selectedDocument) ? "Private file available" : "--"}</strong>
+                {hasDocumentFile(selectedDocument) && (
+                  <button
+                    className="btn btn--secondary documents-file-open"
+                    type="button"
+                    onClick={() => openDocumentFile(selectedDocument)}
+                    disabled={openingDocumentId === selectedDocument.id}
+                  >
+                    <ExternalLink aria-hidden="true" />
+                    {openingDocumentId === selectedDocument.id ? "Opening..." : "Open File"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

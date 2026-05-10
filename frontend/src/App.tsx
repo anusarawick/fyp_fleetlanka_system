@@ -502,6 +502,7 @@ function ManagerRoutes() {
               onEditDocument={data.handleEditDocument}
               onCancelDocumentEdit={data.handleCancelDocumentEdit}
               onDeleteDocument={data.handleDeleteDocument}
+              onGetDocumentFileUrl={data.getDocumentFileUrl}
             />
           </>
         }

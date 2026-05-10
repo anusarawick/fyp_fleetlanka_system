@@ -186,6 +186,10 @@ export type Document = {
   doc_number?: string;
   expiry_date?: string;
   file_url?: string;
+  file_path?: string;
+  file_name?: string;
+  file_mime_type?: string;
+  file_size_bytes?: number;
 };
 
 export type ServiceCenter = {

@@ -443,7 +443,7 @@
 .documents-table__head,
 .documents-table__row {
   display: grid;
-  grid-template-columns: minmax(145px, 1fr) minmax(138px, 0.9fr) minmax(132px, 0.9fr) minmax(128px, 0.82fr) minmax(110px, 0.72fr) 104px;
+  grid-template-columns: minmax(145px, 1fr) minmax(138px, 0.9fr) minmax(132px, 0.9fr) minmax(128px, 0.82fr) minmax(110px, 0.72fr) 128px;
   gap: 9px;
   align-items: center;
   padding: 7px 8px;
@@ -552,11 +552,104 @@
 
 .documents-table__actions {
   display: flex;
-  width: 104px;
-  min-width: 104px;
+  width: 128px;
+  min-width: 128px;
   justify-self: end;
   justify-content: flex-end;
   gap: 7px;
+}
+
+.documents-attachment-indicator {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #d9e2ea;
+  border-radius: 5px;
+  color: #047779;
+  background: #f0fdfa;
+}
+
+.documents-attachment-indicator svg {
+  width: 14px;
+  height: 14px;
+}
+
+.documents-file-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #d9e2ea;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.documents-file-field > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.documents-file-field__label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.documents-file-field strong,
+.documents-file-field small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.documents-file-field strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.documents-file-field small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.documents-file-field__error {
+  color: #dc2626 !important;
+}
+
+.documents-file-field__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.documents-file-upload {
+  position: relative;
+  overflow: hidden;
+}
+
+.documents-file-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.documents-file-open-row {
+  align-items: center;
+}
+
+.documents-file-open {
+  width: fit-content;
+  margin-top: 8px;
+}
+
+.documents-file-open svg {
+  width: 15px;
+  height: 15px;
 }
 
 .app--manager .people-page--documents .icon-action {

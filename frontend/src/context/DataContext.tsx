@@ -329,10 +329,11 @@ type DataContextType = {
     handleEditMaintenance: (record: Maintenance) => void;
     handleCancelMaintenanceEdit: () => void;
     handleDeleteMaintenance: (maintenanceId: string) => Promise<void>;
-    handleAddDocument: (e: FormEvent) => Promise<void>;
+    handleAddDocument: (e: FormEvent, file?: File | null, removeFile?: boolean) => Promise<void>;
     handleEditDocument: (document: Document) => void;
     handleCancelDocumentEdit: () => void;
     handleDeleteDocument: (documentId: string) => Promise<void>;
+    getDocumentFileUrl: (documentId: string) => Promise<string>;
     handleAddCenter: (e: FormEvent) => Promise<void>;
     handleEditCenter: (center: ServiceCenter) => void;
     handleCancelCenterEdit: () => void;
@@ -1971,7 +1972,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
     }
 
-    async function handleAddDocument(e: FormEvent) {
+    async function uploadDocumentFile(documentId: string, file: File) {
+        const formData = new FormData();
+        formData.append("file", file);
+        return apiPostForm<Document>(`/documents/${documentId}/file`, formData, token);
+    }
+
+    async function handleAddDocument(e: FormEvent, file?: File | null, removeFile?: boolean) {
         e.preventDefault();
         if (!token || !docType) return;
         setError(null);
@@ -1991,12 +1998,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 doc_number: docNumber || undefined,
                 expiry_date: docExpiry || undefined,
             };
+            let savedDocument: Document;
             if (editingDocumentId) {
-                const updated = await apiPatch<Document>(`/documents/${editingDocumentId}`, payload, token);
-                setDocuments((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+                savedDocument = await apiPatch<Document>(`/documents/${editingDocumentId}`, payload, token);
+                if (file) {
+                    savedDocument = await uploadDocumentFile(editingDocumentId, file);
+                } else if (removeFile) {
+                    savedDocument = await apiDelete<Document>(`/documents/${editingDocumentId}/file`, token);
+                }
+                setDocuments((prev) => prev.map((doc) => (doc.id === savedDocument.id ? savedDocument : doc)));
             } else {
-                const created = await apiPost<Document>("/documents", payload, token);
-                setDocuments((prev) => [created, ...prev]);
+                savedDocument = await apiPost<Document>("/documents", payload, token);
+                if (file) {
+                    savedDocument = await uploadDocumentFile(savedDocument.id, file);
+                }
+                setDocuments((prev) => [savedDocument, ...prev]);
             }
             setDocOwnerType("vehicle");
             setDocVehicle("");
@@ -2010,6 +2026,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         } finally {
             setLoading(false);
         }
+    }
+
+    async function getDocumentFileUrl(documentId: string) {
+        if (!token) throw new Error("Missing auth token");
+        const response = await apiGet<{ url: string }>(`/documents/${documentId}/file-url`, token);
+        return response.url;
     }
 
     function handleEditDocument(document: Document) {
@@ -2587,6 +2609,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleEditDocument,
                 handleCancelDocumentEdit,
                 handleDeleteDocument,
+                getDocumentFileUrl,
                 handleAddCenter,
                 handleEditCenter,
                 handleCancelCenterEdit,

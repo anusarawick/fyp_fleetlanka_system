@@ -254,6 +254,10 @@ create table if not exists public.documents (
   doc_number text,
   expiry_date date,
   file_url text,
+  file_path text,
+  file_name text,
+  file_mime_type text,
+  file_size_bytes integer,
   created_at timestamptz not null default now(),
   constraint documents_owner_check check (
     (vehicle_id is not null and driver_id is null)
