@@ -51,8 +51,14 @@ class ChatMessageOut(BaseModel):
     read_at: Optional[str] = None
 
 
+class AiChatTurn(BaseModel):
+    role: str
+    text: str
+
+
 class AiChatRequest(BaseModel):
     message: str
+    history: list[AiChatTurn] = []
 
 
 class AiChatResponse(BaseModel):

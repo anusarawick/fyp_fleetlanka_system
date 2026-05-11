@@ -138,6 +138,83 @@ function formatMessageDate(value?: string) {
   return date.toLocaleDateString([], { day: "numeric", month: "short", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
 }
 
+function renderAiText(text: string) {
+  const lines = text.split(/\r?\n/);
+  const nodes: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let tableRows: string[] = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    nodes.push(
+      <ul key={`list-${nodes.length}`}>
+        {listItems.map((item, index) => <li key={`${item}-${index}`}>{renderInlineText(item)}</li>)}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  const flushTable = () => {
+    if (tableRows.length < 2) {
+      tableRows.forEach((row) => nodes.push(<p key={`p-${nodes.length}`}>{renderInlineText(row)}</p>));
+      tableRows = [];
+      return;
+    }
+    const rows = tableRows.filter((row) => !/^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(row));
+    const cells = rows.map((row) => row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
+    const [head, ...body] = cells;
+    nodes.push(
+      <div className="ai-assistant__table-wrap" key={`table-${nodes.length}`}>
+        <table>
+          <thead><tr>{head.map((cell, index) => <th key={`${cell}-${index}`}>{renderInlineText(cell)}</th>)}</tr></thead>
+          <tbody>{body.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => <td key={`${cell}-${index}`}>{renderInlineText(cell)}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    );
+    tableRows = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      flushTable();
+      return;
+    }
+    if (trimmed.includes("|") && trimmed.startsWith("|")) {
+      flushList();
+      tableRows.push(trimmed);
+      return;
+    }
+    flushTable();
+    const bullet = trimmed.match(/^[-*]\s+(.+)/);
+    if (bullet) {
+      listItems.push(bullet[1]);
+      return;
+    }
+    flushList();
+    const heading = trimmed.match(/^#{2,4}\s+(.+)/);
+    if (heading) {
+      nodes.push(<strong className="ai-assistant__heading" key={`h-${nodes.length}`}>{renderInlineText(heading[1])}</strong>);
+      return;
+    }
+    nodes.push(<p key={`p-${nodes.length}`}>{renderInlineText(trimmed)}</p>);
+  });
+  flushList();
+  flushTable();
+  return nodes.length ? nodes : text;
+}
+
+function renderInlineText(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 export default function ChatPanel({ token, role, request, onRequestHandled }: ChatPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -446,6 +523,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
 
 export function AiAssistant({ token }: { token?: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const aiMessageListRef = useRef<HTMLDivElement>(null);
   const [drawerOpen] = useAssistantDrawerOpen();
   const [activeTool, setActiveTool] = useAssistantActiveTool();
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
@@ -456,6 +534,14 @@ export function AiAssistant({ token }: { token?: string }) {
   const open = activeTool === "ai";
   useMinimizeOnOutsideClick(open, rootRef);
 
+  useEffect(() => {
+    if (!open || !aiMessageListRef.current) return;
+    aiMessageListRef.current.scrollTo({
+      top: aiMessageListRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, loading, open]);
+
   async function send(event: FormEvent) {
     event.preventDefault();
     if (!token || !input.trim()) return;
@@ -464,7 +550,8 @@ export function AiAssistant({ token }: { token?: string }) {
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     setLoading(true);
     try {
-      const response = await apiPost<{ answer: string }>("/ai/chat", { message: question }, token);
+      const history = messages.slice(-8).map((message) => ({ role: message.role, text: message.text }));
+      const response = await apiPost<{ answer: string }>("/ai/chat", { message: question, history }, token);
       setMessages((prev) => [...prev, { role: "assistant", text: response.answer }]);
     } catch (err: any) {
       setMessages((prev) => [...prev, { role: "assistant", text: err.message || "AI assistant failed." }]);
@@ -489,14 +576,14 @@ export function AiAssistant({ token }: { token?: string }) {
               <button type="button" onClick={() => setActiveTool(null)} aria-label="Close AI assistant"><X aria-hidden="true" /></button>
             </div>
           </header>
-          <div className="ai-assistant__messages">
+          <div className="ai-assistant__messages" ref={aiMessageListRef}>
             {messages.map((message, index) => (
               <div className={`ai-assistant__message is-${message.role}`} key={`${message.role}-${index}`}>
                 {message.role === "assistant" && index === 0 && <Sparkles aria-hidden="true" />}
-                <span>{message.text}</span>
+                <div className="ai-assistant__content">{message.role === "assistant" ? renderAiText(message.text) : message.text}</div>
               </div>
             ))}
-            {loading && <div className="ai-assistant__message is-assistant"><span>Thinking...</span></div>}
+            {loading && <div className="ai-assistant__message is-assistant"><div className="ai-assistant__content">Thinking...</div></div>}
           </div>
           <form className="ai-assistant__composer" onSubmit={send}>
             <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about your fleet..." />
