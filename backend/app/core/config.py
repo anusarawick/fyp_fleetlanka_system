@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     stripe_connected_account_country: str = "US"
     frontend_url: str = "http://localhost:5173"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
 
 settings = Settings()

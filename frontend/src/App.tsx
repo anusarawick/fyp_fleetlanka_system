@@ -20,6 +20,7 @@ import TripsPage from "./pages/Trips";
 import PublicHomePage from "./pages/PublicHomePage";
 import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
+import ChatPanel, { AiAssistant, ChatRequest } from "./components/ChatPanel";
 
 const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
 
@@ -195,6 +196,7 @@ function DriverRoutes() {
 function ManagerRoutes() {
   const { handleSignOut, loading, email, role, fullName, phone, orgName, handleUpdateProfile, handleChangePassword, profileLoading, token } = useAuth();
   const data = useData();
+  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
 
   // Extract user name from email (before @)
   const resolvedName = fullName || (email ? email.split("@")[0] : "Manager");
@@ -202,6 +204,7 @@ function ManagerRoutes() {
   const userRole = role || "manager";
 
   return (
+    <>
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route
@@ -471,6 +474,8 @@ function ManagerRoutes() {
               onApproveBookingCompletion={data.handleApproveBookingCompletion}
               onRejectBookingCompletion={data.handleRejectBookingCompletion}
               onCreateBookingCheckout={data.handleCreateBookingCheckout}
+              onOpenCenterChat={(centerId) => setChatRequest({ nonce: Date.now(), kind: "service_center", id: centerId })}
+              onOpenBookingChat={(bookingId) => setChatRequest({ nonce: Date.now(), kind: "booking", id: bookingId })}
             />
           </>
         }
@@ -613,6 +618,9 @@ function ManagerRoutes() {
         }
       />
     </Routes>
+    <ChatPanel token={token} role="manager" request={chatRequest} onRequestHandled={() => setChatRequest(null)} />
+    <AiAssistant token={token} />
+    </>
   );
 }
 
@@ -634,8 +642,10 @@ function ServiceRoutes() {
   const resolvedName = fullName || (email ? email.split("@")[0] : "Service Center");
   const userName = resolvedName.split(" ")[0];
   const userRole = role || "service";
+  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
 
   return (
+    <>
     <Routes>
       <Route path="/" element={<Navigate to="/service" replace />} />
       <Route
@@ -649,7 +659,7 @@ function ServiceRoutes() {
               userRole={userRole}
               onSignOut={handleSignOut}
             />
-            <ServicePortal token={token} />
+            <ServicePortal token={token} onOpenBookingChat={(bookingId) => setChatRequest({ nonce: Date.now(), kind: "booking", id: bookingId })} />
           </>
         }
       />
@@ -664,7 +674,7 @@ function ServiceRoutes() {
               userRole={userRole}
               onSignOut={handleSignOut}
             />
-            <ServicePortal token={token} initialTab="bookings" />
+            <ServicePortal token={token} initialTab="bookings" onOpenBookingChat={(bookingId) => setChatRequest({ nonce: Date.now(), kind: "booking", id: bookingId })} />
           </>
         }
       />
@@ -690,6 +700,8 @@ function ServiceRoutes() {
       />
       <Route path="*" element={<Navigate to="/service" replace />} />
     </Routes>
+    <ChatPanel token={token} role="service" request={chatRequest} onRequestHandled={() => setChatRequest(null)} />
+    </>
   );
 }
 

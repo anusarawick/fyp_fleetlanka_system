@@ -334,6 +334,49 @@ create table if not exists public.service_booking_payments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.chat_conversations (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  service_center_id uuid not null references public.service_centers(id) on delete cascade,
+  service_booking_id uuid references public.service_bookings(id) on delete cascade,
+  conversation_type text not null check (conversation_type in ('service_center', 'booking')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chat_conversation_booking_check check (
+    (conversation_type = 'service_center' and service_booking_id is null)
+    or (conversation_type = 'booking' and service_booking_id is not null)
+  )
+);
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.chat_conversations(id) on delete cascade,
+  org_id uuid not null references public.organizations(id),
+  sender_profile_id uuid not null references public.profiles(id) on delete cascade,
+  sender_role text not null check (sender_role in ('owner','manager','service')),
+  message_text text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.chat_read_states (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.chat_conversations(id) on delete cascade,
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  unique (conversation_id, profile_id)
+);
+
+create unique index if not exists chat_conversations_service_center_unique
+  on public.chat_conversations (org_id, service_center_id)
+  where service_booking_id is null;
+
+create unique index if not exists chat_conversations_booking_unique
+  on public.chat_conversations (org_id, service_booking_id)
+  where service_booking_id is not null;
+
+create index if not exists chat_messages_conversation_time_idx
+  on public.chat_messages (conversation_id, created_at);
+
 -- Driver score snapshots
 create table if not exists public.driver_scores (
   id uuid primary key default gen_random_uuid(),
@@ -380,6 +423,9 @@ alter table public.alerts enable row level security;
 alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
 alter table public.service_booking_payments enable row level security;
+alter table public.chat_conversations enable row level security;
+alter table public.chat_messages enable row level security;
+alter table public.chat_read_states enable row level security;
 alter table public.driver_scores enable row level security;
 alter table public.maintenance_predictions enable row level security;
 alter table public.saved_places enable row level security;
@@ -442,6 +488,18 @@ create policy "bookings_org" on public.service_bookings
 create policy "booking_payments_org" on public.service_booking_payments
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
+
+create policy "chat_conversations_org" on public.chat_conversations
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "chat_messages_org" on public.chat_messages
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "chat_read_states_owner" on public.chat_read_states
+  for all using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
 
 create policy "driver_scores_org" on public.driver_scores
   for all using (org_id = public.current_org_id())

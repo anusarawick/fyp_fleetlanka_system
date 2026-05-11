@@ -9,6 +9,7 @@ import {
   Clock3,
   Eye,
   Hourglass,
+  MessageCircle,
   Pencil,
   RotateCcw,
   WalletCards,
@@ -19,6 +20,7 @@ import { apiGet, apiPatch } from "../services/api";
 type ServicePortalProps = {
   token?: string;
   initialTab?: "dashboard" | "bookings";
+  onOpenBookingChat?: (bookingId: string) => void;
 };
 
 type ServicePortalMe = {
@@ -167,7 +169,7 @@ function ServicePortalIcon({ name }: { name: ServicePortalIconName }) {
   return <Icon aria-hidden="true" />;
 }
 
-export default function ServicePortal({ token, initialTab = "dashboard" }: ServicePortalProps) {
+export default function ServicePortal({ token, initialTab = "dashboard", onOpenBookingChat }: ServicePortalProps) {
   const [me, setMe] = useState<ServicePortalMe | null>(null);
   const [bookings, setBookings] = useState<ServicePortalBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1219,6 +1221,12 @@ export default function ServicePortal({ token, initialTab = "dashboard" }: Servi
               <div className="detail-item"><span>Brake Condition</span><strong>{displayText(selectedBooking.proposed_brake_condition)}</strong></div>
               <div className="detail-item"><span>Battery Status</span><strong>{displayText(selectedBooking.proposed_battery_status)}</strong></div>
               <div className="detail-item"><span>Review Status</span><strong>{formatReviewStatus(selectedBooking.completion_review_status)}</strong></div>
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => onOpenBookingChat?.(selectedBooking.id)}>
+                <MessageCircle aria-hidden="true" />
+                Booking Chat
+              </button>
             </div>
           </div>
         </div>

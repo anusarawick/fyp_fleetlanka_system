@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Eye,
   FileText,
+  MessageCircle,
   Pencil,
   Plus,
   Search,
@@ -157,6 +158,8 @@ type MaintenanceProps = {
   onApproveBookingCompletion: (bookingId: string) => Promise<void>;
   onRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
   onCreateBookingCheckout: (bookingId: string) => Promise<void>;
+  onOpenCenterChat?: (centerId: string) => void;
+  onOpenBookingChat?: (bookingId: string) => void;
 };
 
 const maintenanceEventOptions = [
@@ -1356,6 +1359,12 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Stripe Account</span><strong>{selectedCenter.stripe_account_id || "--"}</strong></div>
               <div className="detail-item"><span>Center ID</span><strong>{selectedCenter.id}</strong></div>
             </div>
+            <div className="modal__actions">
+              <button className="btn btn--secondary" type="button" onClick={() => props.onOpenCenterChat?.(selectedCenter.id)}>
+                <MessageCircle aria-hidden="true" />
+                Message Center
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1417,8 +1426,20 @@ export default function Maintenance(props: MaintenanceProps) {
             )}
             {!isPendingCompletionReview(selectedBooking) && getBookingPaymentState(selectedBooking).payable && (
               <div className="modal__actions">
+                <button className="btn btn--secondary" type="button" onClick={() => props.onOpenBookingChat?.(selectedBooking.id)}>
+                  <MessageCircle aria-hidden="true" />
+                  Booking Chat
+                </button>
                 <button className="btn" type="button" disabled={props.loading} onClick={() => props.onCreateBookingCheckout(selectedBooking.id)}>
                   {props.loading ? "Opening Checkout..." : "Pay Service Center"}
+                </button>
+              </div>
+            )}
+            {!isPendingCompletionReview(selectedBooking) && !getBookingPaymentState(selectedBooking).payable && (
+              <div className="modal__actions">
+                <button className="btn btn--secondary" type="button" onClick={() => props.onOpenBookingChat?.(selectedBooking.id)}>
+                  <MessageCircle aria-hidden="true" />
+                  Booking Chat
                 </button>
               </div>
             )}
