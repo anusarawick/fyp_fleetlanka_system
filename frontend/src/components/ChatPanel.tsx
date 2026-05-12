@@ -39,6 +39,34 @@ type ChatServiceCenter = {
   address?: string;
 };
 
+type AiTable = {
+  columns: string[];
+  rows: Array<Array<string | number | null>>;
+};
+
+type AiMessage = {
+  role: "user" | "assistant";
+  text: string;
+  type?: string;
+  title?: string | null;
+  summary?: string | null;
+  table?: AiTable | null;
+  bullets?: string[];
+  followups?: string[];
+  refusal?: string | null;
+};
+
+type AiChatResponse = {
+  answer: string;
+  type?: string;
+  title?: string | null;
+  summary?: string | null;
+  table?: AiTable | null;
+  bullets?: string[];
+  followups?: string[];
+  refusal?: string | null;
+};
+
 type ChatPanelProps = {
   token?: string;
   role: "manager" | "service";
@@ -175,9 +203,13 @@ function renderAiText(text: string) {
     tableRows = [];
   };
 
-  lines.forEach((line) => {
+  lines.forEach((line, lineIndex) => {
     const trimmed = line.trim();
     if (!trimmed) {
+      const nextNonEmpty = lines.slice(lineIndex + 1).find((nextLine) => nextLine.trim());
+      if (tableRows.length > 0 && nextNonEmpty?.trim().startsWith("|")) {
+        return;
+      }
       flushList();
       flushTable();
       return;
@@ -188,7 +220,7 @@ function renderAiText(text: string) {
       return;
     }
     flushTable();
-    const bullet = trimmed.match(/^[-*]\s+(.+)/);
+    const bullet = trimmed.match(/^[-*]\s+(.+)/) || trimmed.match(/^\d+[.)]\s+(.+)/);
     if (bullet) {
       listItems.push(bullet[1]);
       return;
@@ -214,6 +246,59 @@ function renderInlineText(text: string) {
     }
     return <span key={index}>{part}</span>;
   });
+}
+
+function messageForHistory(message: AiMessage) {
+  if (!message.followups?.length) return message.text;
+  const followups = message.followups.map((item, index) => `${index + 1}. ${item}`).join("\n");
+  return `${message.text}\nFollow-ups:\n${followups}`;
+}
+
+function renderStructuredAiMessage(message: AiMessage, onFollowup: (prompt: string) => void) {
+  const hasStructuredContent = message.title || message.summary || message.table || message.bullets?.length || message.followups?.length || message.refusal;
+  if (!hasStructuredContent) return renderAiText(message.text);
+  return (
+    <div className="ai-assistant__structured">
+      {message.title && <strong className="ai-assistant__heading">{message.title}</strong>}
+      {(message.refusal || message.summary) && <p>{message.refusal || message.summary}</p>}
+      {!!message.bullets?.length && (
+        <ul>
+          {message.bullets.map((item, index) => <li key={`${item}-${index}`}>{renderInlineText(item)}</li>)}
+        </ul>
+      )}
+      {message.table?.columns?.length && (
+        <div className="ai-assistant__table-wrap">
+          <table>
+            <thead>
+              <tr>{message.table.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {message.table.rows.length ? (
+                message.table.rows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {message.table?.columns.map((column, cellIndex) => (
+                      <td key={`${column}-${cellIndex}`}>{row[cellIndex] ?? "--"}</td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan={message.table.columns.length}>No records found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!!message.followups?.length && (
+        <div className="ai-assistant__followups" aria-label="Suggested follow-ups">
+          {message.followups.slice(0, 4).map((followup) => (
+            <button type="button" key={followup} onClick={() => onFollowup(followup)}>
+              {followup}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ChatPanel({ token, role, request, onRequestHandled }: ChatPanelProps) {
@@ -526,7 +611,7 @@ export function AiAssistant({ token }: { token?: string }) {
   const feedback = useFeedback();
   const [drawerOpen] = useAssistantDrawerOpen();
   const [activeTool, setActiveTool] = useAssistantActiveTool();
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
+  const [messages, setMessages] = useState<AiMessage[]>([
     { role: "assistant", text: "Ask me about your fleet, maintenance, fuel, documents, bookings, payments, or compliance." },
   ]);
   const [input, setInput] = useState("");
@@ -542,17 +627,25 @@ export function AiAssistant({ token }: { token?: string }) {
     });
   }, [messages, loading, open]);
 
-  async function send(event: FormEvent) {
-    event.preventDefault();
-    if (!token || !input.trim()) return;
-    const question = input.trim();
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", text: question }]);
+  async function sendPrompt(question: string) {
+    if (!token || !question.trim()) return;
+    const trimmedQuestion = question.trim();
+    setMessages((prev) => [...prev, { role: "user", text: trimmedQuestion }]);
     setLoading(true);
     try {
-      const history = messages.slice(-8).map((message) => ({ role: message.role, text: message.text }));
-      const response = await apiPost<{ answer: string }>("/ai/chat", { message: question, history }, token);
-      setMessages((prev) => [...prev, { role: "assistant", text: response.answer }]);
+      const history = messages.slice(-8).map((message) => ({ role: message.role, text: messageForHistory(message) }));
+      const response = await apiPost<AiChatResponse>("/ai/chat", { message: trimmedQuestion, history }, token);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: response.answer,
+        type: response.type,
+        title: response.title,
+        summary: response.summary,
+        table: response.table,
+        bullets: response.bullets,
+        followups: response.followups,
+        refusal: response.refusal,
+      }]);
       if (response.answer.toLowerCase().includes("ai is busy")) {
         feedback.info("AI busy", "Please try again in a moment.");
       }
@@ -563,6 +656,14 @@ export function AiAssistant({ token }: { token?: string }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (!input.trim()) return;
+    const question = input.trim();
+    setInput("");
+    await sendPrompt(question);
   }
 
   if (!drawerOpen) return null;
@@ -585,7 +686,7 @@ export function AiAssistant({ token }: { token?: string }) {
             {messages.map((message, index) => (
               <div className={`ai-assistant__message is-${message.role}`} key={`${message.role}-${index}`}>
                 {message.role === "assistant" && index === 0 && <Sparkles aria-hidden="true" />}
-                <div className="ai-assistant__content">{message.role === "assistant" ? renderAiText(message.text) : message.text}</div>
+                <div className="ai-assistant__content">{message.role === "assistant" ? renderStructuredAiMessage(message, sendPrompt) : message.text}</div>
               </div>
             ))}
             {loading && <div className="ai-assistant__message is-assistant"><div className="ai-assistant__content">Thinking...</div></div>}

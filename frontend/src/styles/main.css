@@ -5099,6 +5099,12 @@ textarea {
   line-height: 1.45;
 }
 
+.ai-assistant__structured {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
 .ai-assistant__content p,
 .ai-assistant__content ul {
   margin: 0;
@@ -5119,7 +5125,9 @@ textarea {
 
 .ai-assistant__table-wrap {
   max-width: 100%;
+  max-height: 280px;
   overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #d9e2ea;
   border-radius: 6px;
   background: #ffffff;
@@ -5148,10 +5156,35 @@ textarea {
   background: #f8fafc;
   font-weight: 850;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .ai-assistant__content tr:last-child td {
   border-bottom: 0;
+}
+
+.ai-assistant__followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-assistant__followups button {
+  border: 1px solid #b7dadd;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #0f7f82;
+  background: #f0fbfb;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.ai-assistant__followups button:hover {
+  border-color: #078f92;
+  background: #e1f7f7;
 }
 
 .chat-panel__message.is-own,

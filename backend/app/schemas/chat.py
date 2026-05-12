@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -61,5 +61,17 @@ class AiChatRequest(BaseModel):
     history: list[AiChatTurn] = []
 
 
+class AiChatTable(BaseModel):
+    columns: list[str] = []
+    rows: list[list[Any]] = []
+
+
 class AiChatResponse(BaseModel):
     answer: str
+    type: str = "message"
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    table: Optional[AiChatTable] = None
+    bullets: list[str] = []
+    followups: list[str] = []
+    refusal: Optional[str] = None
