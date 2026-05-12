@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 import TripRoutePreview from "../components/TripRoutePreview";
 
 type Vehicle = {
@@ -352,6 +353,7 @@ function Stat({ value, label, icon }: { value: ReactNode; label: string; icon?: 
 }
 
 export default function DriverTrips(props: DriverProps) {
+  const feedback = useFeedback();
   const {
     token,
     fullName,
@@ -361,7 +363,6 @@ export default function DriverTrips(props: DriverProps) {
     loading: authLoading,
     handleUpdateProfile,
     handleChangePassword,
-    setError,
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>("home");
@@ -454,9 +455,9 @@ export default function DriverTrips(props: DriverProps) {
     setFuelLoading(true);
     apiGet<FuelLog[]>("/fuel-logs", token)
       .then((rows) => setFuelLogs(rows))
-      .catch((err: any) => setError(err.message || "Failed to load fuel logs"))
+      .catch((err: any) => feedback.error("Fuel logs unavailable", err.message || "Failed to load fuel logs"))
       .finally(() => setFuelLoading(false));
-  }, [token, setError]);
+  }, [token, feedback]);
 
   useEffect(() => {
     if (!token || !isOnline) return;
@@ -535,8 +536,9 @@ export default function DriverTrips(props: DriverProps) {
           window.localStorage.setItem("fleetlanka.profile.phone", phoneValue);
           setPendingProfileEdit(null);
         }
+        if (!cancelled) feedback.success("Offline changes synced");
       } catch (err: any) {
-        setError(err.message || "Offline changes will retry when connected");
+        feedback.warning("Offline sync delayed", err.message || "Offline changes will retry when connected");
       } finally {
         if (!cancelled) setSyncingOfflineQueue(false);
       }
@@ -546,7 +548,7 @@ export default function DriverTrips(props: DriverProps) {
     return () => {
       cancelled = true;
     };
-  }, [token, isOnline, syncingOfflineQueue, pendingFuelLogs, pendingProfileEdit, setError]);
+  }, [token, isOnline, syncingOfflineQueue, pendingFuelLogs, pendingProfileEdit, feedback]);
 
   useEffect(() => {
     if (selectedAssignedTripId && !assignedTrips.some((trip) => trip.id === selectedAssignedTripId)) {
@@ -592,7 +594,9 @@ export default function DriverTrips(props: DriverProps) {
       setFuelLogs((prev) => [created, ...prev]);
       if (!isOnline) {
         setPendingFuelLogs((prev) => [...prev, { temp_id: created.id, payload }]);
-        setError("Fuel log saved offline. It will sync when the connection returns.");
+        feedback.warning("Fuel log saved offline", "It will sync when the connection returns.");
+      } else {
+        feedback.success("Fuel log saved");
       }
       setFuelDate(new Date().toISOString().slice(0, 10));
       setFuelLiters("");
@@ -600,7 +604,7 @@ export default function DriverTrips(props: DriverProps) {
       setFuelOdometer("");
       setFuelVendor("");
     } catch (err: any) {
-      setError(err.message || "Fuel log failed");
+      feedback.error("Fuel log failed", err.message || "Fuel log failed");
     }
   }
 
@@ -612,7 +616,7 @@ export default function DriverTrips(props: DriverProps) {
       setProfile((prev) => prev ? { ...prev, full_name: profileName, phone: profilePhone } : prev);
       window.localStorage.setItem("fleetlanka.profile.name", profileName || "");
       window.localStorage.setItem("fleetlanka.profile.phone", profilePhone || "");
-      setError("Profile changes saved offline. They will sync when the connection returns.");
+      feedback.warning("Profile saved offline", "It will sync when the connection returns.");
       return;
     }
     await handleUpdateProfile(profileName, profilePhone);
@@ -622,7 +626,7 @@ export default function DriverTrips(props: DriverProps) {
   async function handlePasswordSave(e: FormEvent) {
     e.preventDefault();
     if (!isOnline) {
-      setError("Password changes require an internet connection.");
+      feedback.warning("Online required", "Password changes require an internet connection.");
       return;
     }
     await handleChangePassword(currentPassword, newPassword);

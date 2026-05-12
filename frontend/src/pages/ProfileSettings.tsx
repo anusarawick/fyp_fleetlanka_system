@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, UserRound, WalletCards } from "lucide-react";
 import { apiGet, apiPost } from "../services/api";
+import { useFeedback } from "../context/FeedbackContext";
 
 type ProfileSettingsProps = {
     email: string;
@@ -37,6 +38,7 @@ export default function ProfileSettings({
     loading = false,
     token
 }: ProfileSettingsProps) {
+    const feedback = useFeedback();
     const [localName, setLocalName] = useState(name || "");
     const [localPhone, setLocalPhone] = useState(phone || "");
     const [currentPassword, setCurrentPassword] = useState("");
@@ -45,10 +47,8 @@ export default function ProfileSettings({
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [successMessage, setSuccessMessage] = useState("");
     const [serviceCenter, setServiceCenter] = useState<ServicePortalMe["center"] | null>(null);
     const [paymentSetupLoading, setPaymentSetupLoading] = useState(false);
-    const [paymentSetupError, setPaymentSetupError] = useState<string | null>(null);
 
     const roleLabel =
         role === "manager" || role === "owner"
@@ -88,24 +88,20 @@ export default function ProfileSettings({
         e.preventDefault();
         if (onUpdateProfile) {
             await onUpdateProfile(localName, localPhone);
-            setSuccessMessage("Profile updated successfully!");
-            setTimeout(() => setSuccessMessage(""), 3000);
         }
     }
 
     async function handlePasswordChange(e: FormEvent) {
         e.preventDefault();
         if (newPassword !== confirmPassword) {
-            alert("Passwords do not match");
+            feedback.error("Passwords do not match", "Confirm password must match the new password.");
             return;
         }
         if (onChangePassword) {
             await onChangePassword(currentPassword, newPassword);
-            setSuccessMessage("Password changed successfully!");
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
-            setTimeout(() => setSuccessMessage(""), 3000);
         }
     }
 
@@ -117,7 +113,6 @@ export default function ProfileSettings({
     async function handleStripeSetup() {
         if (!token) return;
         setPaymentSetupLoading(true);
-        setPaymentSetupError(null);
         try {
             const account = await apiPost<ServicePortalMe["center"]>(
                 "/service-portal/payments/connect-account",
@@ -130,9 +125,10 @@ export default function ProfileSettings({
                 {},
                 token
             );
+            feedback.info("Opening Stripe", "Continue setup in Stripe onboarding.");
             window.location.href = link.url;
         } catch (err: any) {
-            setPaymentSetupError(err.message || "Stripe setup failed");
+            feedback.error("Stripe setup failed", err.message || "Stripe setup failed");
         } finally {
             setPaymentSetupLoading(false);
         }
@@ -180,10 +176,6 @@ export default function ProfileSettings({
     return (
         <section className="section">
             <div className="profile-page profile-page--manager">
-                {successMessage && (
-                    <div className="alert alert--success">{successMessage}</div>
-                )}
-
                 <div className="profile-layout">
                     <section className="profile-card profile-card--account">
                         <div className="profile-card__header">
@@ -322,7 +314,6 @@ export default function ProfileSettings({
                                         </strong>
                                     </div>
                                 </div>
-                                {paymentSetupError && <div className="alert alert--error">{paymentSetupError}</div>}
                                 <div className="profile-form__actions">
                                     <button
                                         className="btn btn--primary"

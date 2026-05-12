@@ -4,11 +4,13 @@ import {
     useState,
     useEffect,
     useRef,
+    useCallback,
     ReactNode,
     FormEvent,
 } from "react";
 import { supabase } from "../services/supabase";
 import { apiGet, apiPatch, apiPost } from "../services/api";
+import { useFeedback } from "./FeedbackContext";
 
 type AuthContextType = {
     accessToken: string | null;
@@ -38,6 +40,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const feedback = useFeedback();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -48,12 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [phone, setPhone] = useState(() => localStorage.getItem("fleetlanka.profile.phone") || "");
     const [profileLoading, setProfileLoading] = useState(false);
     const [authReady, setAuthReady] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setErrorState] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
 
     const token = accessToken ?? undefined;
+
+    const setError = useCallback((value: string | null) => {
+        setErrorState(null);
+        if (value) {
+            feedback.error("Action failed", value);
+        }
+    }, [feedback]);
 
     useEffect(() => {
         let isMounted = true;
@@ -96,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     async function handleInactiveDriverSignOut() {
-        setError("This account is inactive. Please contact your manager.");
+        feedback.error("Account inactive", "This account is inactive. Please contact your manager.");
         pendingSignOutRef.current = true;
         await supabase.auth.signOut();
         setAccessToken(null);
@@ -150,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (!token) return;
-        loadProfile().catch((e) => setError(e.message));
+        loadProfile().catch((e) => feedback.error("Profile load failed", e.message));
     }, [token]);
 
     async function handleLogin(e: FormEvent) {
@@ -173,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAccessToken(sessionToken);
             setEmail(data.session?.user?.email ?? "");
         } catch (err: any) {
-            setError(err.message || "Login failed");
+            feedback.error("Login failed", err.message || "Check your email and password, then try again.");
         } finally {
             suppressListenerRef.current = false;
             setLoading(false);
@@ -206,12 +216,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setEmail(data.session.user?.email ?? "");
                 setFullName(fullName);
                 setOrgName(resolvedOrgName);
+                feedback.success("Account created", "Your manager workspace is ready.");
             } else {
                 // Email confirmation may be required
-                setError("Account created! Please check your email to confirm.");
+                feedback.success("Account created", "Please check your email to confirm your account.");
             }
         } catch (err: any) {
-            setError(err.message || "Signup failed");
+            feedback.error("Signup failed", err.message || "Could not create your account.");
         } finally {
             suppressListenerRef.current = false;
             setLoading(false);
@@ -241,8 +252,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem("fleetlanka.profile.name", nameValue);
             localStorage.setItem("fleetlanka.profile.phone", updatedPhone);
             localStorage.setItem("fleetlanka.profile.orgName", updatedOrgName);
+            feedback.success("Profile updated");
         } catch (err: any) {
-            setError(err.message || "Profile update failed");
+            feedback.error("Profile update failed", err.message || "Could not update your profile.");
         } finally {
             setLoading(false);
         }
@@ -258,8 +270,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 { current_password: currentPassword, new_password: newPassword },
                 token
             );
+            feedback.success("Password updated");
         } catch (err: any) {
-            setError(err.message || "Password update failed");
+            feedback.error("Password update failed", err.message || "Could not update your password.");
         } finally {
             setLoading(false);
         }
@@ -278,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem("fleetlanka.profile.phone");
         localStorage.removeItem("fleetlanka.profile.orgName");
         pendingSignOutRef.current = false;
+        feedback.info("Signed out");
     }
 
     return (

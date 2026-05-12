@@ -21,12 +21,13 @@ import PublicHomePage from "./pages/PublicHomePage";
 import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
 import ChatPanel, { AiAssistant, ChatRequest } from "./components/ChatPanel";
+import { FeedbackProvider } from "./context/FeedbackContext";
 
 const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
 
 // ===== UNIFIED LOGIN / MANAGER SIGNUP =====
 function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
-  const { email, password, setEmail, setPassword, handleLogin, handleSignup, loading, error, setError } = useAuth();
+  const { email, password, setEmail, setPassword, handleLogin, handleSignup, loading } = useAuth();
   const [isSignup, setIsSignup] = useState(initialSignup);
   const [name, setName] = useState("");
   const [orgName, setOrgName] = useState("");
@@ -54,15 +55,6 @@ function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
               : "Enter your credentials to open your workspace."}
           </p>
         </div>
-
-        {error && (
-          <div className="alert alert--error">
-            <span>{error}</span>
-            <button className="alert__close" type="button" onClick={() => setError(null)}>
-              ×
-            </button>
-          </div>
-        )}
 
         <form className="form" onSubmit={onSubmit}>
           {isSignup && (
@@ -706,7 +698,7 @@ function ServiceRoutes() {
 }
 
 function AppContent() {
-  const { accessToken, role, profileLoading, error, setError, authReady } = useAuth();
+  const { accessToken, role, profileLoading, authReady } = useAuth();
   const location = useLocation();
   const path = location.pathname;
 
@@ -749,14 +741,6 @@ function AppContent() {
 
   return (
     <AppLayout showSidebar={role !== "driver"} role={role}>
-      {error && (
-        <div className="alert alert--error">
-          <span>{error}</span>
-          <button className="alert__close" type="button" onClick={() => setError(null)}>
-            ×
-          </button>
-        </div>
-      )}
       {role === "driver" ? <DriverRoutes /> : role === "service" ? <ServiceRoutes /> : <ManagerRoutes />}
     </AppLayout>
   );
@@ -765,11 +749,13 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <AuthProvider>
-        <DataProvider>
-          <AppContent />
-        </DataProvider>
-      </AuthProvider>
+      <FeedbackProvider>
+        <AuthProvider>
+          <DataProvider>
+            <AppContent />
+          </DataProvider>
+        </AuthProvider>
+      </FeedbackProvider>
     </BrowserRouter>
   );
 }

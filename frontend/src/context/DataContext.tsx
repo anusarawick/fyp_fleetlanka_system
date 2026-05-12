@@ -10,6 +10,7 @@ import {
 } from "react";
 import { apiGet, apiPost, apiPatch, apiPostForm, apiDelete } from "../services/api";
 import { useAuth } from "./AuthContext";
+import { useFeedback } from "./FeedbackContext";
 import {
     Vehicle,
     Driver,
@@ -434,6 +435,7 @@ function applyPendingTripEventsToTrips(rows: Trip[], events: PendingTripEvent[])
 
 export function DataProvider({ children }: { children: ReactNode }) {
     const { token, orgId, role, fullName, setError, setLoading, loading } = useAuth();
+    const feedback = useFeedback();
 
     // Entity state
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -978,7 +980,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                         setPendingTripEvents((prev) => prev.map((event) =>
                             event.trip_id === tripId ? { ...event, error: message } : event
                         ));
-                        setError(message);
+                        feedback.warning("Trip sync delayed", message);
                         return;
                     }
                 }
@@ -1077,7 +1079,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setFuelForecasts([]);
                 setLiveTrips([]);
             } catch (e: any) {
-                setError(e.message);
+                feedback.error("Data load failed", e.message);
             }
         };
         load();
@@ -1106,7 +1108,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             } catch (err: any) {
                 if (!cancelled) {
                     setLiveTrips([]);
-                    setError(err.message || "Failed to load live trips");
+                    feedback.error("Live trips unavailable", err.message || "Failed to load live trips");
                 }
             }
         };
@@ -1130,7 +1132,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!token || role !== "manager") return;
         refreshFuelForecasts().catch((err: any) => {
             setFuelForecasts([]);
-            setError(err.message || "Fuel forecast load failed");
+            feedback.error("Fuel forecast failed", err.message || "Fuel forecast load failed");
         });
     }, [token, role, vehicles.length, fuelLogs.length, trips.length]);
 
@@ -1166,12 +1168,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     ]);
                     setTripTrackingLastUpdated(pointTime);
                     setTripTrackingStatus("error");
-                    setError(e.message || "GPS point saved locally and will retry when connected");
+                    feedback.warning("GPS saved locally", e.message || "GPS point saved locally and will retry when connected");
                 }
             },
             (err) => {
                 setTripTrackingStatus("error");
-                setError(err.message);
+                feedback.error("Location error", err.message);
             },
             { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
         );
@@ -1404,8 +1406,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setBatteryStatus("");
             resetVehicleMlFields();
             setEditingVehicleId(null);
+            feedback.success(editingVehicleId ? "Vehicle updated" : "Vehicle created", imageFile ? "Vehicle image uploaded." : removeImage ? "Vehicle image removed." : undefined);
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingVehicleId ? "Vehicle update failed" : "Vehicle create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1498,8 +1501,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingVehicleId === vehicleId) {
                 handleCancelVehicleEdit();
             }
+            feedback.success("Vehicle deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Vehicle delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1543,8 +1547,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setDriverStatus("active");
             setDriverPassword("");
             setEditingDriverId(null);
+            feedback.success(editingDriverId ? "Driver updated" : "Driver created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingDriverId ? "Driver update failed" : "Driver create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1592,8 +1597,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingDriverId === driverId) {
                 handleCancelDriverEdit();
             }
+            feedback.success("Driver deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Driver delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1650,7 +1656,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 }
                 setActiveTripId(tripId);
                 setTripTrackingStatus("tracking");
-                setError("Trip started offline. It will sync when the connection returns.");
+                feedback.warning("Trip started offline", "It will sync when the connection returns.");
                 return;
             }
             const payload = { status: "in_progress", start_time: now.toISOString() };
@@ -1659,8 +1665,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setTrips((prev) => prev.map((t) => (t.id === trip.id ? trip : t)));
             setTripTrackingStatus("tracking");
             setTripTrackingLastUpdated(null);
+            feedback.success("Trip started");
         } catch (err: any) {
-            setError(err.message || "Start trip failed");
+            feedback.error("Start trip failed", err.message || "Start trip failed");
         } finally {
             setLoading(false);
         }
@@ -1706,7 +1713,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     navigator.geolocation.clearWatch(watchIdRef.current);
                     watchIdRef.current = null;
                 }
-                setError("Trip ended offline. It will sync when the connection returns.");
+                feedback.warning("Trip ended offline", "It will sync when the connection returns.");
                 return;
             }
             const payload = { status: "completed", end_time: now.toISOString() };
@@ -1719,8 +1726,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 navigator.geolocation.clearWatch(watchIdRef.current);
                 watchIdRef.current = null;
             }
+            feedback.success("Trip completed");
         } catch (err: any) {
-            setError(err.message || "Stop trip failed");
+            feedback.error("Stop trip failed", err.message || "Stop trip failed");
         } finally {
             setLoading(false);
         }
@@ -1750,8 +1758,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const created = await apiPost<Trip>("/trips", payload, token);
             setTrips((prev) => [created, ...prev]);
             void refreshDriverInsights();
+            feedback.success("Trip assigned");
         } catch (err: any) {
-            setError(err.message || "Trip assignment failed");
+            feedback.error("Trip assignment failed", err.message || "Trip assignment failed");
         } finally {
             setLoading(false);
         }
@@ -1784,8 +1793,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const updated = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
             setTrips((prev) => prev.map((trip) => (trip.id === updated.id ? updated : trip)));
             void refreshDriverInsights();
+            feedback.success("Trip updated");
         } catch (err: any) {
-            setError(err.message || "Trip update failed");
+            feedback.error("Trip update failed", err.message || "Trip update failed");
         } finally {
             setLoading(false);
         }
@@ -1799,8 +1809,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             await apiDelete(`/trips/${tripId}`, token);
             setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
             void refreshDriverInsights();
+            feedback.success("Trip deleted");
         } catch (err: any) {
-            setError(err.message || "Trip delete failed");
+            feedback.error("Trip delete failed", err.message || "Trip delete failed");
         } finally {
             setLoading(false);
         }
@@ -1835,8 +1846,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setFuelOdometer("");
             setFuelVendor("");
             setEditingFuelId(null);
+            feedback.success(editingFuelId ? "Fuel log updated" : "Fuel log created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingFuelId ? "Fuel update failed" : "Fuel create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1872,8 +1884,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingFuelId === fuelId) {
                 handleCancelFuelEdit();
             }
+            feedback.success("Fuel log deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Fuel delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1920,8 +1933,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setMaintNextDue("");
             setMaintNotes("");
             setEditingMaintenanceId(null);
+            feedback.success(editingMaintenanceId ? "Maintenance updated" : "Maintenance logged");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingMaintenanceId ? "Maintenance update failed" : "Maintenance create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1965,8 +1979,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingMaintenanceId === maintenanceId) {
                 handleCancelMaintenanceEdit();
             }
+            feedback.success("Maintenance record deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Maintenance delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2021,8 +2036,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setDocNumber("");
             setDocExpiry("");
             setEditingDocumentId(null);
+            feedback.success(editingDocumentId ? "Document updated" : "Document created", file ? "Document file uploaded." : removeFile ? "Document file removed." : undefined);
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingDocumentId ? "Document update failed" : "Document create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -2070,8 +2086,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingDocumentId === documentId) {
                 handleCancelDocumentEdit();
             }
+            feedback.success("Document deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Document delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2136,8 +2153,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const refreshedCenters = await apiGet<ServiceCenter[]>("/service-centers", token);
             setServiceCenters(refreshedCenters);
             handleCancelCenterEdit();
+            feedback.success(editingCenterId ? "Service center updated" : "Service center created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingCenterId ? "Service center update failed" : "Service center create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -2153,8 +2171,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingCenterId === centerId) {
                 handleCancelCenterEdit();
             }
+            feedback.success("Service center deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Service center delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2191,8 +2210,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setServiceBookings((prev) => [created, ...prev]);
             }
             handleCancelBookingEdit();
+            feedback.success(editingBookingId ? "Booking updated" : "Booking created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingBookingId ? "Booking update failed" : "Booking create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -2224,8 +2244,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingBookingId === bookingId) {
                 handleCancelBookingEdit();
             }
+            feedback.success("Booking deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Booking delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2244,8 +2265,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ]);
             setVehicles(vehiclesData);
             setMaintenance(maintenanceData);
+            feedback.success("Booking approved", "Maintenance records and vehicle baselines were updated.");
         } catch (err: any) {
-            setError(err.message || "Approval failed");
+            feedback.error("Booking approval failed", err.message || "Approval failed");
         } finally {
             setLoading(false);
         }
@@ -2262,8 +2284,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 token
             );
             setServiceBookings((prev) => prev.map((booking) => (booking.id === rejected.id ? rejected : booking)));
+            feedback.success("Booking rejected");
         } catch (err: any) {
-            setError(err.message || "Rejection failed");
+            feedback.error("Booking rejection failed", err.message || "Rejection failed");
         } finally {
             setLoading(false);
         }
@@ -2279,9 +2302,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 {},
                 token
             );
+            feedback.info("Opening Stripe Checkout", "Redirecting to payment.");
             window.location.href = response.checkout_url;
         } catch (err: any) {
-            setError(err.message || "Payment checkout failed");
+            feedback.error("Payment checkout failed", err.message || "Payment checkout failed");
         } finally {
             setLoading(false);
         }
@@ -2304,8 +2328,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const features = parseFeatureLines(maintFeatures);
             const res = await apiPost<{ predictions: number[] }>("/ml/maintenance", { features }, token);
             setMaintResult(JSON.stringify(res.predictions));
+            feedback.success("Maintenance prediction complete");
         } catch (err: any) {
-            setError(err.message || "Prediction failed");
+            feedback.error("Maintenance prediction failed", err.message || "Prediction failed");
         } finally {
             setLoading(false);
         }
@@ -2320,8 +2345,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const features = parseFeatureLines(fuelFeatures);
             const res = await apiPost<{ predictions: number[] }>("/ml/fuel", { features }, token);
             setFuelResult(JSON.stringify(res.predictions));
+            feedback.success("Fuel prediction complete");
         } catch (err: any) {
-            setError(err.message || "Prediction failed");
+            feedback.error("Fuel prediction failed", err.message || "Prediction failed");
         } finally {
             setLoading(false);
         }
@@ -2333,8 +2359,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setError(null);
         try {
             await refreshVehicleMaintenancePrediction(vehicleId, true);
+            feedback.success("Vehicle prediction updated");
         } catch (err: any) {
-            setError(err.message || "Vehicle prediction failed");
+            feedback.error("Vehicle prediction failed", err.message || "Vehicle prediction failed");
         } finally {
             setLoading(false);
         }
@@ -2347,8 +2374,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             await apiDelete(`/ml/maintenance/predictions/${predictionId}`, token);
             setMaintenancePredictions((prev) => prev.filter((prediction) => prediction.id !== predictionId));
+            feedback.success("Prediction deleted");
         } catch (err: any) {
-            setError(err.message || "Prediction delete failed");
+            feedback.error("Prediction delete failed", err.message || "Prediction delete failed");
             throw err;
         } finally {
             setLoading(false);

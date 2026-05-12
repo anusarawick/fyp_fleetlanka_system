@@ -16,6 +16,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { apiGet, apiPatch } from "../services/api";
+import { useFeedback } from "../context/FeedbackContext";
 
 type ServicePortalProps = {
   token?: string;
@@ -170,11 +171,11 @@ function ServicePortalIcon({ name }: { name: ServicePortalIconName }) {
 }
 
 export default function ServicePortal({ token, initialTab = "dashboard", onOpenBookingChat }: ServicePortalProps) {
+  const feedback = useFeedback();
   const [me, setMe] = useState<ServicePortalMe | null>(null);
   const [bookings, setBookings] = useState<ServicePortalBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "completed" | "cancelled">("all");
   const [workTypeFilter, setWorkTypeFilter] = useState("all");
@@ -198,7 +199,6 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
   async function loadPortal() {
     if (!token) return;
     setLoading(true);
-    setError(null);
     try {
       const [meData, bookingData] = await Promise.all([
         apiGet<ServicePortalMe>("/service-portal/me", token),
@@ -207,7 +207,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
       setMe(meData);
       setBookings(bookingData);
     } catch (err: any) {
-      setError(err.message || "Failed to load service portal");
+      feedback.error("Service portal load failed", err.message || "Failed to load service portal");
     } finally {
       setLoading(false);
     }
@@ -571,7 +571,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
       (editMode === "details" && currentStatus === "completed");
 
     if (requiresFinalCost && !finalCost.trim()) {
-      setError("Final cost is required when marking a booking as completed.");
+      feedback.error("Final cost required", "Final cost is required when marking a booking as completed.");
       return;
     }
     if (
@@ -579,7 +579,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
         (editMode === "details" && currentStatus === "completed")) &&
         !completedOdometerKm.trim())
     ) {
-      setError("Completed odometer is required for completed bookings.");
+      feedback.error("Completed odometer required", "Completed odometer is required for completed bookings.");
       return;
     }
     if (
@@ -587,19 +587,18 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
         (editMode === "details" && currentStatus === "completed")) &&
         !effectiveWorkType)
     ) {
-      setError("Work type is required for completed bookings.");
+      feedback.error("Work type required", "Work type is required for completed bookings.");
       return;
     }
     if (editMode === "transition" && currentStatus === "confirmed" && nextStatus === "pending" && !serviceNotes.trim()) {
-      setError("A service note is required when moving a confirmed booking back to pending.");
+      feedback.error("Service note required", "A service note is required when moving a confirmed booking back to pending.");
       return;
     }
     if (editMode === "transition" && currentStatus === "completed" && nextStatus === "confirmed" && !serviceNotes.trim()) {
-      setError("A service note is required when reopening a completed booking.");
+      feedback.error("Service note required", "A service note is required when reopening a completed booking.");
       return;
     }
     setSaving(true);
-    setError(null);
     try {
       const payload =
         editMode === "details"
@@ -634,8 +633,9 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
       setBookings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       closeActionModal();
       await loadPortal();
+      feedback.success(editMode === "details" ? "Booking details updated" : "Booking status updated");
     } catch (err: any) {
-      setError(err.message || "Failed to update booking");
+      feedback.error("Booking update failed", err.message || "Failed to update booking");
     } finally {
       setSaving(false);
     }
@@ -802,15 +802,6 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
 
   return (
     <section className="section">
-      {error && (
-        <div className="alert alert--error">
-          <span>{error}</span>
-          <button className="alert__close" type="button" onClick={() => setError(null)}>
-            ×
-          </button>
-        </div>
-      )}
-
       <section className="service-portal-page admin-page service-workspace">
       {isOverviewTab ? (
         <>

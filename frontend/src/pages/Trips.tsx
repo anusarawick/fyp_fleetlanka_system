@@ -27,6 +27,7 @@ import TripRoutePreview from "../components/TripRoutePreview";
 import PlacePickerMap from "../components/PlacePickerMap";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 import { Driver, LiveTrip, SavedPlace, Trip, Vehicle } from "../types";
 
 const FREQUENT_TRIP_TITLES = [
@@ -182,7 +183,8 @@ function formatCoordinates(lat: number, lon: number) {
 }
 
 export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading, onCreateTripAssignment, onUpdateTripAssignment, onDeleteTrip }: TripsProps) {
-  const { token, setError } = useAuth();
+  const { token } = useAuth();
+  const feedback = useFeedback();
   const [activeTab, setActiveTab] = useState<TripsTab>("workflow");
   const [liveTripFilter, setLiveTripFilter] = useState<LiveTripFilter>("all");
   const [search, setSearch] = useState("");
@@ -235,8 +237,8 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
     if (!token) return;
     apiGet<SavedPlace[]>("/saved-places", token)
       .then(setSavedPlaces)
-      .catch((err: any) => setError(err.message || "Failed to load saved places"));
-  }, [token, setError]);
+      .catch((err: any) => feedback.error("Saved places unavailable", err.message || "Failed to load saved places"));
+  }, [token, feedback]);
 
   const vehicleLabelMap = useMemo(
     () =>
@@ -609,8 +611,9 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         }
       }
       setShowPlaceModal(false);
+      feedback.success(editingPlaceId ? "Saved place updated" : "Saved place created");
     } catch (err: any) {
-      setError(err.message || "Failed to save place");
+      feedback.error("Saved place failed", err.message || "Failed to save place");
     }
   }
 
@@ -632,8 +635,9 @@ export default function TripsPage({ trips, vehicles, drivers, liveTrips, loading
         setTripDestinationLon("");
       }
       setPlaceDeleteTarget(null);
+      feedback.success("Saved place deleted");
     } catch (err: any) {
-      setError(err.message || "Failed to delete place");
+      feedback.error("Saved place delete failed", err.message || "Failed to delete place");
     }
   }
 

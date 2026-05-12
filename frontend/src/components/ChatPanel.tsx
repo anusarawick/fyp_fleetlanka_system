@@ -1,6 +1,7 @@
 import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Building2, Check, CheckCheck, ChevronLeft, ChevronRight, MessageCircle, Minus, Search, Send, Sparkles, X } from "lucide-react";
 import { apiGet, apiPost } from "../services/api";
+import { useFeedback } from "../context/FeedbackContext";
 
 export type ChatRequest =
   | { nonce: number; kind: "service_center"; id?: string }
@@ -218,6 +219,7 @@ function renderInlineText(text: string) {
 export default function ChatPanel({ token, role, request, onRequestHandled }: ChatPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const feedback = useFeedback();
   const [drawerOpen, setDrawerOpen] = useAssistantDrawerOpen();
   const [activeTool, setActiveTool] = useAssistantActiveTool();
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -228,7 +230,6 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
   const [conversationSearch, setConversationSearch] = useState("");
   const [showStart, setShowStart] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const base = role === "service" ? "/service-portal/chat" : "/chat";
   const open = activeTool === "chat";
   const unreadTotal = useMemo(() => conversations.reduce((sum, row) => sum + (row.unread_count || 0), 0), [conversations]);
@@ -283,7 +284,6 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
   async function openTarget(nextRequest: ChatRequest) {
     if (!token) return;
     setLoading(true);
-    setError("");
     try {
       const path =
         nextRequest.kind === "booking"
@@ -302,7 +302,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
     } catch (err: any) {
       setActiveTool("chat");
       setDrawerOpen(true);
-      setError(err.message || "Failed to open chat");
+      feedback.error("Chat open failed", err.message || "Failed to open chat");
     } finally {
       setLoading(false);
       onRequestHandled?.();
@@ -316,7 +316,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
     }
     setShowStart((value) => !value);
     if (serviceCenters.length === 0) {
-      loadServiceCenters().catch((err: any) => setError(err.message || "Failed to load service centers"));
+      loadServiceCenters().catch((err: any) => feedback.error("Service centers unavailable", err.message || "Failed to load service centers"));
     }
   }
 
@@ -341,7 +341,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
       loadConversations().catch(() => undefined);
     } catch (err: any) {
       setMessages((current) => current.filter((message) => message.id !== pendingId));
-      setError(err.message || "Failed to send message");
+      feedback.error("Message failed", err.message || "Failed to send message");
     }
   }
 
@@ -461,7 +461,6 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
               ))}
             </aside>
             <main className="chat-panel__messages">
-              {error && <div className="chat-panel__error">{error}</div>}
               {!selected ? (
                 <div className="chat-panel__empty">
                   <MessageCircle aria-hidden="true" />
@@ -524,6 +523,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
 export function AiAssistant({ token }: { token?: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const aiMessageListRef = useRef<HTMLDivElement>(null);
+  const feedback = useFeedback();
   const [drawerOpen] = useAssistantDrawerOpen();
   const [activeTool, setActiveTool] = useAssistantActiveTool();
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
@@ -553,8 +553,13 @@ export function AiAssistant({ token }: { token?: string }) {
       const history = messages.slice(-8).map((message) => ({ role: message.role, text: message.text }));
       const response = await apiPost<{ answer: string }>("/ai/chat", { message: question, history }, token);
       setMessages((prev) => [...prev, { role: "assistant", text: response.answer }]);
+      if (response.answer.toLowerCase().includes("ai is busy")) {
+        feedback.info("AI busy", "Please try again in a moment.");
+      }
     } catch (err: any) {
-      setMessages((prev) => [...prev, { role: "assistant", text: err.message || "AI assistant failed." }]);
+      const message = err.message || "AI assistant failed.";
+      setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+      feedback.error("AI assistant failed", message);
     } finally {
       setLoading(false);
     }
