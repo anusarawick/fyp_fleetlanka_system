@@ -576,7 +576,7 @@ export default function MLPredictions(props: MLPredictionsProps) {
           </div>
         </section>
         {showRunAllConfirm && (
-          <div className="modal-backdrop">
+          <div className="modal-backdrop" role="presentation">
             <div className="modal" role="dialog" aria-modal="true" aria-label="Run checks for all vehicles">
               <div className="modal__header">
                 <h3>Run Checks For All?</h3>
@@ -599,7 +599,7 @@ export default function MLPredictions(props: MLPredictionsProps) {
           </div>
         )}
         {deleteTarget && (
-          <div className="modal-backdrop">
+          <div className="modal-backdrop" role="presentation">
             <div className="modal" role="dialog" aria-modal="true" aria-label="Delete prediction">
               <div className="modal__header">
                 <h3>Delete Prediction?</h3>

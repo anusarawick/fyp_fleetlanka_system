@@ -1202,26 +1202,42 @@ export default function DriverTrips(props: DriverProps) {
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedAssignedTripId(null)} aria-label="Close assigned trip details">✕</button>
             </div>
-            <div className="details-grid details-grid--scroll">
-              <div className="detail-item"><span>Trip Title</span><strong>{selectedAssignedTrip.trip_title || "Assigned trip"}</strong></div>
-              <div className="detail-item"><span>Vehicle</span><strong>{selectedAssignedVehicle?.plate_no || "--"}</strong></div>
-              <div className="detail-item"><span>Scheduled Start</span><strong>{selectedAssignedTrip.scheduled_start ? formatDateTime(selectedAssignedTrip.scheduled_start) : "--"}</strong></div>
-              <div className="detail-item"><span>Origin</span><strong>{selectedAssignedTrip.origin_label || "--"}</strong></div>
-              <div className="detail-item"><span>Destination</span><strong>{selectedAssignedTrip.destination_label || "--"}</strong></div>
-              <div className="detail-item"><span>Priority</span><strong>{formatPriority(selectedAssignedTrip.priority)}</strong></div>
-              <div className="detail-item"><span>Contact Person</span><strong>{selectedAssignedTrip.contact_name || "--"}</strong></div>
-              <div className="detail-item"><span>Contact Phone</span><strong>{selectedAssignedTrip.contact_phone || "--"}</strong></div>
-              <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedAssignedTrip.notes || "--"}</strong></div>
-              {(selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null) ||
-              (selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null) ? (
-                <div className="detail-item detail-item--full">
-                  <span>Route Preview</span>
-                  <TripRoutePreview
-                    origin={selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null ? [selectedAssignedTrip.origin_lat, selectedAssignedTrip.origin_lon] : null}
-                    destination={selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null ? [selectedAssignedTrip.destination_lat, selectedAssignedTrip.destination_lon] : null}
-                  />
+            <div className="modal__body">
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Assignment</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Trip Title</span><strong>{selectedAssignedTrip.trip_title || "Assigned trip"}</strong></div>
+                  <div className="detail-item"><span>Vehicle</span><strong>{selectedAssignedVehicle?.plate_no || "--"}</strong></div>
+                  <div className="detail-item"><span>Scheduled Start</span><strong>{selectedAssignedTrip.scheduled_start ? formatDateTime(selectedAssignedTrip.scheduled_start) : "--"}</strong></div>
+                  <div className="detail-item"><span>Priority</span><strong>{formatPriority(selectedAssignedTrip.priority)}</strong></div>
+                  <div className="detail-item"><span>Contact Person</span><strong>{selectedAssignedTrip.contact_name || "--"}</strong></div>
+                  <div className="detail-item"><span>Contact Phone</span><strong>{selectedAssignedTrip.contact_phone || "--"}</strong></div>
                 </div>
-              ) : null}
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Route</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Origin</span><strong>{selectedAssignedTrip.origin_label || "--"}</strong></div>
+                  <div className="detail-item"><span>Destination</span><strong>{selectedAssignedTrip.destination_label || "--"}</strong></div>
+                  {(selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null) ||
+                  (selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null) ? (
+                    <div className="modal-route-preview">
+                      <TripRoutePreview
+                        origin={selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null ? [selectedAssignedTrip.origin_lat, selectedAssignedTrip.origin_lon] : null}
+                        destination={selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null ? [selectedAssignedTrip.destination_lat, selectedAssignedTrip.destination_lon] : null}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Notes</h4>
+                <div className="details-grid">
+                  <div className="detail-item detail-item--full"><span>Instructions</span><strong>{selectedAssignedTrip.notes || "--"}</strong></div>
+                </div>
+              </section>
             </div>
             <div className="modal__actions">
               {selectedAssignedTripMapsUrl ? (
@@ -1251,28 +1267,50 @@ export default function DriverTrips(props: DriverProps) {
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedTripId(null)} aria-label="Close trip history details">✕</button>
             </div>
-            <div className="details-grid details-grid--scroll">
-              <div className="detail-item"><span>Trip Title</span><strong>{selectedTrip.trip_title || "Completed trip"}</strong></div>
-              <div className="detail-item"><span>Vehicle</span><strong>{displayVehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong></div>
-              <div className="detail-item"><span>Scheduled Start</span><strong>{selectedTrip.scheduled_start ? formatDateTime(selectedTrip.scheduled_start) : "--"}</strong></div>
-              <div className="detail-item"><span>Started</span><strong>{formatDateTime(selectedTrip.start_time)}</strong></div>
-              <div className="detail-item"><span>Ended</span><strong>{formatDateTime(selectedTrip.end_time)}</strong></div>
-              <div className="detail-item"><span>From</span><strong>{selectedTrip.origin_label || "--"}</strong></div>
-              <div className="detail-item"><span>To</span><strong>{selectedTrip.destination_label || "--"}</strong></div>
-              <div className="detail-item"><span>Distance</span><strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong></div>
-              <div className="detail-item"><span>Duration</span><strong>{formatDuration(selectedTrip.duration_min)}</strong></div>
-              <div className="detail-item"><span>Average Speed</span><strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong></div>
-              <div className="detail-item"><span>Idle Time</span><strong>{formatDuration(selectedTrip.idle_min)}</strong></div>
-              <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedTrip.notes || "--"}</strong></div>
-              {(selectedTrip.origin_lat != null && selectedTrip.origin_lon != null) || (selectedTrip.destination_lat != null && selectedTrip.destination_lon != null) ? (
-                <div className="detail-item detail-item--full">
-                  <span>Route Preview</span>
-                  <TripRoutePreview
-                    origin={selectedTrip.origin_lat != null && selectedTrip.origin_lon != null ? [selectedTrip.origin_lat, selectedTrip.origin_lon] : null}
-                    destination={selectedTrip.destination_lat != null && selectedTrip.destination_lon != null ? [selectedTrip.destination_lat, selectedTrip.destination_lon] : null}
-                  />
+            <div className="modal__body">
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Trip</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Trip Title</span><strong>{selectedTrip.trip_title || "Completed trip"}</strong></div>
+                  <div className="detail-item"><span>Vehicle</span><strong>{displayVehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong></div>
+                  <div className="detail-item"><span>Scheduled Start</span><strong>{selectedTrip.scheduled_start ? formatDateTime(selectedTrip.scheduled_start) : "--"}</strong></div>
+                  <div className="detail-item"><span>Started</span><strong>{formatDateTime(selectedTrip.start_time)}</strong></div>
+                  <div className="detail-item"><span>Ended</span><strong>{formatDateTime(selectedTrip.end_time)}</strong></div>
                 </div>
-              ) : null}
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Route</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>From</span><strong>{selectedTrip.origin_label || "--"}</strong></div>
+                  <div className="detail-item"><span>To</span><strong>{selectedTrip.destination_label || "--"}</strong></div>
+                  {(selectedTrip.origin_lat != null && selectedTrip.origin_lon != null) || (selectedTrip.destination_lat != null && selectedTrip.destination_lon != null) ? (
+                    <div className="modal-route-preview">
+                      <TripRoutePreview
+                        origin={selectedTrip.origin_lat != null && selectedTrip.origin_lon != null ? [selectedTrip.origin_lat, selectedTrip.origin_lon] : null}
+                        destination={selectedTrip.destination_lat != null && selectedTrip.destination_lon != null ? [selectedTrip.destination_lat, selectedTrip.destination_lon] : null}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Performance</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Distance</span><strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong></div>
+                  <div className="detail-item"><span>Duration</span><strong>{formatDuration(selectedTrip.duration_min)}</strong></div>
+                  <div className="detail-item"><span>Average Speed</span><strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong></div>
+                  <div className="detail-item"><span>Idle Time</span><strong>{formatDuration(selectedTrip.idle_min)}</strong></div>
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Notes</h4>
+                <div className="details-grid">
+                  <div className="detail-item detail-item--full"><span>Trip Notes</span><strong>{selectedTrip.notes || "--"}</strong></div>
+                </div>
+              </section>
             </div>
             <div className="modal__actions"><button className="btn btn--secondary" type="button" onClick={() => setSelectedTripId(null)}>Close</button></div>
           </div>

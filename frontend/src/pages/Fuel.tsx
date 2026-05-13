@@ -81,9 +81,11 @@ type FuelSignal = {
   detail: string;
   tone: "danger" | "warning" | "success" | "info";
   badge: string;
+  sourceRows: Array<{ label: string; detail: string; value: string }>;
 };
 
 type FuelDateRangeMode = "last7" | "last30" | "custom";
+type FuelReportModal = "vendor" | "signals" | "health" | null;
 
 const currency = new Intl.NumberFormat("en-LK", {
   style: "currency",
@@ -227,6 +229,7 @@ export default function Fuel(props: FuelProps) {
   const [fuelCustomDateTo, setFuelCustomDateTo] = useState(formatDateInput(startOfLocalDay()));
   const [fuelRowsPerPage, setFuelRowsPerPage] = useState(10);
   const [fuelPage, setFuelPage] = useState(1);
+  const [fuelReportModal, setFuelReportModal] = useState<FuelReportModal>(null);
 
   const vehicleLabelMap = useMemo(
     () =>
@@ -378,19 +381,23 @@ export default function Fuel(props: FuelProps) {
       : 0;
 
   const vendorRows = useMemo(() => {
-    const spendByVendor = monthlyFuelLogs.reduce<Record<string, number>>((acc, log) => {
+    const spendByVendor = monthlyFuelLogs.reduce<Record<string, { spend: number; logs: number; liters: number }>>((acc, log) => {
       const vendor = log.vendor?.trim() || "Other";
-      acc[vendor] = (acc[vendor] || 0) + (log.cost_lkr || 0);
+      acc[vendor] = acc[vendor] || { spend: 0, logs: 0, liters: 0 };
+      acc[vendor].spend += log.cost_lkr || 0;
+      acc[vendor].logs += 1;
+      acc[vendor].liters += log.liters;
       return acc;
     }, {});
     return Object.entries(spendByVendor)
-      .map(([vendor, spend]) => ({
+      .map(([vendor, row]) => ({
         vendor,
-        spend,
-        percent: monthlyCost > 0 ? (spend / monthlyCost) * 100 : 0,
+        spend: row.spend,
+        logs: row.logs,
+        liters: row.liters,
+        percent: monthlyCost > 0 ? (row.spend / monthlyCost) * 100 : 0,
       }))
-      .sort((a, b) => b.spend - a.spend)
-      .slice(0, 4);
+      .sort((a, b) => b.spend - a.spend);
   }, [monthlyCost, monthlyFuelLogs]);
   const vendorColors = ["#16a34a", "#2563eb", "#f97316", "#94a3b8"];
   let vendorCursor = 0;
@@ -400,8 +407,9 @@ export default function Fuel(props: FuelProps) {
           .map((row, index) => {
             const start = vendorCursor;
             vendorCursor += row.percent;
-            return `${vendorColors[index]} ${start}% ${vendorCursor}%`;
+            return `${vendorColors[index % vendorColors.length]} ${start}% ${vendorCursor}%`;
           })
+          .slice(0, 4)
           .join(", ")})`
       : "conic-gradient(#d9e2ea 0% 100%)";
 
@@ -422,41 +430,84 @@ export default function Fuel(props: FuelProps) {
     const averageVehicleSpend = props.vehicles.length > 0 ? monthlyCost / props.vehicles.length : 0;
     return averageVehicleSpend > 0 && vehicleSpend > averageVehicleSpend * 1.25;
   }).length;
+  const overBudgetVehicles = props.vehicles
+    .map((vehicle) => {
+      const spend = monthlyFuelLogs
+        .filter((log) => log.vehicle_id === vehicle.id)
+        .reduce((sum, log) => sum + (log.cost_lkr || 0), 0);
+      const averageVehicleSpend = props.vehicles.length > 0 ? monthlyCost / props.vehicles.length : 0;
+      return { vehicle, spend, averageVehicleSpend };
+    })
+    .filter((row) => row.averageVehicleSpend > 0 && row.spend > row.averageVehicleSpend * 1.25)
+    .sort((a, b) => b.spend - a.spend);
   const missingLogCount = props.vehicles.filter(
     (vehicle) => !monthlyFuelLogs.some((log) => log.vehicle_id === vehicle.id)
   ).length;
+  const missingLogVehicles = props.vehicles.filter(
+    (vehicle) => !monthlyFuelLogs.some((log) => log.vehicle_id === vehicle.id)
+  );
   const costSpikeCount =
     fleetCostPerLiter > 0
       ? costPerLiterRows.filter((log) => log.costPerLiter > fleetCostPerLiter * 1.2).length
       : 0;
+  const costSpikeRows =
+    fleetCostPerLiter > 0
+      ? costPerLiterRows
+          .filter((log) => log.costPerLiter > fleetCostPerLiter * 1.2)
+          .sort((a, b) => b.costPerLiter - a.costPerLiter)
+      : [];
   const lowEfficiencyCount =
     fleetEfficiency > 0
       ? efficiencyRows.filter((row) => row.efficiency < fleetEfficiency * 0.85).length
       : 0;
+  const lowEfficiencyRows =
+    fleetEfficiency > 0
+      ? efficiencyRows.filter((row) => row.efficiency < fleetEfficiency * 0.85)
+      : [];
   const fuelSignals: FuelSignal[] = [
     {
       label: "Over Budget Vehicles",
       detail: `${overBudgetVehicleCount} Vehicles`,
       tone: "danger",
       badge: "High",
+      sourceRows: overBudgetVehicles.map((row) => ({
+        label: row.vehicle.plate_no,
+        detail: "Monthly spend above fleet average",
+        value: currency.format(row.spend),
+      })),
     },
     {
       label: "Missing Fuel Logs",
       detail: `${missingLogCount} Vehicles`,
       tone: "warning",
       badge: "Medium",
+      sourceRows: missingLogVehicles.map((vehicle) => ({
+        label: vehicle.plate_no,
+        detail: "No fuel log recorded this month",
+        value: "Missing",
+      })),
     },
     {
       label: "Cost Spikes Detected",
       detail: `${costSpikeCount} Entries`,
       tone: "success",
       badge: "Low",
+      sourceRows: costSpikeRows.map((log) => ({
+        label: vehicleLabelMap[log.vehicle_id] || "Vehicle",
+        detail: `${log.fuel_date} • ${log.vendor || "Vendor not recorded"}`,
+        value: `${currency.format(log.costPerLiter)} / L`,
+      })),
     },
     {
       label: "Low Efficiency Alerts",
       detail: `${lowEfficiencyCount} Vehicles`,
       tone: "info",
       badge: "Info",
+      sourceRows: lowEfficiencyRows.map((row) => ({
+        label: row.plateNo,
+        detail: "Below 85% of fleet average efficiency",
+        value: `${row.efficiency.toFixed(1)} km/L`,
+      })),
     },
   ];
 
@@ -890,7 +941,7 @@ export default function Fuel(props: FuelProps) {
             <section className="fuel-board-card fuel-side-card">
               <div className="fuel-card-header fuel-card-header--compact">
                 <h3>Vendor Snapshot</h3>
-                <button type="button" className="fuel-text-button">View report</button>
+                <button type="button" className="fuel-text-button" onClick={() => setFuelReportModal("vendor")}>View report</button>
               </div>
               <div className="fuel-vendor-snapshot">
                 <div className="fuel-donut" style={{ background: vendorDonutGradient }}>
@@ -903,9 +954,9 @@ export default function Fuel(props: FuelProps) {
                   {vendorRows.length === 0 ? (
                     <p className="empty">No vendor spend yet.</p>
                   ) : (
-                    vendorRows.map((row, index) => (
+                    vendorRows.slice(0, 4).map((row, index) => (
                       <div key={row.vendor}>
-                        <i style={{ background: vendorColors[index] }} />
+                        <i style={{ background: vendorColors[index % vendorColors.length] }} />
                         <span>{row.vendor}</span>
                         <strong>{row.percent.toFixed(0)}% ({currency.format(row.spend)})</strong>
                       </div>
@@ -918,7 +969,7 @@ export default function Fuel(props: FuelProps) {
             <section className="fuel-board-card fuel-side-card">
               <div className="fuel-card-header fuel-card-header--compact">
                 <h3>Fuel Control Signals</h3>
-                <button type="button" className="fuel-text-button">View all</button>
+                <button type="button" className="fuel-text-button" onClick={() => setFuelReportModal("signals")}>View all</button>
               </div>
               <div className="fuel-signal-list">
                 {fuelSignals.map((signal) => (
@@ -940,7 +991,7 @@ export default function Fuel(props: FuelProps) {
             <section className="fuel-board-card fuel-side-card">
               <div className="fuel-card-header fuel-card-header--compact">
                 <h3>Fleet Fuel Health</h3>
-                <button type="button" className="fuel-text-button">View report</button>
+                <button type="button" className="fuel-text-button" onClick={() => setFuelReportModal("health")}>View report</button>
               </div>
               <div className="fuel-health-grid">
                 <div>
@@ -974,6 +1025,108 @@ export default function Fuel(props: FuelProps) {
           </aside>
         </div>
       </section>
+
+      {fuelReportModal === "vendor" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Vendor spend report">
+            <div className="modal__header">
+              <div>
+                <h3>Vendor Spend Report</h3>
+                <p className="modal__subtle">Monthly fuel spend grouped by station or vendor.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setFuelReportModal(null)} aria-label="Close vendor report">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              {vendorRows.length === 0 ? (
+                <p className="empty">No vendor spend has been recorded this month.</p>
+              ) : (
+                vendorRows.map((row, index) => (
+                  <div className="detail-item" key={row.vendor}>
+                    <span>{index + 1}. {row.vendor}</span>
+                    <strong>{currency.format(row.spend)}</strong>
+                    <small>{row.percent.toFixed(1)}% of monthly spend • {row.logs} logs • {formatLiters(row.liters)}</small>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fuelReportModal === "signals" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Fuel control signals">
+            <div className="modal__header">
+              <div>
+                <h3>Fuel Control Signals</h3>
+                <p className="modal__subtle">Current month exceptions calculated from fuel logs, vehicles, and cost-per-liter averages.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setFuelReportModal(null)} aria-label="Close fuel signals">
+                ✕
+              </button>
+            </div>
+            <div className="modal-report-list">
+              {fuelSignals.map((signal) => (
+                <div className="modal-report-item" key={signal.label}>
+                  <div className="modal-report-item__meta">
+                    <span>{signal.label}</span>
+                    <strong>{signal.detail}</strong>
+                    {signal.sourceRows.length === 0 ? (
+                      <small>No matching source rows right now.</small>
+                    ) : (
+                      <div className="modal-report-item__chips">
+                        {signal.sourceRows.slice(0, 8).map((row) => (
+                          <small key={`${signal.label}-${row.label}-${row.value}`}>{row.label}: {row.value}</small>
+                        ))}
+                        {signal.sourceRows.length > 8 ? <small>+{signal.sourceRows.length - 8} more</small> : null}
+                      </div>
+                    )}
+                  </div>
+                  <div className="modal-report-item__value">
+                    <strong>{signal.badge}</strong>
+                    <small>{signal.tone}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fuelReportModal === "health" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Fleet fuel health report">
+            <div className="modal__header">
+              <div>
+                <h3>Fleet Fuel Health Report</h3>
+                <p className="modal__subtle">Efficiency and variance use fuel logs. Idle fuel and wastage are estimates from forecast and cost averages.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setFuelReportModal(null)} aria-label="Close fuel health report">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item"><span>Total Fuel Efficiency</span><strong>{fleetEfficiency > 0 ? `${fleetEfficiency.toFixed(1)} km/L` : "--"}</strong><small>Calculated from odometer distance and liters by vehicle.</small></div>
+              <div className="detail-item"><span>Fuel Variance</span><strong>{formatPercent(fuelVariance)}</strong><small>Current monthly cost per liter vs fleet average.</small></div>
+              <div className="detail-item"><span>Idle Fuel Estimate</span><strong>{formatLiters(idleFuelEstimate)}</strong><small>Estimated from 7-day forecast demand.</small></div>
+              <div className="detail-item"><span>Fuel Wastage Estimate</span><strong>{currency.format(wasteEstimate)}</strong><small>Estimated idle liters multiplied by average cost per liter.</small></div>
+              {efficiencyRows.length === 0 ? (
+                <p className="empty">No vehicle efficiency rows are available yet.</p>
+              ) : (
+                efficiencyRows.map((row) => (
+                  <div className="detail-item" key={row.vehicleId}>
+                    <span>{row.plateNo}</span>
+                    <strong>{row.efficiency.toFixed(1)} km/L</strong>
+                    <small>{formatLiters(row.liters)} recorded</small>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFuelModal && (
         <div className="modal-backdrop" role="presentation">

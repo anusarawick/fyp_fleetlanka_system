@@ -735,11 +735,11 @@
 
 .trips-page .modal--form .form-section-title {
   grid-column: 1 / -1;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .trips-page .modal--form .form-section-title svg {
-  color: #2563eb;
+  color: #0f6c8f;
 }
 
 .trips-page .trip-route-map,

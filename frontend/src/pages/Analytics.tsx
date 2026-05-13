@@ -71,6 +71,7 @@ type AnalyticsProps = {
 };
 
 type DateRangeMode = "last7" | "last30" | "custom";
+type AnalyticsReportModal = "performer" | "cost" | "risk" | null;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const currency = new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 0 });
@@ -168,6 +169,7 @@ export default function Analytics(props: AnalyticsProps) {
   const [rangeMode, setRangeMode] = useState<DateRangeMode>("last30");
   const [customFrom, setCustomFrom] = useState(formatDateInput(startOfLocalDay() - 30 * DAY_MS));
   const [customTo, setCustomTo] = useState(formatDateInput(startOfLocalDay()));
+  const [analyticsReportModal, setAnalyticsReportModal] = useState<AnalyticsReportModal>(null);
   const today = startOfLocalDay();
 
   const dateWindow = useMemo(() => {
@@ -276,8 +278,9 @@ export default function Analytics(props: AnalyticsProps) {
     })
     .join(", ")})`;
 
-  const topPerformers = props.topPerformers.slice(0, 5);
-  const costHotspots = filteredMaintenance
+  const allTopPerformers = props.topPerformers;
+  const topPerformers = allTopPerformers.slice(0, 5);
+  const allCostHotspots = filteredMaintenance
     .filter((record) => (record.cost_lkr || 0) > 0)
     .map((record) => ({
       id: record.id,
@@ -285,17 +288,17 @@ export default function Analytics(props: AnalyticsProps) {
       asset: record.vehicle_id ? vehicleLabelMap[record.vehicle_id] || "Vehicle" : "Fleet",
       cost: record.cost_lkr || 0,
     }))
-    .sort((a, b) => b.cost - a.cost)
-    .slice(0, 5);
-  const totalHotspotCost = Math.max(1, costHotspots.reduce((sum, row) => sum + row.cost, 0));
-  const riskRows = Object.values(props.maintenancePredictionMap)
+    .sort((a, b) => b.cost - a.cost);
+  const costHotspots = allCostHotspots.slice(0, 5);
+  const totalHotspotCost = Math.max(1, allCostHotspots.reduce((sum, row) => sum + row.cost, 0));
+  const allRiskRows = Object.values(props.maintenancePredictionMap)
     .map((prediction) => ({
       vehicle: vehicleLabelMap[prediction.vehicle_id] || prediction.vehicle_id,
       level: prediction.risk_level,
       score: Math.round((prediction.probability || 0) * 100),
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    .sort((a, b) => b.score - a.score);
+  const riskRows = allRiskRows.slice(0, 5);
 
   return (
     <section className="section">
@@ -433,21 +436,21 @@ export default function Analytics(props: AnalyticsProps) {
         </section>
 
         <section className="analytics-bottom-grid">
-          <AnalyticsTableCard title="Top Performers" linkLabel="View full leaderboard" columns={["#", "Vehicle / Driver", "Utilization", "Fuel", "Score"]} variant="performer">
+          <AnalyticsTableCard title="Top Performers" linkLabel="View full leaderboard" columns={["#", "Vehicle / Driver", "Utilization", "Fuel", "Score"]} variant="performer" onViewAll={() => setAnalyticsReportModal("performer")}>
             {topPerformers.length === 0 ? <p className="empty">No driver scores available.</p> : topPerformers.map((driver, index) => (
               <div className="analytics-table-row analytics-table-row--performer" key={driver.driverId}>
                 <span>{index + 1}</span><strong>{driver.driverName}</strong><span>{Math.max(0, fleetUtilization - index * 2).toFixed(1)}%</span><span>{avgFuelPerVehicle.toFixed(1)} L</span><b>{driver.score}</b>
               </div>
             ))}
           </AnalyticsTableCard>
-          <AnalyticsTableCard title="Cost Hotspots" linkLabel="View cost analysis" columns={["Item", "Vehicle / Category", "Impact", "% of Total"]} variant="cost">
+          <AnalyticsTableCard title="Cost Hotspots" linkLabel="View cost analysis" columns={["Item", "Vehicle / Category", "Impact", "% of Total"]} variant="cost" onViewAll={() => setAnalyticsReportModal("cost")}>
             {costHotspots.length === 0 ? <p className="empty">No cost hotspots in this range.</p> : costHotspots.map((row) => (
               <div className="analytics-table-row analytics-table-row--cost" key={row.id}>
                 <strong>{row.item}</strong><span>{row.asset}</span><b>{currency.format(row.cost)}</b><span>{((row.cost / totalHotspotCost) * 100).toFixed(1)}%</span>
               </div>
             ))}
           </AnalyticsTableCard>
-          <AnalyticsTableCard title="Vehicle Risk Ranking" linkLabel="View risk report" columns={["#", "Vehicle", "Risk Level", "Risk Score", "Trend"]} variant="risk">
+          <AnalyticsTableCard title="Vehicle Risk Ranking" linkLabel="View risk report" columns={["#", "Vehicle", "Risk Level", "Risk Score", "Trend"]} variant="risk" onViewAll={() => setAnalyticsReportModal("risk")}>
             {riskRows.length === 0 ? <p className="empty">No ML risk predictions available.</p> : riskRows.map((row, index) => (
               <div className="analytics-table-row analytics-table-row--risk" key={`${row.vehicle}-${index}`}>
                 <span>{index + 1}</span><strong>{row.vehicle}</strong><b className={`analytics-risk analytics-risk--${row.level}`}>{row.level}</b><span>{row.score}</span><em>{row.level === "low" ? "↓" : row.level === "medium" ? "→" : "↑"}</em>
@@ -455,17 +458,98 @@ export default function Analytics(props: AnalyticsProps) {
             ))}
           </AnalyticsTableCard>
         </section>
+
+        {analyticsReportModal && (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Analytics detail report">
+              <div className="modal__header">
+                <div>
+                  <h3>
+                    {analyticsReportModal === "performer"
+                      ? "Driver Performance Leaders"
+                      : analyticsReportModal === "cost"
+                        ? "Cost Hotspots"
+                        : "Vehicle Risk Ranking"}
+                  </h3>
+                  <p className="modal__subtle">{rangeLabel} analytics detail view.</p>
+                </div>
+                <button className="modal__close" type="button" onClick={() => setAnalyticsReportModal(null)} aria-label="Close analytics report">
+                  ✕
+                </button>
+              </div>
+              <div className="modal-report-list">
+                {analyticsReportModal === "performer" && (
+                  allTopPerformers.length === 0 ? (
+                    <p className="empty">No driver scores available.</p>
+                  ) : (
+                    allTopPerformers.map((driver, index) => (
+                      <div className="modal-report-item" key={driver.driverId}>
+                        <div className="modal-report-item__meta">
+                          <span>#{index + 1} Driver</span>
+                          <strong>{driver.driverName}</strong>
+                          <small>{Math.max(0, fleetUtilization - index * 2).toFixed(1)}% utilization • {avgFuelPerVehicle.toFixed(1)} L average fuel</small>
+                        </div>
+                        <div className="modal-report-item__value">
+                          <strong>{driver.score}</strong>
+                          <small>Score</small>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+                {analyticsReportModal === "cost" && (
+                  allCostHotspots.length === 0 ? (
+                    <p className="empty">No cost hotspots in this range.</p>
+                  ) : (
+                    allCostHotspots.map((row, index) => (
+                      <div className="modal-report-item" key={row.id}>
+                        <div className="modal-report-item__meta">
+                          <span>#{index + 1} Cost Hotspot</span>
+                          <strong>{row.item}</strong>
+                          <small>{row.asset}</small>
+                        </div>
+                        <div className="modal-report-item__value">
+                          <strong>{currency.format(row.cost)}</strong>
+                          <small>{((row.cost / totalHotspotCost) * 100).toFixed(1)}% of spend</small>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+                {analyticsReportModal === "risk" && (
+                  allRiskRows.length === 0 ? (
+                    <p className="empty">No ML risk predictions available.</p>
+                  ) : (
+                    allRiskRows.map((row, index) => (
+                      <div className="modal-report-item" key={`${row.vehicle}-${index}`}>
+                        <div className="modal-report-item__meta">
+                          <span>#{index + 1} Vehicle</span>
+                          <strong>{row.vehicle}</strong>
+                          <small>{row.level.toUpperCase()} risk • trend {row.level === "low" ? "down" : row.level === "medium" ? "steady" : "up"}</small>
+                        </div>
+                        <div className="modal-report-item__value">
+                          <strong>{row.score}</strong>
+                          <small>Risk score</small>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </section>
   );
 }
 
-function AnalyticsTableCard(props: { title: string; linkLabel: string; columns: string[]; variant: "performer" | "cost" | "risk"; children: ReactNode }) {
+function AnalyticsTableCard(props: { title: string; linkLabel: string; columns: string[]; variant: "performer" | "cost" | "risk"; children: ReactNode; onViewAll: () => void }) {
   return (
     <article className="analytics-board-card analytics-table-card">
       <div className="analytics-card-header analytics-card-header--compact">
         <h3>{props.title}</h3>
-        <button type="button">View all</button>
+        <button type="button" onClick={props.onViewAll}>View all</button>
       </div>
       <div className="analytics-table-list">
         <div className={`analytics-table-head analytics-table-row--${props.variant}`}>
@@ -473,7 +557,7 @@ function AnalyticsTableCard(props: { title: string; linkLabel: string; columns: 
         </div>
         {props.children}
       </div>
-      <button className="analytics-text-link" type="button">{props.linkLabel}</button>
+      <button className="analytics-text-link" type="button" onClick={props.onViewAll}>{props.linkLabel}</button>
     </article>
   );
 }

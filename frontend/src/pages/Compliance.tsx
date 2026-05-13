@@ -82,6 +82,7 @@ type RegisterStatus =
   | "at-risk"
   | "pending-review";
 type DateRangeMode = "next7" | "next30" | "custom";
+type ComplianceReportModal = "health" | "issues" | "calendar" | null;
 
 type ComplianceRegisterRow = {
   id: string;
@@ -106,6 +107,7 @@ type TimelineItem = {
   date: string;
   dueText: string;
   sort: number;
+  category: RegisterCategory;
 };
 
 type MaintenanceRiskRow = {
@@ -248,6 +250,7 @@ export default function Compliance(props: ComplianceProps) {
   const [customDateTo, setCustomDateTo] = useState(formatDateInput(startOfLocalDay() + THIRTY_DAYS_MS));
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
+  const [complianceReportModal, setComplianceReportModal] = useState<ComplianceReportModal>(null);
 
   const today = startOfLocalDay();
 
@@ -520,6 +523,7 @@ export default function Compliance(props: ComplianceProps) {
         date: doc.expiry_date || "",
         dueText: relativeDueText(doc.expiry_date),
         sort: parseDate(doc.expiry_date) || Number.MAX_SAFE_INTEGER,
+        category: "documents" as const,
       }));
 
     const bookingItems = pendingBookings
@@ -534,6 +538,7 @@ export default function Compliance(props: ComplianceProps) {
         date: booking.requested_date,
         dueText: relativeDueText(booking.requested_date),
         sort: parseDate(booking.requested_date) || Number.MAX_SAFE_INTEGER,
+        category: "bookings" as const,
       }));
 
     const maintenanceItems = dueSoonMaintenance.slice(0, 2).map(({ vehicle, component }, index) => {
@@ -545,11 +550,75 @@ export default function Compliance(props: ComplianceProps) {
         date: formatDateInput(sort),
         dueText: "Within 7 days",
         sort,
+        category: "maintenance" as const,
       };
     });
 
     return [...documentItems, ...bookingItems, ...maintenanceItems].sort((a, b) => a.sort - b.sort).slice(0, 5);
   }, [dueSoonMaintenance, expiredDocuments, expiringSoonDocuments, pendingBookings, today, vehicleMap]);
+
+  const calendarItems = useMemo<TimelineItem[]>(() => {
+    const maxDate = today + 7 * DAY_MS;
+    const documentItems = [...expiredDocuments, ...expiringSoonDocuments]
+      .filter((doc) => {
+        const expiry = parseDate(doc.expiry_date);
+        return typeof expiry === "number" && expiry >= today && expiry <= maxDate;
+      })
+      .map((doc) => ({
+        id: `calendar-doc-${doc.id}`,
+        title: `${doc.doc_type} Expiry`,
+        asset: doc.vehicle_id ? vehicleLabel(vehicleMap[doc.vehicle_id]) : doc.driver_id ? "Driver document" : "Owner not recorded",
+        date: doc.expiry_date || "",
+        dueText: relativeDueText(doc.expiry_date),
+        sort: parseDate(doc.expiry_date) || Number.MAX_SAFE_INTEGER,
+        category: "documents" as const,
+      }));
+
+    const bookingItems = pendingBookings
+      .filter((booking) => {
+        const requested = parseDate(booking.requested_date);
+        return typeof requested === "number" && requested >= today && requested <= maxDate;
+      })
+      .map((booking) => ({
+        id: `calendar-booking-${booking.id}`,
+        title: "Booking Review Due",
+        asset: booking.vehicle_id ? vehicleLabel(vehicleMap[booking.vehicle_id]) : bookingLabel(booking),
+        date: booking.requested_date,
+        dueText: relativeDueText(booking.requested_date),
+        sort: parseDate(booking.requested_date) || Number.MAX_SAFE_INTEGER,
+        category: "bookings" as const,
+      }));
+
+    const maintenanceItems = dueSoonMaintenance.map(({ vehicle, component }, index) => {
+      const sort = today + DAY_MS * Math.min(6, index + 1);
+      return {
+        id: `calendar-maintenance-${vehicle.id}`,
+        title: `${component} At Risk`,
+        asset: vehicleLabel(vehicle),
+        date: formatDateInput(sort),
+        dueText: "Within 7 days",
+        sort,
+        category: "maintenance" as const,
+      };
+    });
+
+    return [...documentItems, ...bookingItems, ...maintenanceItems].sort((a, b) => a.sort - b.sort);
+  }, [dueSoonMaintenance, expiredDocuments, expiringSoonDocuments, pendingBookings, today, vehicleMap]);
+
+  const calendarDays = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) => {
+        const timestamp = today + index * DAY_MS;
+        const key = formatDateInput(timestamp);
+        return {
+          key,
+          label: index === 0 ? "Today" : index === 1 ? "Tomorrow" : new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(new Date(timestamp)),
+          dateLabel: new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(timestamp)),
+          items: calendarItems.filter((item) => formatDateInput(item.sort) === key),
+        };
+      }),
+    [calendarItems, today]
+  );
 
   const registerTabs: Array<{ key: RegisterTab; label: string; count: number; icon: typeof ShieldCheck }> = [
     { key: "all", label: "All", count: registerRows.length, icon: ShieldCheck },
@@ -558,6 +627,72 @@ export default function Compliance(props: ComplianceProps) {
     { key: "maintenance", label: "Maintenance", count: issueCounts.maintenance, icon: Wrench },
     { key: "bookings", label: "Bookings", count: issueCounts.bookings, icon: ClipboardCheck },
   ];
+
+  const issueBreakdownRows: Array<{
+    label: string;
+    count: number;
+    detail: string;
+    icon: typeof FileText;
+    category?: RegisterCategory;
+  }> = [
+    {
+      label: "Documents",
+      count: issueCounts.documents,
+      detail: `${expiredDocuments.length} expired, ${expiringSoonDocuments.length} expiring soon`,
+      icon: FileText,
+      category: "documents",
+    },
+    {
+      label: "Maintenance",
+      count: issueCounts.maintenance,
+      detail: `${overdueMaintenance.length} high priority, ${dueSoonMaintenance.length} medium priority`,
+      icon: Wrench,
+      category: "maintenance",
+    },
+    {
+      label: "Bookings",
+      count: issueCounts.bookings,
+      detail: `${pendingBookings.length} pending completion reviews`,
+      icon: ClipboardCheck,
+      category: "bookings",
+    },
+    {
+      label: "Other",
+      count: issueCounts.other,
+      detail: "Vehicles currently marked for maintenance",
+      icon: ShieldCheck,
+    },
+  ];
+
+  function showAllIssues(closeModal = false) {
+    setActiveTab("all");
+    setStatusFilter("all");
+    setAssetFilter("all");
+    setSearch("");
+    setDateRangeMode("next30");
+    setPage(1);
+    if (closeModal) setComplianceReportModal(null);
+  }
+
+  function showIssueCategory(category: RegisterCategory) {
+    setActiveTab(category);
+    setStatusFilter("all");
+    setAssetFilter("all");
+    setSearch("");
+    setDateRangeMode("next30");
+    setPage(1);
+    setComplianceReportModal(null);
+  }
+
+  function showNextSevenDays(closeModal = false) {
+    setActiveTab("all");
+    setStatusFilter("all");
+    setAssetFilter("all");
+    setSearch("");
+    setDateRangeMode("next7");
+    setPage(1);
+    if (closeModal) setComplianceReportModal(null);
+  }
 
   return (
     <section className="section">
@@ -838,7 +973,7 @@ export default function Compliance(props: ComplianceProps) {
             <section className="card compliance-side-card">
               <div className="compliance-side-card__header">
                 <h3>Compliance Health Score</h3>
-                <button type="button">View report</button>
+                <button type="button" onClick={() => setComplianceReportModal("health")}>View report</button>
               </div>
               <div className="compliance-health-card">
                 <div className="compliance-health-donut" style={{ "--score": `${healthScore * 3.6}deg` } as React.CSSProperties}>
@@ -857,7 +992,7 @@ export default function Compliance(props: ComplianceProps) {
             <section className="card compliance-side-card">
               <div className="compliance-side-card__header">
                 <h3>Issue Breakdown</h3>
-                <button type="button">View all</button>
+                <button type="button" onClick={() => setComplianceReportModal("issues")}>View all</button>
               </div>
               <div className="compliance-breakdown-list">
                 <BreakdownRow icon={FileText} label="Documents" count={issueCounts.documents} total={issueTotal} tone="blue" />
@@ -870,7 +1005,7 @@ export default function Compliance(props: ComplianceProps) {
             <section className="card compliance-side-card">
               <div className="compliance-side-card__header">
                 <h3>Next 7 Days</h3>
-                <button type="button">View calendar</button>
+                <button type="button" onClick={() => setComplianceReportModal("calendar")}>View calendar</button>
               </div>
               <div className="compliance-timeline-list">
                 {nextSevenDays.length === 0 ? (
@@ -891,13 +1026,146 @@ export default function Compliance(props: ComplianceProps) {
                   })
                 )}
               </div>
-              <Link className="compliance-view-all" to="/documents">
+              <button className="compliance-view-all" type="button" onClick={() => setComplianceReportModal("calendar")}>
                 View all upcoming ({nextSevenDays.length})
                 <ChevronRight aria-hidden="true" />
-              </Link>
+              </button>
             </section>
           </aside>
         </div>
+
+        {complianceReportModal === "health" && (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Compliance health report">
+              <div className="modal__header">
+                <div>
+                  <h3>Compliance Health Report</h3>
+                  <p className="modal__subtle">Score, issue mix, and category totals from the current compliance register.</p>
+                </div>
+                <button className="modal__close" type="button" onClick={() => setComplianceReportModal(null)} aria-label="Close compliance health report">
+                  ✕
+                </button>
+              </div>
+              <div className="details-grid details-grid--scroll">
+                <div className="detail-item"><span>Health Score</span><strong>{healthScore} / 100</strong><small>{healthScore >= 80 ? "Good" : healthScore >= 50 ? "At Risk" : "Critical"}</small></div>
+                <div className="detail-item"><span>Critical Items</span><strong>{criticalCount}</strong><small>Expired documents, overdue maintenance, and overdue booking reviews.</small></div>
+                <div className="detail-item"><span>Total Issues</span><strong>{issueCounts.documents + issueCounts.maintenance + issueCounts.bookings + issueCounts.other}</strong><small>All tracked compliance categories.</small></div>
+                <div className="detail-item"><span>Good Segment</span><strong>{healthSegments.good}%</strong><small>Current compliant score band.</small></div>
+                <div className="detail-item"><span>At Risk Segment</span><strong>{healthSegments.atRisk}%</strong><small>Items requiring attention soon.</small></div>
+                <div className="detail-item"><span>Critical Segment</span><strong>{healthSegments.critical}%</strong><small>Items already overdue or critical.</small></div>
+                <div className="detail-item"><span>Documents</span><strong>{issueCounts.documents}</strong><small>{expiredDocuments.length} expired • {expiringSoonDocuments.length} expiring soon</small></div>
+                <div className="detail-item"><span>Maintenance</span><strong>{issueCounts.maintenance}</strong><small>{overdueMaintenance.length} high priority • {dueSoonMaintenance.length} medium priority</small></div>
+                <div className="detail-item"><span>Bookings</span><strong>{issueCounts.bookings}</strong><small>{pendingBookings.length} pending completion reviews</small></div>
+                <div className="detail-item"><span>Other</span><strong>{issueCounts.other}</strong><small>Vehicles currently marked for maintenance.</small></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {complianceReportModal === "issues" && (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Issue breakdown report">
+              <div className="modal__header">
+                <div>
+                  <h3>Issue Breakdown</h3>
+                  <p className="modal__subtle">Open a category in the Compliance Register or reset to the full issue list.</p>
+                </div>
+                <button className="modal__close" type="button" onClick={() => setComplianceReportModal(null)} aria-label="Close issue breakdown">
+                  ✕
+                </button>
+              </div>
+              <div className="modal-report-list">
+                <div className="modal-report-item">
+                  <div className="modal-report-item__meta">
+                    <span>Total Tracked Issues</span>
+                    <strong>Compliance register total</strong>
+                    <small>Documents, maintenance risk, booking reviews, and other compliance markers.</small>
+                  </div>
+                  <div className="modal-report-item__value">
+                    <strong>{issueCounts.documents + issueCounts.maintenance + issueCounts.bookings + issueCounts.other}</strong>
+                    <small>Issues</small>
+                  </div>
+                </div>
+                {issueBreakdownRows.map((row) => {
+                  const Icon = row.icon;
+                  const percent = Math.round((row.count / Math.max(1, issueTotal)) * 100);
+                  return (
+                    <div className="modal-report-item" key={row.label}>
+                      <div className="modal-report-item__meta">
+                        <span>{row.label}</span>
+                        <strong>{row.detail}</strong>
+                        <small>{percent}% of tracked compliance issues</small>
+                      </div>
+                      <div className="modal-report-item__value">
+                        <strong>{row.count}</strong>
+                        <small>{percent}%</small>
+                        <button
+                          className="btn btn--secondary btn--compact"
+                          type="button"
+                          onClick={() => (row.category ? showIssueCategory(row.category) : showAllIssues(true))}
+                        >
+                          <Icon aria-hidden="true" />
+                          {row.category ? `View ${row.label}` : "View All Issues"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="modal__actions">
+                <button className="btn btn--secondary" type="button" onClick={() => setComplianceReportModal(null)}>
+                  Close
+                </button>
+                <button className="btn" type="button" onClick={() => showAllIssues(true)}>
+                  All Issues
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {complianceReportModal === "calendar" && (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Next seven days compliance calendar">
+              <div className="modal__header">
+                <div>
+                  <h3>Next 7 Days Calendar</h3>
+                  <p className="modal__subtle">Upcoming document renewals, booking reviews, and maintenance risks grouped by day.</p>
+                </div>
+                <button className="modal__close" type="button" onClick={() => setComplianceReportModal(null)} aria-label="Close compliance calendar">
+                  ✕
+                </button>
+              </div>
+              <div className="details-grid details-grid--scroll details-grid--single">
+                {calendarItems.length === 0 ? (
+                  <p className="empty">No dated compliance work in the next 7 days.</p>
+                ) : (
+                  calendarDays.map((day) => (
+                    <div className="detail-item detail-item--full" key={day.key}>
+                      <span>{day.label}</span>
+                      <strong>{day.dateLabel}</strong>
+                      {day.items.length === 0 ? (
+                        <small>No compliance items scheduled.</small>
+                      ) : (
+                        <small>
+                          {day.items.map((item) => `${item.title} - ${item.asset} (${item.dueText})`).join(" • ")}
+                        </small>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="modal__actions">
+                <button className="btn btn--secondary" type="button" onClick={() => setComplianceReportModal(null)}>
+                  Close
+                </button>
+                <button className="btn" type="button" onClick={() => showNextSevenDays(true)}>
+                  View in Register
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </section>
   );

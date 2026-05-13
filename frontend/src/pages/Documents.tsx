@@ -68,6 +68,7 @@ type DocumentsProps = {
 
 type DocumentRegisterTab = "vehicle" | "driver";
 type DocumentStatusFilter = "all" | "valid" | "expiring" | "expired" | "no-expiry";
+type DocumentsReportModal = "renewals" | "coverage" | null;
 type CoverageIssue = {
   label: string;
   detail: string;
@@ -91,6 +92,7 @@ export default function Documents(props: DocumentsProps) {
   const [removeDocumentFile, setRemoveDocumentFile] = useState(false);
   const [documentFileError, setDocumentFileError] = useState("");
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
+  const [documentsReportModal, setDocumentsReportModal] = useState<DocumentsReportModal>(null);
 
   const allowedDocumentFileTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
   const maxDocumentFileBytes = 10 * 1024 * 1024;
@@ -199,10 +201,10 @@ export default function Documents(props: DocumentsProps) {
   const dueSoonCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).key === "expiring").length;
   const currentCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).key === "valid").length;
   const noExpiryCount = props.documents.filter((doc) => getExpiryStatus(doc.expiry_date).label === "No Expiry").length;
-  const renewalQueue = props.documents
+  const renewalPriorityRows = props.documents
     .filter((doc) => !!doc.expiry_date)
-    .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)))
-    .slice(0, 8);
+    .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)));
+  const renewalQueue = renewalPriorityRows.slice(0, 8);
 
   const expectedVehicleTypes = ["Insurance", "Emission Test", "Revenue License", "Registration"];
   const expectedDriverTypes = ["Driving License", "Medical Certificate"];
@@ -606,7 +608,7 @@ export default function Documents(props: DocumentsProps) {
             <section className="card documents-side-card">
               <div className="documents-side-card__header">
                 <h3>Renewal Priority Queue</h3>
-                <button type="button">View all</button>
+                <button type="button" onClick={() => setDocumentsReportModal("renewals")}>View all</button>
               </div>
               <div className="documents-renewal-queue">
                 {renewalQueue.length === 0 ? (
@@ -630,7 +632,7 @@ export default function Documents(props: DocumentsProps) {
             <section className="card documents-side-card">
               <div className="documents-side-card__header">
                 <h3>Coverage Summary</h3>
-                <button type="button">View report</button>
+                <button type="button" onClick={() => setDocumentsReportModal("coverage")}>View report</button>
               </div>
               <div className="documents-coverage-list">
                 {coverageIssues.map((item) => (
@@ -652,6 +654,65 @@ export default function Documents(props: DocumentsProps) {
             </section>
           </aside>
         </div>
+
+      {documentsReportModal === "renewals" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Renewal priority report">
+            <div className="modal__header">
+              <div>
+                <h3>Renewal Priority Queue</h3>
+                <p className="modal__subtle">All dated documents sorted by the nearest expiry date.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setDocumentsReportModal(null)} aria-label="Close renewal report">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              {renewalPriorityRows.length === 0 ? (
+                <p className="empty">No dated renewals are waiting.</p>
+              ) : (
+                renewalPriorityRows.map((doc) => {
+                  const owner = getDocumentOwner(doc);
+                  const urgency = getUrgency(doc);
+                  return (
+                    <div className="detail-item" key={doc.id}>
+                      <span>{owner.label}</span>
+                      <strong>{doc.doc_type}</strong>
+                      <small>{formatDisplayDate(doc.expiry_date)} • {urgency.label}</small>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {documentsReportModal === "coverage" && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal modal--wide modal--details" role="dialog" aria-modal="true" aria-label="Document coverage report">
+            <div className="modal__header">
+              <div>
+                <h3>Coverage Summary Report</h3>
+                <p className="modal__subtle">Expected vehicle and driver document coverage based on the current register.</p>
+              </div>
+              <button className="modal__close" type="button" onClick={() => setDocumentsReportModal(null)} aria-label="Close coverage report">
+                ✕
+              </button>
+            </div>
+            <div className="details-grid details-grid--scroll">
+              <div className="detail-item"><span>Total Missing Coverage</span><strong>{missingCoverageCount}</strong><small>Across expected vehicle and driver document types.</small></div>
+              {[...missingVehicleDocuments, ...missingDriverDocuments].map((row) => (
+                <div className="detail-item" key={row.type}>
+                  <span>{row.type}</span>
+                  <strong>{row.missing}</strong>
+                  <small>{missingDriverDocuments.some((item) => item.type === row.type) ? "Drivers missing this document" : "Vehicles missing this document"}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDocumentModal && (
         <div className="modal-backdrop" role="presentation">

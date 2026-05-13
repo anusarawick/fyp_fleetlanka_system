@@ -905,7 +905,7 @@ export default function Maintenance(props: MaintenanceProps) {
               })}
             </section>
             <section className="maintenance-side-card">
-              <div className="maintenance-side-header"><h3>Vehicle Component Health</h3><button type="button" onClick={() => setActiveTab("records")}>View all</button></div>
+              <div className="maintenance-side-header"><h3>Vehicle Component Health</h3></div>
               <div className="maintenance-health-list">{componentHealth.map((item) => {
                 const percentage = item.total ? Math.round((item.healthy / item.total) * 100) : 0;
                 const Icon = item.icon;

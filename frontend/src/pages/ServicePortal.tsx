@@ -158,6 +158,7 @@ function resolveWorkTypeSelection(value?: string) {
 }
 
 type ServicePortalIconName = "pending" | "confirmed" | "completedToday" | "completedTotal";
+type BookingDateFilter = "last7" | "last30" | "custom";
 
 function ServicePortalIcon({ name }: { name: ServicePortalIconName }) {
   const icons = {
@@ -179,7 +180,9 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "confirmed" | "completed" | "cancelled">("all");
   const [workTypeFilter, setWorkTypeFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week">("week");
+  const [dateFilter, setDateFilter] = useState<BookingDateFilter>("last7");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selectedBooking, setSelectedBooking] = useState<ServicePortalBooking | null>(null);
@@ -219,27 +222,30 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, workTypeFilter, dateFilter, rowsPerPage, bookings.length]);
+  }, [search, statusFilter, workTypeFilter, dateFilter, customDateFrom, customDateTo, rowsPerPage, bookings.length]);
 
   const filteredBookings = useMemo(() => {
     const query = search.trim().toLowerCase();
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+    const rangeStart = new Date(startOfToday);
+    rangeStart.setDate(startOfToday.getDate() - (dateFilter === "last30" ? 29 : 6));
+    const customStart = customDateFrom ? new Date(`${customDateFrom}T00:00:00`) : null;
+    const customEnd = customDateTo ? new Date(`${customDateTo}T00:00:00`) : null;
+    if (customEnd) customEnd.setDate(customEnd.getDate() + 1);
+
     return bookings.filter((booking) => {
       const statusMatches = statusFilter === "all" ? true : (booking.status || "pending") === statusFilter;
       if (!statusMatches) return false;
       if (workTypeFilter !== "all" && bookingWork(booking) !== workTypeFilter) return false;
-      if (dateFilter !== "all") {
-        const requestedDate = new Date(booking.requested_date);
-        if (Number.isNaN(requestedDate.getTime())) return false;
-        const dateMatches =
-          dateFilter === "today"
-            ? requestedDate >= startOfToday && requestedDate < endOfToday
-            : requestedDate >= startOfToday && requestedDate < endOfWeek;
-        if (!dateMatches) return false;
-      }
+      const requestedDate = new Date(booking.requested_date);
+      if (Number.isNaN(requestedDate.getTime())) return false;
+      const dateMatches =
+        dateFilter === "custom"
+          ? (!customStart || requestedDate >= customStart) && (!customEnd || requestedDate < customEnd)
+          : requestedDate >= rangeStart && requestedDate < endOfToday;
+      if (!dateMatches) return false;
       if (!query) return true;
       return [
         booking.id,
@@ -256,7 +262,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
-  }, [bookings, search, statusFilter, workTypeFilter, dateFilter]);
+  }, [bookings, search, statusFilter, workTypeFilter, dateFilter, customDateFrom, customDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -1012,12 +1018,12 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
                     ))}
                   </select>
                 </label>
-                <label className="service-bookings-control">
-                  <span>Date</span>
+                <label className="service-bookings-control service-bookings-control--date">
+                  <span>Date Range</span>
                   <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}>
-                    <option value="week">Next 7 Days</option>
-                    <option value="today">Today</option>
-                    <option value="all">All Dates</option>
+                    <option value="last7">Last 7 Days</option>
+                    <option value="last30">Last 30 Days</option>
+                    <option value="custom">Custom</option>
                   </select>
                 </label>
                 <label className="service-bookings-control service-bookings-control--rows">
@@ -1028,6 +1034,18 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
                     <option value={50}>50</option>
                   </select>
                 </label>
+                {dateFilter === "custom" && (
+                  <div className="service-bookings-custom-range">
+                    <label className="service-bookings-control">
+                      <span>From</span>
+                      <input aria-label="Custom range start date" type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)} />
+                    </label>
+                    <label className="service-bookings-control">
+                      <span>To</span>
+                      <input aria-label="Custom range end date" type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)} />
+                    </label>
+                  </div>
+                )}
               </div>
 
               {loading ? (

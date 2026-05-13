@@ -640,6 +640,8 @@
 
 .documents-file-open-row {
   align-items: center;
+  background: #ffffff;
+  box-shadow: inset 3px 0 0 rgba(15, 108, 143, 0.12);
 }
 
 .documents-file-open {
@@ -1480,18 +1482,34 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
   margin-top: 8px;
   padding-top: 8px;
+  border: 0;
   border-top: 1px solid #e5ebf0;
+  background: transparent;
   color: #047779;
   font-size: 12px;
+  font-family: inherit;
   font-weight: 850;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .compliance-view-all svg {
   width: 14px;
   height: 14px;
+}
+
+.compliance-modal-inline-actions {
+  justify-content: flex-start;
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.modal .compliance-modal-inline-actions {
+  background: transparent;
 }
 
 .compliance-stats {

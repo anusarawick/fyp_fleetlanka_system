@@ -985,6 +985,13 @@
   gap: 0;
 }
 
+.service-bookings-custom-range {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 180px));
+  gap: 10px;
+}
+
 .service-bookings-control span {
   position: absolute;
   width: 1px;
@@ -1475,16 +1482,17 @@
 }
 
 .service-update-form {
-  gap: 14px;
+  gap: 12px;
 }
 
 .service-form-section {
   border: 1px solid var(--line-soft);
-  border-radius: 16px;
-  background: var(--surface-strong);
-  padding: 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 11px 12px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+  box-shadow: inset 3px 0 0 rgba(15, 108, 143, 0.12);
 }
 
 .service-form-section--full {
@@ -1496,7 +1504,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -1517,7 +1525,7 @@
 .service-form-section__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .service-form-section--full .service-form-section__grid {
