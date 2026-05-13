@@ -13,6 +13,7 @@ from app.schemas.drivers import (
     DriverOut,
     DriverUpdate,
 )
+from app.services.notifications import upsert_notification
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
@@ -217,6 +218,25 @@ def update_driver(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
+    if payload.status is not None:
+        status = payload.status
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=driver_id,
+            source_key=f"event:driver:{driver_id}:status:{status}",
+            alert_type="account_status_changed",
+            title="Account status updated",
+            message=f"Your driver account status is now {status}.",
+            severity="warning" if status != "active" else "info",
+            category="account",
+            action_url="/driver",
+            related_entity="profiles",
+            related_id=driver_id,
+            source_table="profiles",
+            source_id=driver_id,
+            metadata={"status": status},
+        )
     return _profile_with_email(admin_client, response.data[0])
 
 

@@ -12,6 +12,7 @@ from app.schemas.service_portal import (
     ServicePortalMeOut,
 )
 from app.services.maintenance_sync import remove_maintenance_for_booking
+from app.services.notifications import manager_profiles, notify_profiles
 from app.services.payment_sync import reconcile_service_booking_payments
 from app.services.supabase_client import get_supabase_client
 
@@ -223,4 +224,23 @@ def update_service_portal_booking(
         .execute()
     )
     vehicle_map = {vehicle_resp.data["id"]: vehicle_resp.data} if vehicle_resp.data else {}
+    if current_status != next_status:
+        notify_profiles(
+            admin_client,
+            manager_profiles(admin_client, center["org_id"]),
+            org_id=center["org_id"],
+            source_key=f"event:service_booking:{row['id']}:status:{next_status}",
+            alert_type="service_booking_status_changed",
+            title="Service booking status changed",
+            message=f"Service center changed a booking from {current_status} to {next_status}.",
+            severity="warning" if next_status in {"cancelled", "completed"} else "info",
+            category="bookings",
+            action_url="/maintenance",
+            related_entity="service_bookings",
+            related_id=row["id"],
+            source_table="service_bookings",
+            source_id=row["id"],
+            due_date=row.get("requested_date"),
+            metadata={"vehicle_id": row.get("vehicle_id"), "center_id": center.get("id")},
+        )
     return _booking_with_vehicle(row, vehicle_map)

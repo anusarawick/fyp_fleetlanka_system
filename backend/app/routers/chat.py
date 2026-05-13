@@ -13,6 +13,7 @@ from app.schemas.chat import (
     ChatMessageOut,
     ChatServiceCenterOut,
 )
+from app.services.notifications import manager_profiles, notify_profiles, service_profile_for_center, upsert_notification
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -339,7 +340,27 @@ def send_manager_message(
     )
     admin_client.table("chat_conversations").update({"updated_at": _now()}).eq("id", conversation["id"]).execute()
     _mark_read(admin_client, conversation_id, profile["id"])
-    return _hydrate_messages(admin_client, [response.data[0]])[0]
+    message = response.data[0]
+    service_profile = service_profile_for_center(admin_client, conversation.get("service_center_id"), profile["org_id"])
+    if service_profile and service_profile.get("id") != profile["id"]:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:chat_message:{message['id']}",
+            alert_type="chat_message",
+            title="New manager message",
+            message=text,
+            severity="info",
+            category="chat",
+            action_url="/service/bookings" if conversation.get("service_booking_id") else "/service",
+            related_entity="chat_conversations",
+            related_id=conversation_id,
+            source_table="chat_messages",
+            source_id=message["id"],
+            metadata={"conversation_id": conversation_id, "service_booking_id": conversation.get("service_booking_id")},
+        )
+    return _hydrate_messages(admin_client, [message])[0]
 
 
 @router.post("/conversations/{conversation_id}/read")
@@ -432,7 +453,25 @@ def send_service_message(
     )
     admin_client.table("chat_conversations").update({"updated_at": _now()}).eq("id", conversation["id"]).execute()
     _mark_read(admin_client, conversation_id, profile["id"])
-    return _hydrate_messages(admin_client, [response.data[0]])[0]
+    message = response.data[0]
+    notify_profiles(
+        admin_client,
+        manager_profiles(admin_client, center["org_id"]),
+        org_id=center["org_id"],
+        source_key=f"event:chat_message:{message['id']}",
+        alert_type="chat_message",
+        title="New service-center message",
+        message=text,
+        severity="info",
+        category="chat",
+        action_url="/maintenance",
+        related_entity="chat_conversations",
+        related_id=conversation_id,
+        source_table="chat_messages",
+        source_id=message["id"],
+        metadata={"conversation_id": conversation_id, "service_booking_id": conversation.get("service_booking_id"), "center_id": center.get("id")},
+    )
+    return _hydrate_messages(admin_client, [message])[0]
 
 
 @service_router.post("/conversations/{conversation_id}/read")

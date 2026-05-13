@@ -269,13 +269,26 @@ create table if not exists public.documents (
 create table if not exists public.alerts (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
+  recipient_profile_id uuid references public.profiles(id) on delete cascade,
   alert_type text not null,
+  title text not null,
   related_entity text,
   related_id uuid,
   message text not null,
+  severity text not null default 'info',
+  category text not null default 'general',
+  action_url text,
+  source_table text,
+  source_id uuid,
+  source_key text not null,
   due_date date,
   status text default 'open',
-  created_at timestamptz not null default now()
+  metadata jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  dismissed_at timestamptz,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- Service centers
@@ -476,6 +489,12 @@ create policy "docs_org" on public.documents
 create policy "alerts_org" on public.alerts
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
+
+create unique index if not exists alerts_recipient_source_key_unique
+  on public.alerts (recipient_profile_id, source_key);
+
+create index if not exists alerts_recipient_status_idx
+  on public.alerts (recipient_profile_id, dismissed_at, resolved_at, read_at, created_at desc);
 
 create policy "centers_org" on public.service_centers
   for all using (org_id = public.current_org_id())

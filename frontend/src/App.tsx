@@ -22,6 +22,7 @@ import { exportFuel, exportMaintenance } from "./utils/export";
 import { useState } from "react";
 import ChatPanel, { AiAssistant, ChatRequest } from "./components/ChatPanel";
 import { FeedbackProvider } from "./context/FeedbackContext";
+import { NotificationProvider } from "./context/NotificationContext";
 
 const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
 
@@ -208,7 +209,6 @@ function ManagerRoutes() {
               subtitle="Manager overview"
               userName={userName}
               userRole={userRole}
-              notificationCount={data.buildAlerts().length}
               onSignOut={handleSignOut}
             />
             <Dashboard
@@ -751,9 +751,11 @@ export default function App() {
     <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <FeedbackProvider>
         <AuthProvider>
-          <DataProvider>
-            <AppContent />
-          </DataProvider>
+          <NotificationProvider>
+            <DataProvider>
+              <AppContent />
+            </DataProvider>
+          </NotificationProvider>
         </AuthProvider>
       </FeedbackProvider>
     </BrowserRouter>

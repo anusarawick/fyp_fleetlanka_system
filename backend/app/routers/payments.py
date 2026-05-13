@@ -12,6 +12,7 @@ from app.core.deps import (
     require_manager_profile,
     require_service_profile,
 )
+from app.services.notifications import service_profile_for_center, upsert_notification
 from app.services.payment_sync import mark_service_booking_payment_paid
 from app.services.supabase_client import get_supabase_client
 
@@ -306,6 +307,25 @@ def create_service_booking_checkout(
             "checkout_url": session.url,
         }
     ).eq("id", payment["id"]).execute()
+    service_profile = service_profile_for_center(admin_client, booking.get("center_id"), profile["org_id"])
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:payment:{payment['id']}:checkout_created",
+            alert_type="payment_started",
+            title="Payment checkout started",
+            message="The manager started payment checkout for an approved service booking.",
+            severity="info",
+            category="payments",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking_id,
+            source_table="service_booking_payments",
+            source_id=payment["id"],
+            metadata={"booking_id": booking_id, "amount_lkr": booking.get("final_cost_lkr")},
+        )
     return {"checkout_url": session.url}
 
 

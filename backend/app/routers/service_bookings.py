@@ -11,6 +11,7 @@ from app.schemas.service_bookings import (
     ServiceBookingUpdate,
 )
 from app.services.maintenance_sync import upsert_maintenance_from_booking
+from app.services.notifications import service_profile_for_center, upsert_notification
 from app.services.payment_sync import reconcile_service_booking_payments
 from app.services.supabase_client import get_supabase_client
 
@@ -123,7 +124,29 @@ def create_booking(
     response = supabase.table("service_bookings").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
-    return response.data[0]
+    booking = response.data[0]
+    admin_client = get_supabase_client(use_service_role=True)
+    service_profile = service_profile_for_center(admin_client, booking.get("center_id"), org_id)
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=org_id,
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:service_booking:{booking['id']}:created",
+            alert_type="service_booking_created",
+            title="New service booking",
+            message="A manager assigned a new service booking to your center.",
+            severity="info",
+            category="bookings",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking["id"],
+            source_table="service_bookings",
+            source_id=booking["id"],
+            due_date=booking.get("requested_date"),
+            metadata={"vehicle_id": booking.get("vehicle_id")},
+        )
+    return booking
 
 
 @router.patch("/{booking_id}", response_model=ServiceBookingOut)
@@ -178,7 +201,29 @@ def update_booking(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
-    return response.data[0]
+    booking = response.data[0]
+    admin_client = get_supabase_client(use_service_role=True)
+    service_profile = service_profile_for_center(admin_client, booking.get("center_id"), profile["org_id"])
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:service_booking:{booking['id']}:manager_updated",
+            alert_type="service_booking_updated",
+            title="Service booking updated",
+            message="A manager updated a service booking assigned to your center.",
+            severity="info",
+            category="bookings",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking["id"],
+            source_table="service_bookings",
+            source_id=booking["id"],
+            due_date=booking.get("requested_date"),
+            metadata={"vehicle_id": booking.get("vehicle_id")},
+        )
+    return booking
 
 
 @router.delete("/{booking_id}")
@@ -210,6 +255,27 @@ def delete_booking(
     )
     if response.data is None:
         raise HTTPException(status_code=400, detail="Delete failed")
+    admin_client = get_supabase_client(use_service_role=True)
+    service_profile = service_profile_for_center(admin_client, existing.data.get("center_id"), profile["org_id"])
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:service_booking:{booking_id}:deleted",
+            alert_type="service_booking_cancelled",
+            title="Service booking removed",
+            message="A manager removed a pending service booking.",
+            severity="warning",
+            category="bookings",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking_id,
+            source_table="service_bookings",
+            source_id=booking_id,
+            due_date=existing.data.get("requested_date"),
+            metadata={"vehicle_id": existing.data.get("vehicle_id")},
+        )
     return {"status": "ok"}
 
 
@@ -304,7 +370,29 @@ def approve_completed_booking(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Approval update failed")
-    return response.data[0]
+    updated = response.data[0]
+    admin_client = get_supabase_client(use_service_role=True)
+    service_profile = service_profile_for_center(admin_client, updated.get("center_id"), profile["org_id"])
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:service_booking:{booking_id}:approved",
+            alert_type="service_completion_approved",
+            title="Service completion approved",
+            message="The manager approved your completed service booking.",
+            severity="success",
+            category="approvals",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking_id,
+            source_table="service_bookings",
+            source_id=booking_id,
+            due_date=updated.get("requested_date"),
+            metadata={"vehicle_id": updated.get("vehicle_id")},
+        )
+    return updated
 
 
 @router.post("/{booking_id}/reject-completion", response_model=ServiceBookingOut)
@@ -351,4 +439,26 @@ def reject_completed_booking(
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Rejection update failed")
-    return response.data[0]
+    updated = response.data[0]
+    admin_client = get_supabase_client(use_service_role=True)
+    service_profile = service_profile_for_center(admin_client, updated.get("center_id"), profile["org_id"])
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=profile["org_id"],
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:service_booking:{booking_id}:rejected",
+            alert_type="service_completion_rejected",
+            title="Service completion rejected",
+            message=f"Manager rejected the completion review: {note}",
+            severity="danger",
+            category="approvals",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking_id,
+            source_table="service_bookings",
+            source_id=booking_id,
+            due_date=updated.get("requested_date"),
+            metadata={"vehicle_id": updated.get("vehicle_id")},
+        )
+    return updated

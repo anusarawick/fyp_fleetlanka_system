@@ -6,6 +6,7 @@ from typing import Any
 import stripe
 
 from app.core.config import settings
+from app.services.notifications import manager_profiles, notify_profiles, service_profile_for_center, upsert_notification
 
 
 def _can_sync_stripe() -> bool:
@@ -34,6 +35,51 @@ def mark_service_booking_payment_paid(
     admin_client.table("service_bookings").update(
         {"payment_status": "paid"}
     ).eq("id", booking_id).eq("org_id", org_id).execute()
+    booking_resp = (
+        admin_client.table("service_bookings")
+        .select("id, center_id, vehicle_id, final_cost_lkr")
+        .eq("id", booking_id)
+        .eq("org_id", org_id)
+        .single()
+        .execute()
+    )
+    booking = booking_resp.data or {}
+    notify_profiles(
+        admin_client,
+        manager_profiles(admin_client, org_id),
+        org_id=org_id,
+        source_key=f"event:payment:{payment_id}:paid:manager",
+        alert_type="payment_paid",
+        title="Service payment completed",
+        message="A service booking payment was completed.",
+        severity="success",
+        category="payments",
+        action_url="/maintenance",
+        related_entity="service_bookings",
+        related_id=booking_id,
+        source_table="service_booking_payments",
+        source_id=payment_id,
+        metadata={"booking_id": booking_id, "amount_lkr": booking.get("final_cost_lkr")},
+    )
+    service_profile = service_profile_for_center(admin_client, booking.get("center_id"), org_id)
+    if service_profile:
+        upsert_notification(
+            admin_client,
+            org_id=org_id,
+            recipient_profile_id=service_profile["id"],
+            source_key=f"event:payment:{payment_id}:paid:service",
+            alert_type="payment_paid",
+            title="Service payment received",
+            message="A manager payment for a service booking was completed.",
+            severity="success",
+            category="payments",
+            action_url="/service/bookings",
+            related_entity="service_bookings",
+            related_id=booking_id,
+            source_table="service_booking_payments",
+            source_id=payment_id,
+            metadata={"booking_id": booking_id, "amount_lkr": booking.get("final_cost_lkr")},
+        )
 
 
 def reconcile_service_booking_payments(admin_client: Any, org_id: str) -> None:

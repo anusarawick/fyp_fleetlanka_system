@@ -18,6 +18,7 @@ from app.routers.saved_places import router as saved_places_router
 from app.routers.payments import router as payments_router
 from app.routers.chat import router as chat_router, service_router as service_chat_router
 from app.routers.ai import router as ai_router
+from app.routers.notifications import router as notifications_router
 
 app = FastAPI(title="FleetLanka API")
 
@@ -54,3 +55,4 @@ app.include_router(payments_router)
 app.include_router(chat_router)
 app.include_router(service_chat_router)
 app.include_router(ai_router)
+app.include_router(notifications_router)

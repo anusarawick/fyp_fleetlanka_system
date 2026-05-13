@@ -1,20 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, LogOut, Menu, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Settings } from "lucide-react";
 import { useShell } from "../layout/AppLayout";
+import NotificationBell from "./NotificationBell";
 
 type TopbarProps = {
   title: string;
   subtitle?: string;
   userName?: string;
   userRole?: string;
-  notificationCount?: number;
   onSignOut?: () => void;
 };
-
-function BellIcon() {
-  return <Bell aria-hidden="true" className="topbar__icon-svg" />;
-}
 
 function MenuIcon() {
   return <Menu aria-hidden="true" className="topbar__icon-svg" />;
@@ -37,7 +33,6 @@ export default function Topbar({
   subtitle,
   userName = "Manager",
   userRole = "manager",
-  notificationCount = 0,
   onSignOut
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -83,19 +78,7 @@ export default function Topbar({
       </div>
 
       <div className="topbar__actions">
-        <button
-          className="topbar__icon-btn"
-          title={notificationCount > 0 ? "Open compliance alerts" : "No active alerts"}
-          type="button"
-          aria-label={notificationCount > 0 ? "Open compliance alerts" : "No active alerts"}
-          aria-disabled={notificationCount === 0}
-          onClick={() => {
-            if (notificationCount > 0) navigate("/compliance");
-          }}
-        >
-          <BellIcon />
-          {notificationCount > 0 && <span className="topbar__badge">{notificationCount}</span>}
-        </button>
+        <NotificationBell />
 
         <div className="topbar__profile" ref={dropdownRef}>
           <button

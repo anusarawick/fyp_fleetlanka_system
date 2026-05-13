@@ -31,6 +31,7 @@ import {
 import { apiGet, apiPatch, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useFeedback } from "../context/FeedbackContext";
+import NotificationBell from "../components/NotificationBell";
 import TripRoutePreview from "../components/TripRoutePreview";
 
 type Vehicle = {
@@ -677,6 +678,7 @@ export default function DriverTrips(props: DriverProps) {
               </div>
             </div>
             <div className="pwa-header__actions">
+              <NotificationBell compact />
               <button className="pwa-header-icon-btn" type="button" onClick={props.onSignOut} aria-label="Sign out">
                 <DriverIcon name="signout" />
               </button>
@@ -686,6 +688,7 @@ export default function DriverTrips(props: DriverProps) {
           <>
             <div className="pwa-header__title">{headerTitle}</div>
             <div className="pwa-header__actions">
+              <NotificationBell compact />
               <button className="pwa-header-icon-btn" type="button" onClick={props.onSignOut} aria-label="Sign out">
                 <DriverIcon name="signout" />
               </button>
