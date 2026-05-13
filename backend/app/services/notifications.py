@@ -7,6 +7,18 @@ from typing import Any, Iterable, Optional
 MANAGER_ROLES = {"owner", "manager"}
 SERVICE_DUE_SOON_KM = 1000
 DOCUMENT_DUE_SOON_DAYS = 14
+PREFERENCE_CATEGORIES = (
+    "documents",
+    "maintenance",
+    "approvals",
+    "ml",
+    "bookings",
+    "payments",
+    "chat",
+    "trips",
+    "fuel",
+)
+DEFAULT_PREFERENCES = {category: True for category in PREFERENCE_CATEGORIES}
 GENERATED_PREFIXES = (
     "generated:document:",
     "generated:maintenance:",
@@ -45,6 +57,96 @@ def _days_until(value: Any) -> Optional[int]:
 
 def _safe_metadata(value: Optional[dict[str, Any]]) -> dict[str, Any]:
     return value or {}
+
+
+def is_required_notification(category: Optional[str], severity: Optional[str], alert_type: Optional[str] = None) -> bool:
+    normalized_category = (category or "").lower()
+    normalized_severity = (severity or "").lower()
+    normalized_type = (alert_type or "").lower()
+    if normalized_category == "account":
+        return True
+    if normalized_severity == "danger" and normalized_category in {"documents", "maintenance", "approvals", "ml"}:
+        return True
+    return normalized_type.startswith("account_")
+
+
+def normalize_preferences(row: Optional[dict]) -> dict[str, bool]:
+    preferences = dict(DEFAULT_PREFERENCES)
+    if row:
+        for category in PREFERENCE_CATEGORIES:
+            value = row.get(category)
+            if isinstance(value, bool):
+                preferences[category] = value
+    return preferences
+
+
+def get_notification_preferences(admin_client: Any, profile: dict) -> dict[str, bool]:
+    response = (
+        admin_client.table("notification_preferences")
+        .select(",".join(PREFERENCE_CATEGORIES))
+        .eq("profile_id", profile["id"])
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+    if rows:
+        return normalize_preferences(rows[0])
+    payload = {
+        "profile_id": profile["id"],
+        "org_id": profile["org_id"],
+        **DEFAULT_PREFERENCES,
+        "updated_at": _now(),
+    }
+    admin_client.table("notification_preferences").upsert(payload, on_conflict="profile_id").execute()
+    return dict(DEFAULT_PREFERENCES)
+
+
+def update_notification_preferences(admin_client: Any, profile: dict, updates: dict[str, bool]) -> dict[str, bool]:
+    allowed_updates = {key: bool(value) for key, value in updates.items() if key in PREFERENCE_CATEGORIES}
+    existing = get_notification_preferences(admin_client, profile)
+    payload = {
+        "profile_id": profile["id"],
+        "org_id": profile["org_id"],
+        **existing,
+        **allowed_updates,
+        "updated_at": _now(),
+    }
+    response = (
+        admin_client.table("notification_preferences")
+        .upsert(payload, on_conflict="profile_id")
+        .execute()
+    )
+    row = (response.data or [payload])[0]
+    return normalize_preferences(row)
+
+
+def notification_allowed(
+    admin_client: Any,
+    profile: dict,
+    *,
+    category: Optional[str],
+    severity: Optional[str],
+    alert_type: Optional[str] = None,
+) -> bool:
+    if is_required_notification(category, severity, alert_type):
+        return True
+    normalized_category = (category or "").lower()
+    if normalized_category not in PREFERENCE_CATEGORIES:
+        return True
+    preferences = get_notification_preferences(admin_client, profile)
+    return preferences.get(normalized_category, True)
+
+
+def filter_notifications_for_preferences(admin_client: Any, profile: dict, rows: list[dict]) -> list[dict]:
+    preferences = get_notification_preferences(admin_client, profile)
+    filtered = []
+    for row in rows:
+        category = str(row.get("category") or "").lower()
+        if is_required_notification(category, row.get("severity"), row.get("alert_type")):
+            filtered.append(row)
+        elif category not in PREFERENCE_CATEGORIES or preferences.get(category, True):
+            filtered.append(row)
+    return filtered
 
 
 def list_profiles_by_roles(admin_client: Any, org_id: str, roles: Iterable[str]) -> list[dict]:
@@ -106,6 +208,9 @@ def upsert_notification(
     due_date: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> Optional[dict]:
+    profile = {"id": recipient_profile_id, "org_id": org_id}
+    if not notification_allowed(admin_client, profile, category=category, severity=severity, alert_type=alert_type):
+        return None
     payload = {
         "org_id": org_id,
         "recipient_profile_id": recipient_profile_id,

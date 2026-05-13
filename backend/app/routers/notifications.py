@@ -5,8 +5,19 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_current_profile
-from app.schemas.notifications import NotificationCountOut, NotificationOut
-from app.services.notifications import _now, sync_generated_notifications
+from app.schemas.notifications import (
+    NotificationCountOut,
+    NotificationOut,
+    NotificationPreferencesOut,
+    NotificationPreferencesUpdate,
+)
+from app.services.notifications import (
+    _now,
+    filter_notifications_for_preferences,
+    get_notification_preferences,
+    sync_generated_notifications,
+    update_notification_preferences,
+)
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -55,7 +66,7 @@ def list_notifications(profile: dict = Depends(get_current_profile)) -> List[Not
         .limit(40)
         .execute()
     )
-    rows = response.data or []
+    rows = filter_notifications_for_preferences(admin_client, profile, response.data or [])
     rows.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
     rows.sort(key=lambda row: bool(row.get("read_at")))
     return rows
@@ -67,13 +78,33 @@ def notification_count(profile: dict = Depends(get_current_profile)) -> Notifica
     _sync(profile, admin_client)
     response = (
         _notification_query(admin_client, profile)
-        .select("id", count="exact")
+        .select("id, category, severity, alert_type")
         .is_("read_at", "null")
         .is_("dismissed_at", "null")
         .is_("resolved_at", "null")
         .execute()
     )
-    return {"unread_count": response.count or 0}
+    rows = filter_notifications_for_preferences(admin_client, profile, response.data or [])
+    return {"unread_count": len(rows)}
+
+
+@router.get("/preferences", response_model=NotificationPreferencesOut)
+def get_preferences(profile: dict = Depends(get_current_profile)) -> NotificationPreferencesOut:
+    admin_client = get_supabase_client(use_service_role=True)
+    return get_notification_preferences(admin_client, profile)
+
+
+@router.patch("/preferences", response_model=NotificationPreferencesOut)
+def update_preferences(
+    payload: NotificationPreferencesUpdate,
+    profile: dict = Depends(get_current_profile),
+) -> NotificationPreferencesOut:
+    admin_client = get_supabase_client(use_service_role=True)
+    return update_notification_preferences(
+        admin_client,
+        profile,
+        payload.model_dump(exclude_unset=True),
+    )
 
 
 def _mark_notification_read(notification_id: str, profile: dict) -> NotificationOut:

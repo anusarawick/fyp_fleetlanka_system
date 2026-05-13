@@ -32,3 +32,27 @@ class NotificationOut(BaseModel):
 
 class NotificationCountOut(BaseModel):
     unread_count: int
+
+
+class NotificationPreferencesOut(BaseModel):
+    documents: bool = True
+    maintenance: bool = True
+    approvals: bool = True
+    ml: bool = True
+    bookings: bool = True
+    payments: bool = True
+    chat: bool = True
+    trips: bool = True
+    fuel: bool = True
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    documents: Optional[bool] = None
+    maintenance: Optional[bool] = None
+    approvals: Optional[bool] = None
+    ml: Optional[bool] = None
+    bookings: Optional[bool] = None
+    payments: Optional[bool] = None
+    chat: Optional[bool] = None
+    trips: Optional[bool] = None
+    fuel: Optional[bool] = None

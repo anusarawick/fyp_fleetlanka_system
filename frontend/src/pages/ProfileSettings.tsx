@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, UserRound, WalletCards } from "lucide-react";
-import { apiGet, apiPost } from "../services/api";
+import { Bell, BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, ShieldCheck, UserRound, WalletCards } from "lucide-react";
+import { apiGet, apiPatch, apiPost } from "../services/api";
 import { useFeedback } from "../context/FeedbackContext";
+import { useNotifications } from "../context/NotificationContext";
 
 type ProfileSettingsProps = {
     email: string;
@@ -26,6 +27,78 @@ type ServicePortalMe = {
     };
 };
 
+type NotificationPreferences = {
+    documents: boolean;
+    maintenance: boolean;
+    approvals: boolean;
+    ml: boolean;
+    bookings: boolean;
+    payments: boolean;
+    chat: boolean;
+    trips: boolean;
+    fuel: boolean;
+};
+
+const defaultNotificationPreferences: NotificationPreferences = {
+    documents: true,
+    maintenance: true,
+    approvals: true,
+    ml: true,
+    bookings: true,
+    payments: true,
+    chat: true,
+    trips: true,
+    fuel: true,
+};
+
+const notificationPreferenceLabels: Record<keyof NotificationPreferences, { title: string; description: string; roles: Array<"manager" | "owner" | "service" | "driver"> }> = {
+    documents: {
+        title: "Documents",
+        description: "Expiry and renewal reminders.",
+        roles: ["manager", "owner"],
+    },
+    maintenance: {
+        title: "Maintenance",
+        description: "Service due and overdue alerts.",
+        roles: ["manager", "owner"],
+    },
+    approvals: {
+        title: "Approvals",
+        description: "Service completion review actions.",
+        roles: ["manager", "owner", "service"],
+    },
+    ml: {
+        title: "ML Risk",
+        description: "Predictive maintenance risk alerts.",
+        roles: ["manager", "owner"],
+    },
+    bookings: {
+        title: "Bookings",
+        description: "Service booking assignments and status changes.",
+        roles: ["manager", "owner", "service"],
+    },
+    payments: {
+        title: "Payments",
+        description: "Checkout, payment, and settlement updates.",
+        roles: ["manager", "owner", "service"],
+    },
+    chat: {
+        title: "Chat",
+        description: "New manager and service-center messages.",
+        roles: ["manager", "owner", "service"],
+    },
+    trips: {
+        title: "Trips",
+        description: "Trip assignments and trip status updates.",
+        roles: ["manager", "owner", "driver"],
+    },
+    fuel: {
+        title: "Fuel",
+        description: "Driver fuel log submissions.",
+        roles: ["manager", "owner"],
+    },
+};
+
 export default function ProfileSettings({
     email,
     role,
@@ -39,6 +112,7 @@ export default function ProfileSettings({
     token
 }: ProfileSettingsProps) {
     const feedback = useFeedback();
+    const { refreshNotifications } = useNotifications();
     const [localName, setLocalName] = useState(name || "");
     const [localPhone, setLocalPhone] = useState(phone || "");
     const [currentPassword, setCurrentPassword] = useState("");
@@ -49,6 +123,11 @@ export default function ProfileSettings({
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [serviceCenter, setServiceCenter] = useState<ServicePortalMe["center"] | null>(null);
     const [paymentSetupLoading, setPaymentSetupLoading] = useState(false);
+    const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(defaultNotificationPreferences);
+    const [preferencesLoading, setPreferencesLoading] = useState(false);
+    const [preferencesSaving, setPreferencesSaving] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [showPreferencesModal, setShowPreferencesModal] = useState(false);
 
     const roleLabel =
         role === "manager" || role === "owner"
@@ -58,6 +137,8 @@ export default function ProfileSettings({
                 : "Driver";
     const initials = localName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "U";
     const workspaceName = organizationName?.trim() || "Organization not recorded";
+    const preferenceKeys = visiblePreferenceKeys();
+    const enabledPreferenceCount = preferenceKeys.filter((key) => notificationPreferences[key]).length;
 
     useEffect(() => {
         setLocalName(name || "");
@@ -84,6 +165,15 @@ export default function ProfileSettings({
             .catch(() => setServiceCenter(null));
     }, [role, token]);
 
+    useEffect(() => {
+        if (!token) return;
+        setPreferencesLoading(true);
+        apiGet<NotificationPreferences>("/notifications/preferences", token)
+            .then((prefs) => setNotificationPreferences({ ...defaultNotificationPreferences, ...prefs }))
+            .catch((err: any) => feedback.error("Notification preferences unavailable", err.message || "Could not load notification preferences"))
+            .finally(() => setPreferencesLoading(false));
+    }, [feedback, token]);
+
     async function handleProfileUpdate(e: FormEvent) {
         e.preventDefault();
         if (onUpdateProfile) {
@@ -102,6 +192,7 @@ export default function ProfileSettings({
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
+            setShowPasswordModal(false);
         }
     }
 
@@ -138,6 +229,53 @@ export default function ProfileSettings({
         if (!serviceCenter?.stripe_account_id) return "Set up Stripe payments";
         if (serviceCenter.stripe_onboarding_status === "connected") return "Payments connected";
         return "Continue Stripe setup";
+    }
+
+    function visiblePreferenceKeys() {
+        const normalizedRole = role as "manager" | "owner" | "service" | "driver";
+        return (Object.keys(notificationPreferenceLabels) as Array<keyof NotificationPreferences>)
+            .filter((key) => notificationPreferenceLabels[key].roles.includes(normalizedRole));
+    }
+
+    function setPreference(key: keyof NotificationPreferences, value: boolean) {
+        setNotificationPreferences((current) => ({ ...current, [key]: value }));
+    }
+
+    function setAllVisiblePreferences(value: boolean) {
+        setNotificationPreferences((current) => {
+            const next = { ...current };
+            preferenceKeys.forEach((key) => {
+                next[key] = value;
+            });
+            return next;
+        });
+    }
+
+    async function handlePreferencesSave() {
+        if (!token) return;
+        setPreferencesSaving(true);
+        try {
+            const updated = await apiPatch<NotificationPreferences>(
+                "/notifications/preferences",
+                notificationPreferences,
+                token
+            );
+            setNotificationPreferences({ ...defaultNotificationPreferences, ...updated });
+            await refreshNotifications();
+            feedback.success("Preferences saved", "Notification preferences were updated.");
+            setShowPreferencesModal(false);
+        } catch (err: any) {
+            feedback.error("Preference save failed", err.message || "Could not update notification preferences");
+        } finally {
+            setPreferencesSaving(false);
+        }
+    }
+
+    function closePasswordModal() {
+        setShowPasswordModal(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
     }
 
     function PasswordField({
@@ -180,7 +318,7 @@ export default function ProfileSettings({
                     <section className="profile-card profile-card--account">
                         <div className="profile-card__header">
                             <div>
-                                <h3>Account Profile</h3>
+                                <h3>Profile Details</h3>
                                 <p>Update your personal information and contact details.</p>
                             </div>
                         </div>
@@ -246,50 +384,25 @@ export default function ProfileSettings({
                     </section>
 
                     <div className="profile-side-stack">
-                        <section className="profile-card">
+                        <section className="profile-card profile-summary-card">
                             <div className="profile-card__header">
                                 <div>
-                                    <h3>Change Password</h3>
-                                    <p>Update your password to keep your account secure.</p>
+                                    <h3>Password & Security</h3>
+                                    <p>Update your password and keep your account secure.</p>
                                 </div>
                             </div>
-
-                            <form className="profile-form profile-form--password" onSubmit={handlePasswordChange}>
-                                <PasswordField
-                                    label="Current Password"
-                                    value={currentPassword}
-                                    onChange={setCurrentPassword}
-                                    placeholder="Enter current password"
-                                    visible={showCurrentPassword}
-                                    onToggle={() => setShowCurrentPassword((value) => !value)}
-                                />
-                                <PasswordField
-                                    label="New Password"
-                                    value={newPassword}
-                                    onChange={setNewPassword}
-                                    placeholder="Enter new password"
-                                    visible={showNewPassword}
-                                    onToggle={() => setShowNewPassword((value) => !value)}
-                                />
-                                <PasswordField
-                                    label="Confirm New Password"
-                                    value={confirmPassword}
-                                    onChange={setConfirmPassword}
-                                    placeholder="Confirm new password"
-                                    visible={showConfirmPassword}
-                                    onToggle={() => setShowConfirmPassword((value) => !value)}
-                                />
-                                <p className="profile-password-hint">Password must be at least 8 characters and include uppercase, lowercase, number, and special character.</p>
-                                <div className="profile-form__actions">
-                                    <button
-                                        className="btn btn--primary"
-                                        type="submit"
-                                        disabled={!currentPassword || !newPassword || !confirmPassword || loading}
-                                    >
-                                        {loading ? "Updating..." : "Update Password"}
-                                    </button>
+                            <div className="profile-summary-card__body">
+                                <div className="profile-summary-card__icon"><Lock aria-hidden="true" /></div>
+                                <div>
+                                    <strong>Password protected</strong>
+                                    <span>Change your password from a secure dialog when needed.</span>
                                 </div>
-                            </form>
+                            </div>
+                            <div className="profile-form__actions">
+                                <button className="btn btn--primary" type="button" onClick={() => setShowPasswordModal(true)}>
+                                    Change Password
+                                </button>
+                            </div>
                         </section>
 
                         {role === "service" && serviceCenter?.payment_access_enabled && (
@@ -326,6 +439,27 @@ export default function ProfileSettings({
                                 </div>
                             </section>
                         )}
+
+                        <section className="profile-card profile-summary-card">
+                            <div className="profile-card__header">
+                                <div>
+                                    <h3>Notification Preferences</h3>
+                                    <p>Control which in-app notification categories appear.</p>
+                                </div>
+                            </div>
+                            <div className="profile-summary-card__body">
+                                <div className="profile-summary-card__icon"><Bell aria-hidden="true" /></div>
+                                <div>
+                                    <strong>{enabledPreferenceCount} of {preferenceKeys.length} categories enabled</strong>
+                                    <span>Critical account and compliance alerts always remain enabled.</span>
+                                </div>
+                            </div>
+                            <div className="profile-form__actions">
+                                <button className="btn btn--primary" type="button" onClick={() => setShowPreferencesModal(true)}>
+                                    Change Preferences
+                                </button>
+                            </div>
+                        </section>
 
                         <section className="profile-card">
                             <div className="profile-card__header">
@@ -367,6 +501,141 @@ export default function ProfileSettings({
                     </div>
                 </div>
             </div>
+
+            {showPasswordModal && (
+                <div className="modal-backdrop" role="presentation">
+                    <div className="modal modal--form profile-settings-modal" role="dialog" aria-modal="true" aria-label="Change password">
+                        <div className="modal__header">
+                            <div>
+                                <h3>Change Password</h3>
+                                <p className="modal__subtle">Update your password to keep your account secure.</p>
+                            </div>
+                            <button className="modal__close" type="button" onClick={closePasswordModal} aria-label="Close password dialog">
+                                ✕
+                            </button>
+                        </div>
+                        <form className="profile-form profile-form--password" onSubmit={handlePasswordChange}>
+                            <PasswordField
+                                label="Current Password"
+                                value={currentPassword}
+                                onChange={setCurrentPassword}
+                                placeholder="Enter current password"
+                                visible={showCurrentPassword}
+                                onToggle={() => setShowCurrentPassword((value) => !value)}
+                            />
+                            <PasswordField
+                                label="New Password"
+                                value={newPassword}
+                                onChange={setNewPassword}
+                                placeholder="Enter new password"
+                                visible={showNewPassword}
+                                onToggle={() => setShowNewPassword((value) => !value)}
+                            />
+                            <PasswordField
+                                label="Confirm New Password"
+                                value={confirmPassword}
+                                onChange={setConfirmPassword}
+                                placeholder="Confirm new password"
+                                visible={showConfirmPassword}
+                                onToggle={() => setShowConfirmPassword((value) => !value)}
+                            />
+                            <p className="profile-password-hint">Password must be at least 8 characters and include uppercase, lowercase, number, and special character.</p>
+                            <div className="modal__actions">
+                                <button className="btn btn--secondary" type="button" onClick={closePasswordModal}>
+                                    Cancel
+                                </button>
+                                <button
+                                    className="btn btn--primary"
+                                    type="submit"
+                                    disabled={!currentPassword || !newPassword || !confirmPassword || loading}
+                                >
+                                    {loading ? "Updating..." : "Update Password"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showPreferencesModal && (
+                <div className="modal-backdrop" role="presentation">
+                    <div className="modal modal--wide modal--form profile-settings-modal" role="dialog" aria-modal="true" aria-label="Notification preferences">
+                        <div className="modal__header">
+                            <div>
+                                <h3>Notification Preferences</h3>
+                                <p className="modal__subtle">Choose which in-app notification categories appear in your notification inbox.</p>
+                            </div>
+                            <button className="modal__close" type="button" onClick={() => setShowPreferencesModal(false)} aria-label="Close notification preferences">
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="profile-notification-list profile-notification-list--modal">
+                            <div className="profile-notification-row profile-notification-row--locked">
+                                <span className="profile-notification-row__icon"><ShieldCheck aria-hidden="true" /></span>
+                                <span className="profile-notification-row__body">
+                                    <strong>Critical & Account</strong>
+                                    <small>Account status and critical safety/compliance alerts always remain enabled.</small>
+                                </span>
+                                <span className="profile-status-chip">Required</span>
+                            </div>
+
+                            {preferenceKeys.map((key) => {
+                                const item = notificationPreferenceLabels[key];
+                                return (
+                                    <label className="profile-notification-row toggle-switch" key={key}>
+                                        <span className="profile-notification-row__icon"><Bell aria-hidden="true" /></span>
+                                        <span className="profile-notification-row__body">
+                                            <strong>{item.title}</strong>
+                                            <small>{item.description}</small>
+                                        </span>
+                                        <input
+                                            className="toggle-switch__input"
+                                            type="checkbox"
+                                            checked={notificationPreferences[key]}
+                                            onChange={(event) => setPreference(key, event.target.checked)}
+                                            disabled={preferencesLoading || preferencesSaving}
+                                        />
+                                        <span className="toggle-switch__track" aria-hidden="true">
+                                            <span className="toggle-switch__thumb" />
+                                        </span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+
+                        <div className="modal__actions">
+                            <button
+                                className="btn btn--secondary"
+                                type="button"
+                                onClick={() => setAllVisiblePreferences(true)}
+                                disabled={preferencesLoading || preferencesSaving}
+                            >
+                                Enable All
+                            </button>
+                            <button
+                                className="btn btn--secondary"
+                                type="button"
+                                onClick={() => setAllVisiblePreferences(false)}
+                                disabled={preferencesLoading || preferencesSaving}
+                            >
+                                Disable All
+                            </button>
+                            <button className="btn btn--secondary" type="button" onClick={() => setShowPreferencesModal(false)}>
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn--primary"
+                                type="button"
+                                onClick={handlePreferencesSave}
+                                disabled={preferencesLoading || preferencesSaving || !token}
+                            >
+                                {preferencesSaving ? "Saving..." : preferencesLoading ? "Loading..." : "Save Preferences"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </section>
     );
 }
