@@ -1,4 +1,4 @@
-import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Building2, Check, CheckCheck, ChevronLeft, ChevronRight, MessageCircle, Minus, Search, Send, Sparkles, X } from "lucide-react";
 import { apiGet, apiPost } from "../services/api";
 import { useFeedback } from "../context/FeedbackContext";
@@ -12,6 +12,9 @@ type ChatConversation = {
   service_center_id: string;
   service_booking_id?: string;
   conversation_type: string;
+  counterparty_name?: string;
+  manager_name?: string;
+  organization_name?: string;
   service_center_name?: string;
   booking_vehicle_plate?: string;
   booking_reference?: string;
@@ -132,8 +135,9 @@ function useMinimizeOnOutsideClick(open: boolean, rootRef: RefObject<HTMLElement
   }, [open, rootRef]);
 }
 
-function titleFor(conversation?: ChatConversation | null) {
+function titleFor(conversation: ChatConversation | null | undefined, role: ChatPanelProps["role"]) {
   if (!conversation) return "Messages";
+  if (role === "service") return conversation.counterparty_name || conversation.manager_name || "Fleet Manager";
   return conversation.service_center_name || "Service center";
 }
 
@@ -254,6 +258,10 @@ function messageForHistory(message: AiMessage) {
   return `${message.text}\nFollow-ups:\n${followups}`;
 }
 
+function shouldPollChat() {
+  return typeof document === "undefined" || document.visibilityState !== "hidden";
+}
+
 function renderStructuredAiMessage(message: AiMessage, onFollowup: (prompt: string) => void) {
   const hasStructuredContent = message.title || message.summary || message.table || message.bullets?.length || message.followups?.length || message.refusal;
   if (!hasStructuredContent) return renderAiText(message.text);
@@ -323,7 +331,10 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
     if (!query) return conversations;
     return conversations.filter((conversation) => {
       return [
+        titleFor(conversation, role),
         conversation.service_center_name,
+        conversation.manager_name,
+        conversation.counterparty_name,
         conversation.booking_reference,
         conversation.booking_vehicle_plate,
         conversation.last_message_text,
@@ -332,10 +343,10 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
-  }, [conversationSearch, conversations]);
+  }, [conversationSearch, conversations, role]);
   useMinimizeOnOutsideClick(open, rootRef);
 
-  async function loadConversations() {
+  const loadConversations = useCallback(async () => {
     if (!token) return;
     const rows = await apiGet<ChatConversation[]>(`${base}/conversations`, token);
     setConversations(rows);
@@ -343,21 +354,21 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
       if (!current) return current;
       return rows.find((row) => row.id === current.id) || current;
     });
-  }
+  }, [base, token]);
 
-  async function loadServiceCenters() {
+  const loadServiceCenters = useCallback(async () => {
     if (!token || role !== "manager") return;
     const rows = await apiGet<ChatServiceCenter[]>("/chat/service-centers", token);
     setServiceCenters(rows);
-  }
+  }, [role, token]);
 
-  async function loadMessages(conversationId: string) {
+  const loadMessages = useCallback(async (conversationId: string) => {
     if (!token) return;
     const rows = await apiGet<ChatMessage[]>(`${base}/conversations/${conversationId}/messages`, token);
     setMessages(rows);
     await apiPost(`${base}/conversations/${conversationId}/read`, {}, token);
     await loadConversations();
-  }
+  }, [base, loadConversations, token]);
 
   async function openConversation(conversation: ChatConversation) {
     setSelected(conversation);
@@ -431,14 +442,36 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
   }
 
   useEffect(() => {
-    if (!token || !drawerOpen) return;
+    if (!token) {
+      setConversations([]);
+      setSelected(null);
+      setMessages([]);
+      return;
+    }
     loadConversations().catch(() => undefined);
+    const refresh = () => {
+      if (shouldPollChat()) loadConversations().catch(() => undefined);
+    };
     const id = window.setInterval(() => {
-      loadConversations().catch(() => undefined);
-      if (selected && open) loadMessages(selected.id).catch(() => undefined);
+      refresh();
+    }, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadConversations, token]);
+
+  useEffect(() => {
+    if (!token || !selected || !open || !drawerOpen) return;
+    loadMessages(selected.id).catch(() => undefined);
+    const id = window.setInterval(() => {
+      if (shouldPollChat()) loadMessages(selected.id).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(id);
-  }, [token, selected?.id, base, drawerOpen, open]);
+  }, [drawerOpen, loadMessages, open, selected?.id, token]);
 
   useEffect(() => {
     if (!request) return;
@@ -448,7 +481,9 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
 
   useEffect(() => {
     if (!open) return;
-    messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+    if (typeof messageListRef.current?.scrollTo === "function") {
+      messageListRef.current.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [messages.length, selected?.id, open]);
 
   if (!drawerOpen) {
@@ -467,7 +502,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
           <header className="chat-panel__header">
             <div className="chat-panel__title">
               <div>
-                <strong>{titleFor(selected)}</strong>
+                <strong>{titleFor(selected, role)}</strong>
               </div>
               {selected ? (
                 <span className="chat-panel__header-tags">
@@ -532,11 +567,8 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
                   onClick={() => openConversation(conversation)}
                 >
                   <div className="chat-panel__conversation-head">
-                    <strong>{conversation.service_center_name || "Service center"}</strong>
+                    <strong>{titleFor(conversation, role)}</strong>
                     <span className="chat-panel__conversation-tags">
-                      {conversation.conversation_type === "booking" && (
-                        <small>{conversation.booking_vehicle_plate || "Vehicle not linked"}</small>
-                      )}
                       <em>{conversationTypeLabel(conversation)}</em>
                     </span>
                   </div>
@@ -621,10 +653,12 @@ export function AiAssistant({ token }: { token?: string }) {
 
   useEffect(() => {
     if (!open || !aiMessageListRef.current) return;
-    aiMessageListRef.current.scrollTo({
-      top: aiMessageListRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    if (typeof aiMessageListRef.current.scrollTo === "function") {
+      aiMessageListRef.current.scrollTo({
+        top: aiMessageListRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   }, [messages, loading, open]);
 
   async function sendPrompt(question: string) {

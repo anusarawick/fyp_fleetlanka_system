@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -295,6 +295,13 @@ def router_app(monkeypatch: pytest.MonkeyPatch, fake_supabase: FakeSupabaseClien
         app.dependency_overrides[deps.require_manager_profile] = lambda: active_profile
         app.dependency_overrides[deps.require_manager_or_driver_profile] = lambda: active_profile
         app.dependency_overrides[deps.require_service_profile] = lambda: active_profile
+        def current_service_center() -> dict[str, Any]:
+            for center in fake_supabase.tables.get("service_centers", []):
+                if center.get("profile_id") == active_profile.get("id"):
+                    return center
+            raise HTTPException(status_code=403, detail="No service center is linked to this account")
+
+        app.dependency_overrides[deps.get_current_service_center] = current_service_center
         app.include_router(router)
         return app
 

@@ -20,6 +20,9 @@ class ChatConversationOut(BaseModel):
     service_center_id: str
     service_booking_id: Optional[str] = None
     conversation_type: str
+    counterparty_name: Optional[str] = None
+    manager_name: Optional[str] = None
+    organization_name: Optional[str] = None
     service_center_name: Optional[str] = None
     booking_vehicle_plate: Optional[str] = None
     booking_reference: Optional[str] = None

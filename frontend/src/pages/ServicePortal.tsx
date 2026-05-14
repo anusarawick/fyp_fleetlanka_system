@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { apiGet, apiPatch } from "../services/api";
 import { useFeedback } from "../context/FeedbackContext";
+import { formatBookingReference } from "../utils/bookings";
 
 type ServicePortalProps = {
   token?: string;
@@ -249,6 +250,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
       if (!query) return true;
       return [
         booking.id,
+        formatBookingReference(booking.id),
         booking.requested_date,
         booking.status,
         booking.completion_review_status,
@@ -1055,6 +1057,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
               ) : (
                 <div className="service-bookings-table">
                   <div className="service-bookings-table__head">
+                    <span>Booking ID</span>
                     <span>Vehicle</span>
                     <span>Scheduled Date</span>
                     <span>Work Type</span>
@@ -1065,6 +1068,9 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
                   </div>
                   {visibleBookings.map((booking) => (
                     <div key={booking.id} className="service-bookings-table__row">
+                      <span data-label="Booking ID">
+                        <strong>{formatBookingReference(booking.id)}</strong>
+                      </span>
                       <span className="service-bookings-table__booking" data-label="Vehicle">
                         <strong>{vehiclePlate(booking)}</strong>
                         <small>{vehicleName(booking)}</small>
@@ -1215,6 +1221,7 @@ export default function ServicePortal({ token, initialTab = "dashboard", onOpenB
               </button>
             </div>
             <div className="details-grid details-grid--scroll">
+              <div className="detail-item"><span>Booking ID</span><strong>{formatBookingReference(selectedBooking.id)}</strong></div>
               <div className="detail-item"><span>Vehicle</span><strong>{vehicleLabel(selectedBooking)}</strong></div>
               <div className="detail-item"><span>Requested Date</span><strong>{selectedBooking.requested_date}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{formatStatus(selectedBooking.status)}</strong></div>

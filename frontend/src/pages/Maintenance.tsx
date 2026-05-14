@@ -22,6 +22,7 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
+import { formatBookingReference } from "../utils/bookings";
 
 type Vehicle = {
   id: string;
@@ -311,6 +312,7 @@ export default function Maintenance(props: MaintenanceProps) {
         booking.notes,
         booking.work_type,
         booking.service_notes,
+        formatBookingReference(booking.id),
         review.label,
         status.label,
         booking.vehicle_id ? vehicleLabelMap[booking.vehicle_id] : "",
@@ -773,7 +775,7 @@ export default function Maintenance(props: MaintenanceProps) {
                 </div>
                 {filteredBookings.length === 0 ? <div className="maintenance-empty-state"><CalendarClock aria-hidden="true" /><div><strong>No service bookings found</strong><span>Create bookings for vehicles that need workshop attention.</span></div></div> : (
                   <div className="maintenance-register-table maintenance-bookings-table">
-                    <div className="maintenance-table__head"><span>Vehicle</span><span>Service Center</span><span>Requested Date</span><span>Work Type</span><span>Status</span><span>Review</span><span>Payment</span><span>Actions</span></div>
+                    <div className="maintenance-table__head"><span>Booking ID</span><span>Vehicle</span><span>Service Center</span><span>Requested Date</span><span>Work Type</span><span>Status</span><span>Payment</span><span>Actions</span></div>
                     {paginatedBookings.map((booking) => {
                       const status = bookingWorkflowStatus(booking);
                       const review = reviewState(booking);
@@ -781,12 +783,12 @@ export default function Maintenance(props: MaintenanceProps) {
                       const canChange = (booking.status || "pending") === "pending";
                       return (
                         <div className="maintenance-table__row" key={booking.id}>
+                          <span data-label="Booking ID"><strong>{formatBookingReference(booking.id)}</strong></span>
                           <span data-label="Vehicle"><strong>{vehicleLabelMap[booking.vehicle_id || ""] || "--"}</strong></span>
                           <span data-label="Service Center">{centerLabelMap[booking.center_id || ""] || "--"}</span>
                           <span data-label="Requested Date">{formatDate(booking.requested_date)}</span>
                           <span data-label="Work Type">{booking.work_type || booking.notes || "General Service"}</span>
                           <span data-label="Status"><span className={`maintenance-badge maintenance-badge--${status.tone}`}>{status.label}</span></span>
-                          <span data-label="Review"><span className={`maintenance-badge maintenance-badge--${review.tone}`}>{review.label}</span></span>
                           <span data-label="Payment"><span className={`maintenance-badge maintenance-badge--${payment.tone}`}>{payment.label}</span></span>
                           <span className="maintenance-row-actions" data-label="Actions">
                             <button className="icon-action" type="button" onClick={() => setSelectedBooking(booking)} title="View booking" aria-label={`View booking ${booking.id}`}><Eye className="icon-action__svg icon-action__svg--view" aria-hidden="true" /></button>
@@ -1331,7 +1333,7 @@ export default function Maintenance(props: MaintenanceProps) {
               <div className="detail-item"><span>Service Center</span><strong>{selectedRecord.service_center_id ? centerLabelMap[selectedRecord.service_center_id] || "--" : "--"}</strong></div>
               <div className="detail-item"><span>Odometer</span><strong>{selectedRecord.odometer_km ?? "--"}</strong></div>
               <div className="detail-item"><span>Next Due (km)</span><strong>{selectedRecord.next_service_due_km ?? "--"}</strong></div>
-              <div className="detail-item"><span>Linked Booking</span><strong>{selectedRecord.service_booking_id || "--"}</strong></div>
+              <div className="detail-item"><span>Linked Booking</span><strong>{formatBookingReference(selectedRecord.service_booking_id)}</strong></div>
               <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedRecord.notes || "--"}</strong></div>
             </div>
           </div>
@@ -1382,6 +1384,7 @@ export default function Maintenance(props: MaintenanceProps) {
               </button>
             </div>
             <div className="details-grid details-grid--scroll">
+              <div className="detail-item"><span>Booking ID</span><strong>{formatBookingReference(selectedBooking.id)}</strong></div>
               <div className="detail-item"><span>Date</span><strong>{selectedBooking.requested_date}</strong></div>
               <div className="detail-item"><span>Status</span><strong>{(selectedBooking.status || "pending") === "completed" && (selectedBooking.completion_review_status || "pending") !== "approved" ? "Completed. Pending Approval" : selectedBooking.status || "pending"}</strong></div>
               <div className="detail-item"><span>Work Type</span><strong>{selectedBooking.work_type || "--"}</strong></div>

@@ -152,9 +152,20 @@ def _booking_reference(booking_id: Optional[str]) -> Optional[str]:
     return f"BK-{booking_id.replace('-', '')[:8].upper()}"
 
 
-def _conversation_metadata(admin_client, conversations: list[dict], profile_id: str) -> list[dict]:
+def _role_label(role: Optional[str]) -> str:
+    labels = {
+        "owner": "Fleet Owner",
+        "manager": "Fleet Manager",
+        "service": "Service Center",
+        "driver": "Driver",
+    }
+    return labels.get((role or "").lower(), "Fleet Manager")
+
+
+def _conversation_metadata(admin_client, conversations: list[dict], profile: dict) -> list[dict]:
     if not conversations:
         return []
+    profile_id = profile["id"]
     conversation_ids = [row["id"] for row in conversations]
     center_ids = list({row["service_center_id"] for row in conversations if row.get("service_center_id")})
     booking_ids = list({row["service_booking_id"] for row in conversations if row.get("service_booking_id")})
@@ -196,6 +207,31 @@ def _conversation_metadata(admin_client, conversations: list[dict], profile_id: 
         conversation_id = message.get("conversation_id")
         if conversation_id and conversation_id not in last_by_conversation:
             last_by_conversation[conversation_id] = message
+    sender_names = _message_sender_names(admin_client, message_rows)
+    manager_name_by_conversation: dict[str, str] = {}
+    for message in message_rows:
+        if message.get("sender_role") not in {"owner", "manager"}:
+            continue
+        conversation_id = message.get("conversation_id")
+        sender_name = sender_names.get(message.get("sender_profile_id"))
+        if conversation_id and sender_name and conversation_id not in manager_name_by_conversation:
+            manager_name_by_conversation[conversation_id] = sender_name
+
+    org_manager_name = None
+    org_manager_position = "Fleet Manager"
+    organization_name = None
+    if profile.get("role") == "service":
+        org_response = (
+            admin_client.table("organizations")
+            .select("name")
+            .eq("id", profile["org_id"])
+            .single()
+            .execute()
+        )
+        organization_name = (org_response.data or {}).get("name")
+        managers = manager_profiles(admin_client, profile["org_id"])
+        org_manager_name = next((row.get("full_name") for row in managers if row.get("full_name")), None)
+        org_manager_position = _role_label(next((row.get("role") for row in managers if row.get("role")), "manager"))
 
     read_rows = (
         admin_client.table("chat_read_states")
@@ -222,10 +258,19 @@ def _conversation_metadata(admin_client, conversations: list[dict], profile_id: 
         booking = bookings.get(conversation.get("service_booking_id") or "")
         vehicle = vehicles.get((booking or {}).get("vehicle_id") or "")
         last_message = last_by_conversation.get(conversation_id, {})
+        service_center_name = centers.get(conversation.get("service_center_id"), {}).get("name")
+        manager_name = manager_name_by_conversation.get(conversation_id) or org_manager_name or "Fleet Manager"
+        if profile.get("role") == "service":
+            counterparty_name = f"{org_manager_position} - {organization_name}" if organization_name else org_manager_position
+        else:
+            counterparty_name = service_center_name or "Service center"
         hydrated.append(
             {
                 **conversation,
-                "service_center_name": centers.get(conversation.get("service_center_id"), {}).get("name"),
+                "counterparty_name": counterparty_name,
+                "manager_name": manager_name,
+                "organization_name": organization_name,
+                "service_center_name": service_center_name,
                 "booking_vehicle_plate": vehicle.get("plate_no") if vehicle else None,
                 "booking_reference": _booking_reference(conversation.get("service_booking_id")),
                 "last_message_text": last_message.get("message_text"),
@@ -246,7 +291,7 @@ def _list_conversations(admin_client, profile: dict, center: Optional[dict] = No
     if center:
         query = query.eq("service_center_id", center["id"])
     conversations = query.execute().data or []
-    return _conversation_metadata(admin_client, conversations, profile["id"])
+    return _conversation_metadata(admin_client, conversations, profile)
 
 
 @router.get("/conversations", response_model=list[ChatConversationOut])
@@ -279,7 +324,7 @@ def open_manager_center_conversation(
     admin_client = get_supabase_client(use_service_role=True)
     _get_center(admin_client, payload.service_center_id, profile["org_id"])
     conversation = _create_or_get_conversation(admin_client, profile["org_id"], payload.service_center_id, None)
-    return _conversation_metadata(admin_client, [conversation], profile["id"])[0]
+    return _conversation_metadata(admin_client, [conversation], profile)[0]
 
 
 @router.post("/conversations/booking", response_model=ChatConversationOut)
@@ -292,7 +337,7 @@ def open_manager_booking_conversation(
     admin_client = get_supabase_client(use_service_role=True)
     booking = _get_booking(admin_client, payload.service_booking_id, profile["org_id"])
     conversation = _create_or_get_conversation(admin_client, profile["org_id"], booking["center_id"], booking["id"])
-    return _conversation_metadata(admin_client, [conversation], profile["id"])[0]
+    return _conversation_metadata(admin_client, [conversation], profile)[0]
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])
@@ -389,7 +434,7 @@ def open_service_center_conversation(
 ) -> ChatConversationOut:
     admin_client = get_supabase_client(use_service_role=True)
     conversation = _create_or_get_conversation(admin_client, center["org_id"], center["id"], None)
-    return _conversation_metadata(admin_client, [conversation], profile["id"])[0]
+    return _conversation_metadata(admin_client, [conversation], profile)[0]
 
 
 @service_router.post("/conversations/booking", response_model=ChatConversationOut)
@@ -403,7 +448,7 @@ def open_service_booking_conversation(
     admin_client = get_supabase_client(use_service_role=True)
     booking = _get_booking(admin_client, payload.service_booking_id, center["org_id"], center["id"])
     conversation = _create_or_get_conversation(admin_client, center["org_id"], center["id"], booking["id"])
-    return _conversation_metadata(admin_client, [conversation], profile["id"])[0]
+    return _conversation_metadata(admin_client, [conversation], profile)[0]
 
 
 @service_router.get("/conversations/{conversation_id}/messages", response_model=list[ChatMessageOut])

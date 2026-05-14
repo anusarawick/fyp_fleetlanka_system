@@ -580,7 +580,9 @@
 
 .maintenance-bookings-table .maintenance-table__head,
 .maintenance-bookings-table .maintenance-table__row {
-  grid-template-columns: minmax(92px, 0.62fr) minmax(116px, 0.78fr) minmax(96px, 0.62fr) minmax(108px, 0.72fr) 118px 126px 118px 104px;
+  grid-template-columns: minmax(104px, 0.72fr) minmax(82px, 0.55fr) minmax(112px, 0.78fr) minmax(98px, 0.64fr) minmax(112px, 0.78fr) minmax(104px, 0.68fr) minmax(104px, 0.68fr) 118px;
+  gap: 6px;
+  padding-inline: 6px;
 }
 
 .maintenance-centers-table .maintenance-table__head,
@@ -672,8 +674,9 @@
 }
 
 .maintenance-bookings-table .maintenance-row-actions {
-  width: 104px;
-  min-width: 104px;
+  width: 118px;
+  min-width: 118px;
+  gap: 5px;
 }
 
 .maintenance-approvals-table .maintenance-row-actions--review {
