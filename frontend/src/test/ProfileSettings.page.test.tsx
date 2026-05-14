@@ -17,6 +17,7 @@ vi.mock("../services/api", () => ({
   apiGet: vi.fn(),
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
+  isAuthSessionExpiredError: vi.fn(() => false),
 }));
 
 vi.mock("../context/FeedbackContext", () => ({
@@ -80,12 +81,46 @@ describe("ProfileSettings page", () => {
     const dialog = screen.getByRole("dialog", { name: "Change password" });
 
     fireEvent.change(within(dialog).getByPlaceholderText("Enter current password"), { target: { value: "OldPass1!" } });
-    fireEvent.change(within(dialog).getByPlaceholderText("Enter new password"), { target: { value: "NewPass1!" } });
-    fireEvent.change(within(dialog).getByPlaceholderText("Confirm new password"), { target: { value: "NewPass1!" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Enter new password"), { target: { value: "RoadOps#2026" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Confirm new password"), { target: { value: "RoadOps#2026" } });
     await userEvent.click(within(dialog).getByRole("button", { name: "Update Password" }));
 
-    expect(onChangePassword).toHaveBeenCalledWith("OldPass1!", "NewPass1!");
+    expect(onChangePassword).toHaveBeenCalledWith("OldPass1!", "RoadOps#2026");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Change password" })).not.toBeInTheDocument());
+  });
+
+  it("blocks weak or mismatched profile password changes", async () => {
+    const onChangePassword = vi.fn().mockResolvedValue(undefined);
+    renderProfile({ onChangePassword });
+
+    await userEvent.click(screen.getByRole("button", { name: "Change Password" }));
+    const dialog = screen.getByRole("dialog", { name: "Change password" });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Enter current password"), { target: { value: "OldPass1!" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Enter new password"), { target: { value: "weak" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Confirm new password"), { target: { value: "different" } });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update Password" }));
+
+    expect(onChangePassword).not.toHaveBeenCalled();
+    expect(within(dialog).getByText("Use at least 10 characters.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Passwords do not match.")).toBeInTheDocument();
+  });
+
+  it("keeps the password modal open and marks current password when the server rejects it", async () => {
+    const onChangePassword = vi.fn().mockRejectedValue(new Error("Current password is incorrect"));
+    renderProfile({ onChangePassword });
+
+    await userEvent.click(screen.getByRole("button", { name: "Change Password" }));
+    const dialog = screen.getByRole("dialog", { name: "Change password" });
+
+    fireEvent.change(within(dialog).getByPlaceholderText("Enter current password"), { target: { value: "WrongPass1!" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Enter new password"), { target: { value: "RoadOps#2026" } });
+    fireEvent.change(within(dialog).getByPlaceholderText("Confirm new password"), { target: { value: "RoadOps#2026" } });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Update Password" }));
+
+    expect(onChangePassword).toHaveBeenCalledWith("WrongPass1!", "RoadOps#2026");
+    expect(screen.getByRole("dialog", { name: "Change password" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Current password is incorrect.")).toBeInTheDocument();
   });
 
   it("opens notification preferences, disables all visible categories, saves, and refreshes notifications", async () => {

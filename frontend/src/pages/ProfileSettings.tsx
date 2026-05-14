@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { Bell, BriefcaseBusiness, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, ShieldCheck, UserRound, WalletCards } from "lucide-react";
-import { apiGet, apiPatch, apiPost } from "../services/api";
+import { apiGet, apiPatch, apiPost, isAuthSessionExpiredError } from "../services/api";
 import { useFeedback } from "../context/FeedbackContext";
 import { useNotifications } from "../context/NotificationContext";
+import PasswordStrengthGuide from "../components/PasswordStrengthGuide";
+import { validatePassword } from "../utils/passwordPolicy";
 
 type ProfileSettingsProps = {
     email: string;
@@ -37,6 +39,20 @@ type NotificationPreferences = {
     chat: boolean;
     trips: boolean;
     fuel: boolean;
+};
+
+type PasswordErrors = Partial<Record<"current" | "new" | "confirm", string>>;
+
+type PasswordFieldProps = {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    visible: boolean;
+    onToggle: () => void;
+    error?: string;
+    onClearError: () => void;
+    children?: ReactNode;
 };
 
 const defaultNotificationPreferences: NotificationPreferences = {
@@ -99,6 +115,46 @@ const notificationPreferenceLabels: Record<keyof NotificationPreferences, { titl
     },
 };
 
+function PasswordField({
+    label,
+    value,
+    onChange,
+    placeholder,
+    visible,
+    onToggle,
+    error,
+    onClearError,
+    children,
+}: PasswordFieldProps) {
+    return (
+        <label className="profile-field">
+            <span>{label}</span>
+            <span className="profile-password-control">
+                <input
+                    type={visible ? "text" : "password"}
+                    aria-label={label}
+                    value={value}
+                    onChange={(event) => {
+                        onChange(event.target.value);
+                        if (error) onClearError();
+                    }}
+                    placeholder={placeholder}
+                    aria-invalid={Boolean(error)}
+                />
+                <button type="button" onClick={onToggle} aria-label={visible ? `Hide ${label}` : `Show ${label}`}>
+                    {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </button>
+            </span>
+            {error && <span className="profile-field-error">{error}</span>}
+            {children}
+        </label>
+    );
+}
+
+function isCurrentPasswordError(message: string) {
+    return /current password|invalid login credentials|invalid credentials/i.test(message);
+}
+
 export default function ProfileSettings({
     email,
     role,
@@ -128,6 +184,7 @@ export default function ProfileSettings({
     const [preferencesSaving, setPreferencesSaving] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showPreferencesModal, setShowPreferencesModal] = useState(false);
+    const [passwordErrors, setPasswordErrors] = useState<PasswordErrors>({});
 
     const roleLabel =
         role === "manager" || role === "owner"
@@ -170,7 +227,10 @@ export default function ProfileSettings({
         setPreferencesLoading(true);
         apiGet<NotificationPreferences>("/notifications/preferences", token)
             .then((prefs) => setNotificationPreferences({ ...defaultNotificationPreferences, ...prefs }))
-            .catch((err: any) => feedback.error("Notification preferences unavailable", err.message || "Could not load notification preferences"))
+            .catch((err: any) => {
+                if (isAuthSessionExpiredError(err)) return;
+                feedback.error("Notification preferences unavailable", err.message || "Could not load notification preferences");
+            })
             .finally(() => setPreferencesLoading(false));
     }, [feedback, token]);
 
@@ -183,16 +243,35 @@ export default function ProfileSettings({
 
     async function handlePasswordChange(e: FormEvent) {
         e.preventDefault();
-        if (newPassword !== confirmPassword) {
-            feedback.error("Passwords do not match", "Confirm password must match the new password.");
-            return;
+        const nextErrors: PasswordErrors = {};
+        if (!currentPassword) nextErrors.current = "Current password is required.";
+        const passwordError = validatePassword(newPassword, {
+            requireStrong: true,
+            context: { email, fullName: localName, orgName: organizationName },
+        });
+        if (passwordError) nextErrors.new = passwordError;
+        if (!confirmPassword) {
+            nextErrors.confirm = "Confirm your new password.";
+        } else if (newPassword !== confirmPassword) {
+            nextErrors.confirm = "Passwords do not match.";
         }
-        if (onChangePassword) {
+        setPasswordErrors(nextErrors);
+        if (Object.keys(nextErrors).length > 0) return;
+        if (!onChangePassword) return;
+        try {
             await onChangePassword(currentPassword, newPassword);
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
+            setPasswordErrors({});
             setShowPasswordModal(false);
+        } catch (err: any) {
+            const message = err?.message || "Could not update your password.";
+            if (isCurrentPasswordError(message)) {
+                setPasswordErrors((current) => ({ ...current, current: "Current password is incorrect." }));
+                return;
+            }
+            setPasswordErrors((current) => ({ ...current, new: message }));
         }
     }
 
@@ -276,39 +355,7 @@ export default function ProfileSettings({
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
-    }
-
-    function PasswordField({
-        label,
-        value,
-        onChange,
-        placeholder,
-        visible,
-        onToggle,
-    }: {
-        label: string;
-        value: string;
-        onChange: (value: string) => void;
-        placeholder: string;
-        visible: boolean;
-        onToggle: () => void;
-    }) {
-        return (
-            <label className="profile-field">
-                <span>{label}</span>
-                <span className="profile-password-control">
-                    <input
-                        type={visible ? "text" : "password"}
-                        value={value}
-                        onChange={(event) => onChange(event.target.value)}
-                        placeholder={placeholder}
-                    />
-                    <button type="button" onClick={onToggle} aria-label={visible ? `Hide ${label}` : `Show ${label}`}>
-                        {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                    </button>
-                </span>
-            </label>
-        );
+        setPasswordErrors({});
     }
 
     return (
@@ -522,6 +569,8 @@ export default function ProfileSettings({
                                 placeholder="Enter current password"
                                 visible={showCurrentPassword}
                                 onToggle={() => setShowCurrentPassword((value) => !value)}
+                                error={passwordErrors.current}
+                                onClearError={() => setPasswordErrors((current) => ({ ...current, current: undefined }))}
                             />
                             <PasswordField
                                 label="New Password"
@@ -530,7 +579,11 @@ export default function ProfileSettings({
                                 placeholder="Enter new password"
                                 visible={showNewPassword}
                                 onToggle={() => setShowNewPassword((value) => !value)}
-                            />
+                                error={passwordErrors.new}
+                                onClearError={() => setPasswordErrors((current) => ({ ...current, new: undefined }))}
+                            >
+                                <PasswordStrengthGuide password={newPassword} context={{ email, fullName: localName, orgName: organizationName }} />
+                            </PasswordField>
                             <PasswordField
                                 label="Confirm New Password"
                                 value={confirmPassword}
@@ -538,8 +591,9 @@ export default function ProfileSettings({
                                 placeholder="Confirm new password"
                                 visible={showConfirmPassword}
                                 onToggle={() => setShowConfirmPassword((value) => !value)}
+                                error={passwordErrors.confirm}
+                                onClearError={() => setPasswordErrors((current) => ({ ...current, confirm: undefined }))}
                             />
-                            <p className="profile-password-hint">Password must be at least 8 characters and include uppercase, lowercase, number, and special character.</p>
                             <div className="modal__actions">
                                 <button className="btn btn--secondary" type="button" onClick={closePasswordModal}>
                                     Cancel

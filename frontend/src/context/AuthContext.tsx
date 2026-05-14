@@ -9,7 +9,7 @@ import {
     FormEvent,
 } from "react";
 import { supabase } from "../services/supabase";
-import { apiGet, apiPatch, apiPost } from "../services/api";
+import { apiGet, apiPatch, apiPost, isAuthSessionExpiredError } from "../services/api";
 import { useFeedback } from "./FeedbackContext";
 
 type AuthContextType = {
@@ -23,6 +23,7 @@ type AuthContextType = {
     authReady: boolean;
     error: string | null;
     loading: boolean;
+    passwordChangeRequiresLogin: boolean;
     email: string;
     password: string;
     setEmail: (v: string) => void;
@@ -34,10 +35,26 @@ type AuthContextType = {
     handleUpdateProfile: (name: string, phone: string) => Promise<void>;
     handleChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     handleSignOut: () => Promise<void>;
+    clearPasswordChangeRedirect: () => void;
     token: string | undefined;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function getPasswordChangeErrorMessage(error: unknown) {
+    const rawMessage = error instanceof Error ? error.message : String(error || "");
+    try {
+        const parsed = JSON.parse(rawMessage);
+        const detail = parsed?.detail;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail?.password_errors) && detail.password_errors.length > 0) {
+            return detail.password_errors[0];
+        }
+    } catch {
+        // Non-JSON errors already have the message we need.
+    }
+    return rawMessage || "Could not update your password.";
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const feedback = useFeedback();
@@ -53,8 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [authReady, setAuthReady] = useState(false);
     const [error, setErrorState] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [passwordChangeRequiresLogin, setPasswordChangeRequiresLogin] = useState(false);
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
+    const sessionExpiredNotifiedRef = useRef(false);
 
     const token = accessToken ?? undefined;
 
@@ -64,6 +83,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             feedback.error("Action failed", value);
         }
     }, [feedback]);
+
+    const clearAuthState = useCallback(() => {
+        setAccessToken(null);
+        setOrgId(null);
+        setOrgName("");
+        setRole(null);
+        setFullName("");
+        setPhone("");
+        localStorage.removeItem("fleetlanka.profile.name");
+        localStorage.removeItem("fleetlanka.profile.phone");
+        localStorage.removeItem("fleetlanka.profile.orgName");
+    }, []);
+
+    const clearPasswordChangeRedirect = useCallback(() => {
+        setPasswordChangeRequiresLogin(false);
+    }, []);
+
+    const handleExpiredSession = useCallback(async () => {
+        if (sessionExpiredNotifiedRef.current) return;
+        sessionExpiredNotifiedRef.current = true;
+        pendingSignOutRef.current = true;
+        await supabase.auth.signOut().catch(() => undefined);
+        clearAuthState();
+        pendingSignOutRef.current = false;
+        feedback.error("Session expired", "Please sign in again to continue.");
+    }, [clearAuthState, feedback]);
 
     useEffect(() => {
         let isMounted = true;
@@ -92,9 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAccessToken(session?.access_token ?? null);
             setEmail(session?.user?.email ?? "");
             if (!session && event === "SIGNED_OUT") {
-                setOrgId(null);
-                setOrgName("");
-                setRole(null);
+                clearAuthState();
                 pendingSignOutRef.current = false;
             }
         });
@@ -103,7 +146,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isMounted = false;
             authListener.subscription.unsubscribe();
         };
-    }, []);
+    }, [clearAuthState]);
+
+    useEffect(() => {
+        const onExpiredSession = () => {
+            handleExpiredSession();
+        };
+        window.addEventListener("fleetlanka:auth-session-expired", onExpiredSession);
+        return () => window.removeEventListener("fleetlanka:auth-session-expired", onExpiredSession);
+    }, [handleExpiredSession]);
 
     async function handleInactiveDriverSignOut() {
         feedback.error("Account inactive", "This account is inactive. Please contact your manager.");
@@ -152,6 +203,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await handleInactiveDriverSignOut();
                 return;
             }
+            if (isAuthSessionExpiredError(err)) {
+                await handleExpiredSession();
+                return;
+            }
             throw err;
         } finally {
             setProfileLoading(false);
@@ -160,8 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (!token) return;
-        loadProfile().catch((e) => feedback.error("Profile load failed", e.message));
-    }, [token]);
+        loadProfile().catch((e) => {
+            if (isAuthSessionExpiredError(e)) return;
+            feedback.error("Profile load failed", e.message);
+        });
+    }, [handleExpiredSession, token]);
 
     async function handleLogin(e: FormEvent) {
         e.preventDefault();
@@ -180,6 +238,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const profile = await fetchProfileForToken(sessionToken);
             const allowed = await applyProfile(profile);
             if (!allowed) return;
+            sessionExpiredNotifiedRef.current = false;
+            setPasswordChangeRequiresLogin(false);
             setAccessToken(sessionToken);
             setEmail(data.session?.user?.email ?? "");
         } catch (err: any) {
@@ -212,6 +272,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             if (authError) throw authError;
             if (data.session) {
+                sessionExpiredNotifiedRef.current = false;
+                setPasswordChangeRequiresLogin(false);
                 setAccessToken(data.session.access_token);
                 setEmail(data.session.user?.email ?? "");
                 setFullName(fullName);
@@ -270,9 +332,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 { current_password: currentPassword, new_password: newPassword },
                 token
             );
-            feedback.success("Password updated");
+            feedback.success("Password updated", "Please sign in again with your new password.");
+            setPasswordChangeRequiresLogin(true);
+            pendingSignOutRef.current = true;
+            await supabase.auth.signOut().catch(() => undefined);
+            clearAuthState();
+            pendingSignOutRef.current = false;
         } catch (err: any) {
-            feedback.error("Password update failed", err.message || "Could not update your password.");
+            throw new Error(getPasswordChangeErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -281,15 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function handleSignOut() {
         pendingSignOutRef.current = true;
         await supabase.auth.signOut();
-        setAccessToken(null);
-        setOrgId(null);
-        setOrgName("");
-        setRole(null);
-        setFullName("");
-        setPhone("");
-        localStorage.removeItem("fleetlanka.profile.name");
-        localStorage.removeItem("fleetlanka.profile.phone");
-        localStorage.removeItem("fleetlanka.profile.orgName");
+        clearAuthState();
         pendingSignOutRef.current = false;
         feedback.info("Signed out");
     }
@@ -307,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 authReady,
                 error,
                 loading,
+                passwordChangeRequiresLogin,
                 email,
                 password,
                 setEmail,
@@ -318,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 handleUpdateProfile,
                 handleChangePassword,
                 handleSignOut,
+                clearPasswordChangeRedirect,
                 token,
             }}
         >

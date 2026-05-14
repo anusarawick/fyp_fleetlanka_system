@@ -1443,6 +1443,17 @@
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
 }
 
+.pwa-form__field input[aria-invalid="true"] {
+  border-color: #ca4b4b;
+  box-shadow: 0 0 0 4px rgba(202, 75, 75, 0.12);
+}
+
+.pwa-field-error {
+  color: #ca4b4b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 @media (max-width: 768px) {
   .pwa-driver-grid,
   .pwa-detail-grid,

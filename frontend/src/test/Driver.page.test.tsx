@@ -1,8 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import Driver from "../pages/Driver";
+
+const authMocks = vi.hoisted(() => ({
+  handleUpdateProfile: vi.fn(),
+  handleChangePassword: vi.fn(),
+}));
 
 vi.mock("../components/NotificationBell", () => ({
   default: () => <button type="button">Notifications</button>,
@@ -16,6 +21,7 @@ vi.mock("../services/api", () => ({
   apiGet: vi.fn().mockResolvedValue([]),
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
+  isAuthSessionExpiredError: vi.fn(() => false),
 }));
 
 vi.mock("../context/AuthContext", () => ({
@@ -26,8 +32,8 @@ vi.mock("../context/AuthContext", () => ({
     email: "driver@example.com",
     role: "driver",
     loading: false,
-    handleUpdateProfile: vi.fn(),
-    handleChangePassword: vi.fn(),
+    handleUpdateProfile: authMocks.handleUpdateProfile,
+    handleChangePassword: authMocks.handleChangePassword,
   }),
 }));
 
@@ -96,6 +102,8 @@ describe("Driver PWA trip views", () => {
     window.localStorage.clear();
     defaultProps.startTrip.mockReset();
     defaultProps.stopTrip.mockReset();
+    authMocks.handleUpdateProfile.mockReset();
+    authMocks.handleChangePassword.mockReset().mockResolvedValue(undefined);
   });
 
   it("opens assigned trip details and shows start action from the trip tab", async () => {
@@ -130,5 +138,39 @@ describe("Driver PWA trip views", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "History" }));
     expect(screen.getByText("No trip history available.")).toBeInTheDocument();
+  });
+
+  it("requires strong matching password changes from the profile tab", async () => {
+    renderDriver();
+
+    await userEvent.click(screen.getByRole("button", { name: "Profile" }));
+    fireEvent.change(screen.getByLabelText("Current Password"), { target: { value: "OldPass1!" } });
+    fireEvent.change(screen.getByLabelText("New Password"), { target: { value: "weak" } });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), { target: { value: "different" } });
+    await userEvent.click(screen.getByRole("button", { name: "Update Password" }));
+
+    expect(authMocks.handleChangePassword).not.toHaveBeenCalled();
+    expect(screen.getByText("Use at least 10 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Passwords do not match.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("New Password"), { target: { value: "RoadOps#2026" } });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), { target: { value: "RoadOps#2026" } });
+    await userEvent.click(screen.getByRole("button", { name: "Update Password" }));
+
+    expect(authMocks.handleChangePassword).toHaveBeenCalledWith("OldPass1!", "RoadOps#2026");
+  });
+
+  it("shows an inline current-password error when password update is rejected", async () => {
+    authMocks.handleChangePassword.mockRejectedValueOnce(new Error("Current password is incorrect"));
+    renderDriver();
+
+    await userEvent.click(screen.getByRole("button", { name: "Profile" }));
+    fireEvent.change(screen.getByLabelText("Current Password"), { target: { value: "WrongPass1!" } });
+    fireEvent.change(screen.getByLabelText("New Password"), { target: { value: "RoadOps#2026" } });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), { target: { value: "RoadOps#2026" } });
+    await userEvent.click(screen.getByRole("button", { name: "Update Password" }));
+
+    expect(authMocks.handleChangePassword).toHaveBeenCalledWith("WrongPass1!", "RoadOps#2026");
+    expect(screen.getByText("Current password is incorrect.")).toBeInTheDocument();
   });
 });

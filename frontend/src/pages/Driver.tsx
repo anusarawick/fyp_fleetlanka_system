@@ -33,6 +33,8 @@ import { useAuth } from "../context/AuthContext";
 import { useFeedback } from "../context/FeedbackContext";
 import NotificationBell from "../components/NotificationBell";
 import TripRoutePreview from "../components/TripRoutePreview";
+import PasswordStrengthGuide from "../components/PasswordStrengthGuide";
+import { validatePassword } from "../utils/passwordPolicy";
 
 type Vehicle = {
   id: string;
@@ -167,6 +169,12 @@ type PendingProfileEdit = {
   phone: string;
   savedAt: string;
 };
+
+type DriverPasswordErrors = Partial<Record<"current" | "new" | "confirm", string>>;
+
+function isCurrentPasswordError(message: string) {
+  return /current password|invalid login credentials|invalid credentials/i.test(message);
+}
 
 const DRIVER_CACHE_KEY = "fleetlanka.driver.cache.v1";
 const DRIVER_PENDING_FUEL_KEY = "fleetlanka.driver.pendingFuel.v1";
@@ -379,6 +387,8 @@ export default function DriverTrips(props: DriverProps) {
   const [profilePhone, setProfilePhone] = useState(phone || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordErrors, setPasswordErrors] = useState<DriverPasswordErrors>({});
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedAssignedTripId, setSelectedAssignedTripId] = useState<string | null>(null);
@@ -630,9 +640,34 @@ export default function DriverTrips(props: DriverProps) {
       feedback.warning("Online required", "Password changes require an internet connection.");
       return;
     }
-    await handleChangePassword(currentPassword, newPassword);
-    setCurrentPassword("");
-    setNewPassword("");
+    const nextErrors: DriverPasswordErrors = {};
+    if (!currentPassword) nextErrors.current = "Current password is required.";
+    const passwordError = validatePassword(newPassword, {
+      requireStrong: true,
+      context: { email: displayEmail, fullName: displayName },
+    });
+    if (passwordError) nextErrors.new = passwordError;
+    if (!confirmPassword) {
+      nextErrors.confirm = "Confirm your new password.";
+    } else if (newPassword !== confirmPassword) {
+      nextErrors.confirm = "Passwords do not match.";
+    }
+    setPasswordErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    try {
+      await handleChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordErrors({});
+    } catch (err: any) {
+      const message = err?.message || "Could not update your password.";
+      if (isCurrentPasswordError(message)) {
+        setPasswordErrors((current) => ({ ...current, current: "Current password is incorrect." }));
+        return;
+      }
+      setPasswordErrors((current) => ({ ...current, new: message }));
+    }
   }
 
   const todayTrips = completedTrips.filter((trip) => {
@@ -1124,11 +1159,51 @@ export default function DriverTrips(props: DriverProps) {
               <form className="pwa-form pwa-form--driver-ref" onSubmit={handlePasswordSave}>
                 <label className="pwa-form__field">
                   <span>Current Password</span>
-                  <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                  <input
+                    type="password"
+                    aria-label="Current Password"
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordErrors.current) setPasswordErrors((current) => ({ ...current, current: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.current)}
+                    required
+                  />
+                  {passwordErrors.current && <small className="pwa-field-error">{passwordErrors.current}</small>}
                 </label>
                 <label className="pwa-form__field">
                   <span>New Password</span>
-                  <input type="password" minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  <input
+                    type="password"
+                    aria-label="New Password"
+                    minLength={10}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordErrors.new) setPasswordErrors((current) => ({ ...current, new: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.new)}
+                    required
+                  />
+                  {passwordErrors.new && <small className="pwa-field-error">{passwordErrors.new}</small>}
+                  <PasswordStrengthGuide password={newPassword} context={{ email: displayEmail, fullName: displayName }} />
+                </label>
+                <label className="pwa-form__field">
+                  <span>Confirm New Password</span>
+                  <input
+                    type="password"
+                    aria-label="Confirm New Password"
+                    minLength={10}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (passwordErrors.confirm) setPasswordErrors((current) => ({ ...current, confirm: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.confirm)}
+                    required
+                  />
+                  {passwordErrors.confirm && <small className="pwa-field-error">{passwordErrors.confirm}</small>}
                 </label>
                 <button className="pwa-btn pwa-btn--primary pwa-btn--full" type="submit" disabled={authLoading || !isOnline}>
                   {isOnline ? "Update Password" : "Online Required"}

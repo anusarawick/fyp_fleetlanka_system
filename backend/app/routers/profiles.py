@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_bearer_token, get_current_profile
-from app.schemas.profiles import ProfileOut, ProfileUpdate, PasswordUpdate
+from app.schemas.profiles import ProfileOut, ProfileUpdate, PasswordUpdate, password_policy_errors
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -74,9 +74,16 @@ def update_password(
         email = user.user.email
         if not email:
             raise HTTPException(status_code=400, detail="Email not found")
-        auth_res = user_client.auth.sign_in_with_password(
-            {"email": email, "password": payload.current_password}
-        )
+        email_username = email.split("@", 1)[0]
+        errors = password_policy_errors(payload.new_password, [email_username])
+        if errors:
+            raise HTTPException(status_code=400, detail={"password_errors": errors})
+        try:
+            auth_res = user_client.auth.sign_in_with_password(
+                {"email": email, "password": payload.current_password}
+            )
+        except Exception:
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
         if auth_res.user is None:
             raise HTTPException(status_code=401, detail="Current password is incorrect")
         user_client.auth.update_user({"password": payload.new_password})

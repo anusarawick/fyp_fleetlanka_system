@@ -19,21 +19,77 @@ import ServicePortal from "./pages/ServicePortal";
 import TripsPage from "./pages/Trips";
 import PublicHomePage from "./pages/PublicHomePage";
 import { exportFuel, exportMaintenance } from "./utils/export";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Mail } from "lucide-react";
 import ChatPanel, { AiAssistant, ChatRequest } from "./components/ChatPanel";
-import { FeedbackProvider } from "./context/FeedbackContext";
+import { FeedbackProvider, useFeedback } from "./context/FeedbackContext";
 import { NotificationProvider } from "./context/NotificationContext";
+import { supabase } from "./services/supabase";
+import PasswordStrengthGuide from "./components/PasswordStrengthGuide";
+import { validateEmail, validatePassword } from "./utils/passwordPolicy";
 
 const BRAND_LOGO_SRC = "/icons/fleetlanka-logo.png";
+
+type AuthErrors = Partial<Record<"name" | "email" | "password" | "confirmPassword" | "resetEmail", string>>;
+
+function AuthFieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <span className="auth-field-error">{message}</span>;
+}
 
 // ===== UNIFIED LOGIN / MANAGER SIGNUP =====
 function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
   const { email, password, setEmail, setPassword, handleLogin, handleSignup, loading } = useAuth();
+  const feedback = useFeedback();
   const [isSignup, setIsSignup] = useState(initialSignup);
   const [name, setName] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<AuthErrors>({});
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSending, setResetSending] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const title = isSignup ? "Create Manager Account" : "Sign in to FleetLanka";
+  const subtitle = isSignup
+    ? "Create a manager workspace for your fleet operations."
+    : "Enter your credentials to open your workspace.";
+
+  function resetMode(nextSignup: boolean) {
+    setIsSignup(nextSignup);
+    setErrors({});
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  }
+
+  function validateAuthForm() {
+    const nextErrors: AuthErrors = {};
+    if (isSignup && !name.trim()) nextErrors.name = "Full name is required.";
+    const emailError = validateEmail(email);
+    if (emailError) nextErrors.email = emailError;
+    const passwordError = validatePassword(password, {
+      requireStrong: isSignup,
+      context: { email, fullName: name, orgName },
+    });
+    if (passwordError) nextErrors.password = passwordError;
+    if (isSignup) {
+      if (!confirmPassword) {
+        nextErrors.confirmPassword = "Confirm your password.";
+      } else if (password !== confirmPassword) {
+        nextErrors.confirmPassword = "Passwords do not match.";
+      }
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
 
   async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!validateAuthForm()) return;
     if (isSignup) {
       await handleSignup(e, name, orgName);
     } else {
@@ -41,89 +97,335 @@ function AuthPortal({ initialSignup = false }: { initialSignup?: boolean }) {
     }
   }
 
-  return (
-    <section className="auth">
-      <div className="auth__card">
-        <Link className="auth__back" to="/">← Back</Link>
-        <div className="auth__header">
-          <span className="auth__icon" aria-hidden="true">
-            <img src={BRAND_LOGO_SRC} alt="" />
-          </span>
-          <h2>{isSignup ? "Create Manager Account" : "Sign in to FleetLanka"}</h2>
-          <p className="muted">
-            {isSignup
-              ? "Create a manager workspace for your fleet operations."
-              : "Enter your credentials to open your workspace."}
-          </p>
-        </div>
+  function openForgotPassword() {
+    setResetEmail(email);
+    setErrors({});
+    setResetSent(false);
+    setForgotOpen(true);
+  }
 
-        <form className="form" onSubmit={onSubmit}>
-          {isSignup && (
+  async function submitForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    const emailError = validateEmail(resetEmail);
+    if (emailError) {
+      setErrors((current) => ({ ...current, resetEmail: emailError }));
+      return;
+    }
+    setErrors((current) => ({ ...current, resetEmail: undefined }));
+    setResetSending(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      setResetSent(true);
+      feedback.success("Reset email sent", "Check your email for the password reset link.");
+    } catch (err: any) {
+      feedback.error("Reset email failed", err.message || "Could not send the reset email.");
+    } finally {
+      setResetSending(false);
+    }
+  }
+
+  return (
+    <section className="auth auth--portal">
+      <div className="auth__shell auth__shell--single">
+        <Link className="auth__back" to="/">
+          <ArrowLeft aria-hidden="true" />
+          Back to home
+        </Link>
+
+        <div className="auth__card">
+          <div className="auth__header">
+            <span className="auth__icon" aria-hidden="true">
+              <img src={BRAND_LOGO_SRC} alt="" />
+            </span>
+            <h2>{title}</h2>
+            <p className="muted">{subtitle}</p>
+          </div>
+
+          <form className="auth-form" onSubmit={onSubmit} noValidate>
+            {isSignup && (
+              <label>
+                Full Name
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (errors.name) setErrors((current) => ({ ...current, name: undefined }));
+                  }}
+                  aria-invalid={Boolean(errors.name)}
+                  required
+                />
+                <AuthFieldError message={errors.name} />
+              </label>
+            )}
+            {isSignup && (
+              <label>
+                Organization Name
+                <input
+                  type="text"
+                  placeholder="FleetLanka Logistics"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                />
+              </label>
+            )}
             <label>
-              Full Name
+              Email Address
               <input
-                type="text"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                type="email"
+                placeholder="user@company.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors((current) => ({ ...current, email: undefined }));
+                }}
+                aria-invalid={Boolean(errors.email)}
                 required
               />
+              <AuthFieldError message={errors.email} />
             </label>
-          )}
-          {isSignup && (
             <label>
-              Organization Name
-              <input
-                type="text"
-                placeholder="FleetLanka Logistics"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-              />
+              Password
+              <span className="auth-password-control">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder={isSignup ? "Create a password" : "Enter your password"}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors((current) => ({ ...current, password: undefined }));
+                  }}
+                  aria-invalid={Boolean(errors.password)}
+                  required
+                  minLength={isSignup ? 10 : undefined}
+                />
+                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                  {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </button>
+              </span>
+              <AuthFieldError message={errors.password} />
+              {isSignup && <PasswordStrengthGuide password={password} context={{ email, fullName: name, orgName }} />}
             </label>
-          )}
-          <label>
-            Email Address
-            <input
-              type="email"
-              placeholder="user@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              placeholder={isSignup ? "Create a password" : "Enter your password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={isSignup ? 6 : undefined}
-            />
-          </label>
-          <button className="btn" type="submit" disabled={loading}>
-            {loading
-              ? (isSignup ? "Creating account..." : "Signing in...")
-              : (isSignup ? "Create manager account" : "Sign in")}
-          </button>
-        </form>
 
-        <div className="auth__toggle">
-          {isSignup ? (
-            <p>
-              Already have an account?{" "}
-              <button type="button" onClick={() => setIsSignup(false)}>
-                Sign in
+            {isSignup && (
+              <label>
+                Confirm Password
+                <span className="auth-password-control">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (errors.confirmPassword) setErrors((current) => ({ ...current, confirmPassword: undefined }));
+                    }}
+                  aria-invalid={Boolean(errors.confirmPassword)}
+                  required
+                  minLength={10}
+                />
+                  <button type="button" onClick={() => setShowConfirmPassword((value) => !value)} aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}>
+                    {showConfirmPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  </button>
+                </span>
+                <AuthFieldError message={errors.confirmPassword} />
+              </label>
+            )}
+
+            {!isSignup && (
+              <button className="auth__forgot" type="button" onClick={openForgotPassword}>
+                Forgot password?
               </button>
+            )}
+
+            <button className="btn" type="submit" disabled={loading}>
+              {loading
+                ? (isSignup ? "Creating account..." : "Signing in...")
+                : (isSignup ? "Create manager account" : "Sign in")}
+            </button>
+          </form>
+
+          {isSignup && (
+            <div className="auth__note">
+              <CheckCircle2 aria-hidden="true" />
+              You can add vehicles, drivers, and service centers after registration.
+            </div>
+          )}
+
+          <div className="auth__toggle">
+            {isSignup ? (
+              <p>
+                Already have an account?{" "}
+                <button type="button" onClick={() => resetMode(false)}>
+                  Sign in
+                </button>
+              </p>
+            ) : (
+              <p>
+                Need a manager workspace?{" "}
+                <button type="button" onClick={() => resetMode(true)}>
+                  Create manager account
+                </button>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {forgotOpen && (
+        <div className="auth-modal-backdrop" role="presentation">
+          <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Reset password">
+            <div className="auth-modal__header">
+              <div>
+                <h3>Reset your password</h3>
+                <p>Enter your account email and we will send a reset link.</p>
+              </div>
+              <button type="button" onClick={() => setForgotOpen(false)} aria-label="Close reset password dialog">×</button>
+            </div>
+            {resetSent ? (
+              <div className="auth-modal__success">
+                <Mail aria-hidden="true" />
+                <strong>Check your email</strong>
+                <p>We sent a password reset link to {resetEmail.trim()}.</p>
+                <button className="btn" type="button" onClick={() => setForgotOpen(false)}>Done</button>
+              </div>
+            ) : (
+              <form className="auth-form" onSubmit={submitForgotPassword} noValidate>
+                <label>
+                  Email Address
+                  <input
+                    type="email"
+                    placeholder="user@company.com"
+                    value={resetEmail}
+                    onChange={(e) => {
+                      setResetEmail(e.target.value);
+                      if (errors.resetEmail) setErrors((current) => ({ ...current, resetEmail: undefined }));
+                    }}
+                    aria-invalid={Boolean(errors.resetEmail)}
+                  />
+                  <AuthFieldError message={errors.resetEmail} />
+                </label>
+                <button className="btn" type="submit" disabled={resetSending}>
+                  {resetSending ? "Sending reset link..." : "Send reset link"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ResetPasswordPage() {
+  const feedback = useFeedback();
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<AuthErrors>({});
+  const [loading, setLoading] = useState(false);
+  const [complete, setComplete] = useState(false);
+
+  function validateResetForm() {
+    const nextErrors: AuthErrors = {};
+    const passwordError = validatePassword(newPassword, { requireStrong: true });
+    if (passwordError) nextErrors.password = passwordError;
+    if (!confirmPassword) {
+      nextErrors.confirmPassword = "Confirm your new password.";
+    } else if (newPassword !== confirmPassword) {
+      nextErrors.confirmPassword = "Passwords do not match.";
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  async function submitReset(e: React.FormEvent) {
+    e.preventDefault();
+    if (!validateResetForm()) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      await supabase.auth.signOut();
+      setComplete(true);
+      feedback.success("Password updated", "You can now sign in with your new password.");
+    } catch (err: any) {
+      feedback.error("Password reset failed", err.message || "Open the reset link from your email and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="auth auth--portal">
+      <div className="auth__shell auth__shell--single">
+        <Link className="auth__back" to="/">
+          <ArrowLeft aria-hidden="true" />
+          Back to home
+        </Link>
+        <div className="auth__card">
+          <div className="auth__header">
+            <span className="auth__icon" aria-hidden="true">
+              <img src={BRAND_LOGO_SRC} alt="" />
+            </span>
+            <h2>{complete ? "Password updated" : "Create a new password"}</h2>
+            <p className="muted">
+              {complete ? "Your password has been changed successfully." : "Enter a new password for your FleetLanka account."}
             </p>
+          </div>
+          {complete ? (
+            <Link className="btn" to="/login">Back to sign in</Link>
           ) : (
-            <p>
-              Need a manager workspace?{" "}
-              <button type="button" onClick={() => setIsSignup(true)}>
-                Create manager account
+            <form className="auth-form" onSubmit={submitReset} noValidate>
+              <label>
+                New Password
+                <span className="auth-password-control">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (errors.password) setErrors((current) => ({ ...current, password: undefined }));
+                    }}
+                    aria-invalid={Boolean(errors.password)}
+                    minLength={10}
+                  />
+                  <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                    {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  </button>
+                </span>
+                <AuthFieldError message={errors.password} />
+                <PasswordStrengthGuide password={newPassword} />
+              </label>
+              <label>
+                Confirm Password
+                <span className="auth-password-control">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (errors.confirmPassword) setErrors((current) => ({ ...current, confirmPassword: undefined }));
+                    }}
+                    aria-invalid={Boolean(errors.confirmPassword)}
+                    minLength={10}
+                  />
+                  <button type="button" onClick={() => setShowConfirmPassword((value) => !value)} aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}>
+                    {showConfirmPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  </button>
+                </span>
+                <AuthFieldError message={errors.confirmPassword} />
+              </label>
+              <button className="btn" type="submit" disabled={loading}>
+                {loading ? "Updating password..." : "Update password"}
               </button>
-            </p>
+            </form>
           )}
         </div>
       </div>
@@ -698,9 +1000,15 @@ function ServiceRoutes() {
 }
 
 function AppContent() {
-  const { accessToken, role, profileLoading, authReady } = useAuth();
+  const { accessToken, role, profileLoading, authReady, passwordChangeRequiresLogin, clearPasswordChangeRedirect } = useAuth();
   const location = useLocation();
   const path = location.pathname;
+
+  useEffect(() => {
+    if (path === "/login" && !accessToken && passwordChangeRequiresLogin) {
+      clearPasswordChangeRedirect();
+    }
+  }, [accessToken, clearPasswordChangeRedirect, passwordChangeRequiresLogin, path]);
 
   function appHomePath() {
     if (role === "driver") return "/driver";
@@ -716,6 +1024,10 @@ function AppContent() {
     return <PublicHomePage accessToken={accessToken} role={role} />;
   }
 
+  if (path === "/reset-password") {
+    return <ResetPasswordPage />;
+  }
+
   if (path === "/login") {
     if (accessToken) return <Navigate to={appHomePath()} replace />;
     return <AuthPortal />;
@@ -729,6 +1041,10 @@ function AppContent() {
   if (path === "/signup") {
     if (accessToken) return <Navigate to={appHomePath()} replace />;
     return <AuthPortal initialSignup />;
+  }
+
+  if (!accessToken && passwordChangeRequiresLogin) {
+    return <Navigate to="/login" replace />;
   }
 
   if (!accessToken) {

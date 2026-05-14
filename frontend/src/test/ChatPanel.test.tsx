@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../services/api", () => ({
   apiGet: apiMocks.get,
   apiPost: apiMocks.post,
+  isAuthSessionExpiredError: vi.fn(() => false),
 }));
 
 vi.mock("../context/FeedbackContext", () => ({

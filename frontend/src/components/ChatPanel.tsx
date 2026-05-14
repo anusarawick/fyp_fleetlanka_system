@@ -1,6 +1,6 @@
 import { FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Building2, Check, CheckCheck, ChevronLeft, ChevronRight, MessageCircle, Minus, Search, Send, Sparkles, X } from "lucide-react";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost, isAuthSessionExpiredError } from "../services/api";
 import { useFeedback } from "../context/FeedbackContext";
 
 export type ChatRequest =
@@ -396,6 +396,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
       await openConversation(conversation);
       await loadConversations();
     } catch (err: any) {
+      if (isAuthSessionExpiredError(err)) return;
       setActiveTool("chat");
       setDrawerOpen(true);
       feedback.error("Chat open failed", err.message || "Failed to open chat");
@@ -412,7 +413,10 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
     }
     setShowStart((value) => !value);
     if (serviceCenters.length === 0) {
-      loadServiceCenters().catch((err: any) => feedback.error("Service centers unavailable", err.message || "Failed to load service centers"));
+      loadServiceCenters().catch((err: any) => {
+        if (isAuthSessionExpiredError(err)) return;
+        feedback.error("Service centers unavailable", err.message || "Failed to load service centers");
+      });
     }
   }
 
@@ -437,6 +441,7 @@ export default function ChatPanel({ token, role, request, onRequestHandled }: Ch
       loadConversations().catch(() => undefined);
     } catch (err: any) {
       setMessages((current) => current.filter((message) => message.id !== pendingId));
+      if (isAuthSessionExpiredError(err)) return;
       feedback.error("Message failed", err.message || "Failed to send message");
     }
   }

@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiPost, isAuthSessionExpiredError } from "../services/api";
 import { useAuth } from "./AuthContext";
 import { useFeedback } from "./FeedbackContext";
 
@@ -50,6 +50,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       setNotifications(rows);
       setHasLoaded(true);
     } catch (err: any) {
+      if (isAuthSessionExpiredError(err)) return;
       feedback.error("Notifications unavailable", err.message || "Could not load notifications");
     } finally {
       setLoading(false);
@@ -84,6 +85,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const updated = await apiPost<NotificationItem>(`/notifications/${id}/read`, {}, token);
       setNotifications((current) => current.map((item) => item.id === id ? updated : item));
     } catch (err: any) {
+      if (isAuthSessionExpiredError(err)) return;
       setNotifications(previous);
       feedback.error("Notification update failed", err.message || "Could not mark notification as read");
     }
@@ -97,6 +99,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       await apiPost("/notifications/read-all", {}, token);
     } catch (err: any) {
+      if (isAuthSessionExpiredError(err)) return;
       setNotifications(previous);
       feedback.error("Notification update failed", err.message || "Could not mark notifications as read");
     }
@@ -109,6 +112,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     try {
       await apiPost<NotificationItem>(`/notifications/${id}/dismiss`, {}, token);
     } catch (err: any) {
+      if (isAuthSessionExpiredError(err)) return;
       setNotifications(previous);
       feedback.error("Notification dismiss failed", err.message || "Could not dismiss notification");
     }
