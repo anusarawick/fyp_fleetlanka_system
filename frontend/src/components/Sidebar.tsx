@@ -77,7 +77,7 @@ const managerNav: NavItemConfig[] = [
   { to: "/documents", label: "Documents", icon: "documents" },
   { to: "/compliance", label: "Compliance", icon: "compliance" },
   { to: "/analytics", label: "Analytics", icon: "analytics" },
-  { to: "/ml", label: "ML Predictions", icon: "ml" },
+  { to: "/ml", label: "Predict Maintenance", icon: "ml" },
   { to: "/reports", label: "Reports", icon: "reports" },
 ];
 

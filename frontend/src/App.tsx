@@ -843,7 +843,7 @@ function ManagerRoutes() {
         path="/ml"
         element={
           <>
-            <Topbar title="ML Predictions" subtitle="Maintenance risk checks and history" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
+            <Topbar title="Predictive Maintenance" subtitle="Maintenance risk checks and history" userName={userName} userRole={userRole} onSignOut={handleSignOut} />
             <MLPredictions
               vehicles={data.vehicles}
               maintenance={data.maintenance}
