@@ -11,6 +11,9 @@ from app.schemas.service_portal import (
     ServicePortalBookingUpdate,
     ServicePortalMeOut,
 )
+from app.services.maintenance_sync import remove_maintenance_for_booking
+from app.services.notifications import manager_profiles, notify_profiles
+from app.services.payment_sync import reconcile_service_booking_payments
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/service-portal", tags=["service-portal"])
@@ -26,52 +29,34 @@ def _booking_with_vehicle(row: dict, vehicle_map: dict[str, dict]) -> dict:
     }
 
 
-def _sync_maintenance_from_booking(admin_client, booking: dict, center: dict, *, remove: bool = False) -> None:
-    booking_id = booking["id"]
-    if remove:
-        admin_client.table("maintenance").delete().eq("service_booking_id", booking_id).execute()
-        return
+def _attach_latest_payment_summaries(bookings: list[dict], admin_client, org_id: str, center_id: str) -> list[dict]:
+    booking_ids = [booking["id"] for booking in bookings if booking.get("id")]
+    if not booking_ids:
+        return bookings
 
-    vehicle_resp = (
-        admin_client.table("vehicles")
-        .select("odometer_km")
-        .eq("id", booking["vehicle_id"])
-        .single()
+    payments_resp = (
+        admin_client.table("service_booking_payments")
+        .select(
+            "id, booking_id, status, amount_lkr, currency, stripe_checkout_session_id, "
+            "stripe_payment_intent_id, stripe_transfer_destination, paid_at, created_at"
+        )
+        .eq("org_id", org_id)
+        .eq("service_center_id", center_id)
+        .in_("booking_id", booking_ids)
+        .order("created_at", desc=True)
         .execute()
     )
-    vehicle = vehicle_resp.data or {}
-    service_date = str(booking.get("completed_at") or booking.get("requested_date") or "")[:10]
-    manager_notes = (booking.get("notes") or "").strip()
-    service_notes = (booking.get("service_notes") or "").strip()
-    center_name = (center.get("name") or "").strip()
-    note_parts = [part for part in [f"Service Center: {center_name}" if center_name else "", manager_notes, service_notes] if part]
-    maintenance_data = {
-        "org_id": booking["org_id"],
-        "vehicle_id": booking["vehicle_id"],
-        "service_center_id": booking.get("center_id"),
-        "service_booking_id": booking_id,
-        "service_date": service_date,
-        "service_type": (booking.get("work_type") or "").strip() or "Booked Service",
-        "event_type": "regular_service",
-        "event_category": "scheduled",
-        "severity": "routine",
-        "cost_lkr": booking.get("final_cost_lkr"),
-        "odometer_km": vehicle.get("odometer_km"),
-        "next_service_due_km": booking.get("next_service_due_km"),
-        "notes": " | ".join(note_parts) if note_parts else None,
-    }
+    latest_by_booking: dict[str, dict] = {}
+    for payment in payments_resp.data or []:
+        booking_id = payment.get("booking_id")
+        if booking_id and booking_id not in latest_by_booking:
+            payment_summary = dict(payment)
+            payment_summary.pop("booking_id", None)
+            latest_by_booking[booking_id] = payment_summary
 
-    existing = (
-        admin_client.table("maintenance")
-        .select("id")
-        .eq("service_booking_id", booking_id)
-        .execute()
-    )
-    existing_rows = existing.data or []
-    if existing_rows:
-        admin_client.table("maintenance").update(maintenance_data).eq("id", existing_rows[0]["id"]).execute()
-    else:
-        admin_client.table("maintenance").insert(maintenance_data).execute()
+    for booking in bookings:
+        booking["payment"] = latest_by_booking.get(booking.get("id"))
+    return bookings
 
 
 def _set_vehicle_status(admin_client, vehicle_id: str, status: str) -> None:
@@ -110,6 +95,7 @@ def list_service_portal_bookings(
     center: dict = Depends(get_current_service_center),
 ) -> list[ServicePortalBookingOut]:
     admin_client = get_supabase_client(use_service_role=True)
+    reconcile_service_booking_payments(admin_client, center["org_id"])
     bookings_resp = (
         admin_client.table("service_bookings")
         .select("*")
@@ -128,6 +114,7 @@ def list_service_portal_bookings(
             .execute()
         )
         vehicle_map = {row["id"]: row for row in (vehicles_resp.data or [])}
+    bookings = _attach_latest_payment_summaries(bookings, admin_client, center["org_id"], center["id"])
     return [_booking_with_vehicle(row, vehicle_map) for row in bookings]
 
 
@@ -173,6 +160,8 @@ def update_service_portal_booking(
         raise HTTPException(status_code=400, detail="A service note is required when reopening a completed booking")
     if next_status == "completed" and not (payload.work_type or existing.get("work_type") or "").strip():
         raise HTTPException(status_code=400, detail="Work type is required when completing a booking")
+    if next_status == "completed" and payload.completed_odometer_km is None and existing.get("completed_odometer_km") is None:
+        raise HTTPException(status_code=400, detail="Completed odometer is required when completing a booking")
 
     update_data = payload.model_dump(exclude_none=True)
     if next_status == "completed" and current_status != "completed":
@@ -190,6 +179,7 @@ def update_service_portal_booking(
         if current_status == "completed" and next_status == "confirmed":
             update_data["final_cost_lkr"] = None
             update_data["next_service_due_km"] = None
+            update_data["completed_odometer_km"] = None
             update_data["proposed_tire_condition"] = None
             update_data["proposed_brake_condition"] = None
             update_data["proposed_battery_status"] = None
@@ -216,7 +206,7 @@ def update_service_portal_booking(
 
     try:
         if current_status == "completed" and next_status != "completed":
-            _sync_maintenance_from_booking(admin_client, row, center, remove=True)
+            remove_maintenance_for_booking(admin_client, row["id"])
     except Exception as exc:
         message = str(exc)
         if "service_booking_id" in message or "service_center_id" in message or "event_type" in message:
@@ -234,4 +224,23 @@ def update_service_portal_booking(
         .execute()
     )
     vehicle_map = {vehicle_resp.data["id"]: vehicle_resp.data} if vehicle_resp.data else {}
+    if current_status != next_status:
+        notify_profiles(
+            admin_client,
+            manager_profiles(admin_client, center["org_id"]),
+            org_id=center["org_id"],
+            source_key=f"event:service_booking:{row['id']}:status:{next_status}",
+            alert_type="service_booking_status_changed",
+            title="Service booking status changed",
+            message=f"Service center changed a booking from {current_status} to {next_status}.",
+            severity="warning" if next_status in {"cancelled", "completed"} else "info",
+            category="bookings",
+            action_url="/maintenance",
+            related_entity="service_bookings",
+            related_id=row["id"],
+            source_table="service_bookings",
+            source_id=row["id"],
+            due_date=row.get("requested_date"),
+            metadata={"vehicle_id": row.get("vehicle_id"), "center_id": center.get("id")},
+        )
     return _booking_with_vehicle(row, vehicle_map)

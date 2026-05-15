@@ -30,7 +30,11 @@ import {
 } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
+import NotificationBell from "../components/NotificationBell";
 import TripRoutePreview from "../components/TripRoutePreview";
+import PasswordStrengthGuide from "../components/PasswordStrengthGuide";
+import { validatePassword } from "../utils/passwordPolicy";
 
 type Vehicle = {
   id: string;
@@ -165,6 +169,12 @@ type PendingProfileEdit = {
   phone: string;
   savedAt: string;
 };
+
+type DriverPasswordErrors = Partial<Record<"current" | "new" | "confirm", string>>;
+
+function isCurrentPasswordError(message: string) {
+  return /current password|invalid login credentials|invalid credentials/i.test(message);
+}
 
 const DRIVER_CACHE_KEY = "fleetlanka.driver.cache.v1";
 const DRIVER_PENDING_FUEL_KEY = "fleetlanka.driver.pendingFuel.v1";
@@ -352,6 +362,7 @@ function Stat({ value, label, icon }: { value: ReactNode; label: string; icon?: 
 }
 
 export default function DriverTrips(props: DriverProps) {
+  const feedback = useFeedback();
   const {
     token,
     fullName,
@@ -361,7 +372,6 @@ export default function DriverTrips(props: DriverProps) {
     loading: authLoading,
     handleUpdateProfile,
     handleChangePassword,
-    setError,
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>("home");
@@ -377,6 +387,8 @@ export default function DriverTrips(props: DriverProps) {
   const [profilePhone, setProfilePhone] = useState(phone || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordErrors, setPasswordErrors] = useState<DriverPasswordErrors>({});
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [selectedAssignedTripId, setSelectedAssignedTripId] = useState<string | null>(null);
@@ -454,9 +466,9 @@ export default function DriverTrips(props: DriverProps) {
     setFuelLoading(true);
     apiGet<FuelLog[]>("/fuel-logs", token)
       .then((rows) => setFuelLogs(rows))
-      .catch((err: any) => setError(err.message || "Failed to load fuel logs"))
+      .catch((err: any) => feedback.error("Fuel logs unavailable", err.message || "Failed to load fuel logs"))
       .finally(() => setFuelLoading(false));
-  }, [token, setError]);
+  }, [token, feedback]);
 
   useEffect(() => {
     if (!token || !isOnline) return;
@@ -535,8 +547,9 @@ export default function DriverTrips(props: DriverProps) {
           window.localStorage.setItem("fleetlanka.profile.phone", phoneValue);
           setPendingProfileEdit(null);
         }
+        if (!cancelled) feedback.success("Offline changes synced");
       } catch (err: any) {
-        setError(err.message || "Offline changes will retry when connected");
+        feedback.warning("Offline sync delayed", err.message || "Offline changes will retry when connected");
       } finally {
         if (!cancelled) setSyncingOfflineQueue(false);
       }
@@ -546,7 +559,7 @@ export default function DriverTrips(props: DriverProps) {
     return () => {
       cancelled = true;
     };
-  }, [token, isOnline, syncingOfflineQueue, pendingFuelLogs, pendingProfileEdit, setError]);
+  }, [token, isOnline, syncingOfflineQueue, pendingFuelLogs, pendingProfileEdit, feedback]);
 
   useEffect(() => {
     if (selectedAssignedTripId && !assignedTrips.some((trip) => trip.id === selectedAssignedTripId)) {
@@ -592,7 +605,9 @@ export default function DriverTrips(props: DriverProps) {
       setFuelLogs((prev) => [created, ...prev]);
       if (!isOnline) {
         setPendingFuelLogs((prev) => [...prev, { temp_id: created.id, payload }]);
-        setError("Fuel log saved offline. It will sync when the connection returns.");
+        feedback.warning("Fuel log saved offline", "It will sync when the connection returns.");
+      } else {
+        feedback.success("Fuel log saved");
       }
       setFuelDate(new Date().toISOString().slice(0, 10));
       setFuelLiters("");
@@ -600,7 +615,7 @@ export default function DriverTrips(props: DriverProps) {
       setFuelOdometer("");
       setFuelVendor("");
     } catch (err: any) {
-      setError(err.message || "Fuel log failed");
+      feedback.error("Fuel log failed", err.message || "Fuel log failed");
     }
   }
 
@@ -612,7 +627,7 @@ export default function DriverTrips(props: DriverProps) {
       setProfile((prev) => prev ? { ...prev, full_name: profileName, phone: profilePhone } : prev);
       window.localStorage.setItem("fleetlanka.profile.name", profileName || "");
       window.localStorage.setItem("fleetlanka.profile.phone", profilePhone || "");
-      setError("Profile changes saved offline. They will sync when the connection returns.");
+      feedback.warning("Profile saved offline", "It will sync when the connection returns.");
       return;
     }
     await handleUpdateProfile(profileName, profilePhone);
@@ -622,12 +637,37 @@ export default function DriverTrips(props: DriverProps) {
   async function handlePasswordSave(e: FormEvent) {
     e.preventDefault();
     if (!isOnline) {
-      setError("Password changes require an internet connection.");
+      feedback.warning("Online required", "Password changes require an internet connection.");
       return;
     }
-    await handleChangePassword(currentPassword, newPassword);
-    setCurrentPassword("");
-    setNewPassword("");
+    const nextErrors: DriverPasswordErrors = {};
+    if (!currentPassword) nextErrors.current = "Current password is required.";
+    const passwordError = validatePassword(newPassword, {
+      requireStrong: true,
+      context: { email: displayEmail, fullName: displayName },
+    });
+    if (passwordError) nextErrors.new = passwordError;
+    if (!confirmPassword) {
+      nextErrors.confirm = "Confirm your new password.";
+    } else if (newPassword !== confirmPassword) {
+      nextErrors.confirm = "Passwords do not match.";
+    }
+    setPasswordErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    try {
+      await handleChangePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordErrors({});
+    } catch (err: any) {
+      const message = err?.message || "Could not update your password.";
+      if (isCurrentPasswordError(message)) {
+        setPasswordErrors((current) => ({ ...current, current: "Current password is incorrect." }));
+        return;
+      }
+      setPasswordErrors((current) => ({ ...current, new: message }));
+    }
   }
 
   const todayTrips = completedTrips.filter((trip) => {
@@ -673,6 +713,7 @@ export default function DriverTrips(props: DriverProps) {
               </div>
             </div>
             <div className="pwa-header__actions">
+              <NotificationBell compact />
               <button className="pwa-header-icon-btn" type="button" onClick={props.onSignOut} aria-label="Sign out">
                 <DriverIcon name="signout" />
               </button>
@@ -682,6 +723,7 @@ export default function DriverTrips(props: DriverProps) {
           <>
             <div className="pwa-header__title">{headerTitle}</div>
             <div className="pwa-header__actions">
+              <NotificationBell compact />
               <button className="pwa-header-icon-btn" type="button" onClick={props.onSignOut} aria-label="Sign out">
                 <DriverIcon name="signout" />
               </button>
@@ -1117,11 +1159,51 @@ export default function DriverTrips(props: DriverProps) {
               <form className="pwa-form pwa-form--driver-ref" onSubmit={handlePasswordSave}>
                 <label className="pwa-form__field">
                   <span>Current Password</span>
-                  <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                  <input
+                    type="password"
+                    aria-label="Current Password"
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      if (passwordErrors.current) setPasswordErrors((current) => ({ ...current, current: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.current)}
+                    required
+                  />
+                  {passwordErrors.current && <small className="pwa-field-error">{passwordErrors.current}</small>}
                 </label>
                 <label className="pwa-form__field">
                   <span>New Password</span>
-                  <input type="password" minLength={6} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                  <input
+                    type="password"
+                    aria-label="New Password"
+                    minLength={10}
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordErrors.new) setPasswordErrors((current) => ({ ...current, new: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.new)}
+                    required
+                  />
+                  {passwordErrors.new && <small className="pwa-field-error">{passwordErrors.new}</small>}
+                  <PasswordStrengthGuide password={newPassword} context={{ email: displayEmail, fullName: displayName }} />
+                </label>
+                <label className="pwa-form__field">
+                  <span>Confirm New Password</span>
+                  <input
+                    type="password"
+                    aria-label="Confirm New Password"
+                    minLength={10}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (passwordErrors.confirm) setPasswordErrors((current) => ({ ...current, confirm: undefined }));
+                    }}
+                    aria-invalid={Boolean(passwordErrors.confirm)}
+                    required
+                  />
+                  {passwordErrors.confirm && <small className="pwa-field-error">{passwordErrors.confirm}</small>}
                 </label>
                 <button className="pwa-btn pwa-btn--primary pwa-btn--full" type="submit" disabled={authLoading || !isOnline}>
                   {isOnline ? "Update Password" : "Online Required"}
@@ -1195,26 +1277,42 @@ export default function DriverTrips(props: DriverProps) {
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedAssignedTripId(null)} aria-label="Close assigned trip details">✕</button>
             </div>
-            <div className="details-grid details-grid--scroll">
-              <div className="detail-item"><span>Trip Title</span><strong>{selectedAssignedTrip.trip_title || "Assigned trip"}</strong></div>
-              <div className="detail-item"><span>Vehicle</span><strong>{selectedAssignedVehicle?.plate_no || "--"}</strong></div>
-              <div className="detail-item"><span>Scheduled Start</span><strong>{selectedAssignedTrip.scheduled_start ? formatDateTime(selectedAssignedTrip.scheduled_start) : "--"}</strong></div>
-              <div className="detail-item"><span>Origin</span><strong>{selectedAssignedTrip.origin_label || "--"}</strong></div>
-              <div className="detail-item"><span>Destination</span><strong>{selectedAssignedTrip.destination_label || "--"}</strong></div>
-              <div className="detail-item"><span>Priority</span><strong>{formatPriority(selectedAssignedTrip.priority)}</strong></div>
-              <div className="detail-item"><span>Contact Person</span><strong>{selectedAssignedTrip.contact_name || "--"}</strong></div>
-              <div className="detail-item"><span>Contact Phone</span><strong>{selectedAssignedTrip.contact_phone || "--"}</strong></div>
-              <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedAssignedTrip.notes || "--"}</strong></div>
-              {(selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null) ||
-              (selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null) ? (
-                <div className="detail-item detail-item--full">
-                  <span>Route Preview</span>
-                  <TripRoutePreview
-                    origin={selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null ? [selectedAssignedTrip.origin_lat, selectedAssignedTrip.origin_lon] : null}
-                    destination={selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null ? [selectedAssignedTrip.destination_lat, selectedAssignedTrip.destination_lon] : null}
-                  />
+            <div className="modal__body">
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Assignment</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Trip Title</span><strong>{selectedAssignedTrip.trip_title || "Assigned trip"}</strong></div>
+                  <div className="detail-item"><span>Vehicle</span><strong>{selectedAssignedVehicle?.plate_no || "--"}</strong></div>
+                  <div className="detail-item"><span>Scheduled Start</span><strong>{selectedAssignedTrip.scheduled_start ? formatDateTime(selectedAssignedTrip.scheduled_start) : "--"}</strong></div>
+                  <div className="detail-item"><span>Priority</span><strong>{formatPriority(selectedAssignedTrip.priority)}</strong></div>
+                  <div className="detail-item"><span>Contact Person</span><strong>{selectedAssignedTrip.contact_name || "--"}</strong></div>
+                  <div className="detail-item"><span>Contact Phone</span><strong>{selectedAssignedTrip.contact_phone || "--"}</strong></div>
                 </div>
-              ) : null}
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Route</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Origin</span><strong>{selectedAssignedTrip.origin_label || "--"}</strong></div>
+                  <div className="detail-item"><span>Destination</span><strong>{selectedAssignedTrip.destination_label || "--"}</strong></div>
+                  {(selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null) ||
+                  (selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null) ? (
+                    <div className="modal-route-preview">
+                      <TripRoutePreview
+                        origin={selectedAssignedTrip.origin_lat != null && selectedAssignedTrip.origin_lon != null ? [selectedAssignedTrip.origin_lat, selectedAssignedTrip.origin_lon] : null}
+                        destination={selectedAssignedTrip.destination_lat != null && selectedAssignedTrip.destination_lon != null ? [selectedAssignedTrip.destination_lat, selectedAssignedTrip.destination_lon] : null}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Notes</h4>
+                <div className="details-grid">
+                  <div className="detail-item detail-item--full"><span>Instructions</span><strong>{selectedAssignedTrip.notes || "--"}</strong></div>
+                </div>
+              </section>
             </div>
             <div className="modal__actions">
               {selectedAssignedTripMapsUrl ? (
@@ -1244,28 +1342,50 @@ export default function DriverTrips(props: DriverProps) {
               </div>
               <button className="modal__close" type="button" onClick={() => setSelectedTripId(null)} aria-label="Close trip history details">✕</button>
             </div>
-            <div className="details-grid details-grid--scroll">
-              <div className="detail-item"><span>Trip Title</span><strong>{selectedTrip.trip_title || "Completed trip"}</strong></div>
-              <div className="detail-item"><span>Vehicle</span><strong>{displayVehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong></div>
-              <div className="detail-item"><span>Scheduled Start</span><strong>{selectedTrip.scheduled_start ? formatDateTime(selectedTrip.scheduled_start) : "--"}</strong></div>
-              <div className="detail-item"><span>Started</span><strong>{formatDateTime(selectedTrip.start_time)}</strong></div>
-              <div className="detail-item"><span>Ended</span><strong>{formatDateTime(selectedTrip.end_time)}</strong></div>
-              <div className="detail-item"><span>From</span><strong>{selectedTrip.origin_label || "--"}</strong></div>
-              <div className="detail-item"><span>To</span><strong>{selectedTrip.destination_label || "--"}</strong></div>
-              <div className="detail-item"><span>Distance</span><strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong></div>
-              <div className="detail-item"><span>Duration</span><strong>{formatDuration(selectedTrip.duration_min)}</strong></div>
-              <div className="detail-item"><span>Average Speed</span><strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong></div>
-              <div className="detail-item"><span>Idle Time</span><strong>{formatDuration(selectedTrip.idle_min)}</strong></div>
-              <div className="detail-item detail-item--full"><span>Notes</span><strong>{selectedTrip.notes || "--"}</strong></div>
-              {(selectedTrip.origin_lat != null && selectedTrip.origin_lon != null) || (selectedTrip.destination_lat != null && selectedTrip.destination_lon != null) ? (
-                <div className="detail-item detail-item--full">
-                  <span>Route Preview</span>
-                  <TripRoutePreview
-                    origin={selectedTrip.origin_lat != null && selectedTrip.origin_lon != null ? [selectedTrip.origin_lat, selectedTrip.origin_lon] : null}
-                    destination={selectedTrip.destination_lat != null && selectedTrip.destination_lon != null ? [selectedTrip.destination_lat, selectedTrip.destination_lon] : null}
-                  />
+            <div className="modal__body">
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Trip</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Trip Title</span><strong>{selectedTrip.trip_title || "Completed trip"}</strong></div>
+                  <div className="detail-item"><span>Vehicle</span><strong>{displayVehicles.find((v) => v.id === selectedTrip.vehicle_id)?.plate_no || "Vehicle"}</strong></div>
+                  <div className="detail-item"><span>Scheduled Start</span><strong>{selectedTrip.scheduled_start ? formatDateTime(selectedTrip.scheduled_start) : "--"}</strong></div>
+                  <div className="detail-item"><span>Started</span><strong>{formatDateTime(selectedTrip.start_time)}</strong></div>
+                  <div className="detail-item"><span>Ended</span><strong>{formatDateTime(selectedTrip.end_time)}</strong></div>
                 </div>
-              ) : null}
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Route</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>From</span><strong>{selectedTrip.origin_label || "--"}</strong></div>
+                  <div className="detail-item"><span>To</span><strong>{selectedTrip.destination_label || "--"}</strong></div>
+                  {(selectedTrip.origin_lat != null && selectedTrip.origin_lon != null) || (selectedTrip.destination_lat != null && selectedTrip.destination_lon != null) ? (
+                    <div className="modal-route-preview">
+                      <TripRoutePreview
+                        origin={selectedTrip.origin_lat != null && selectedTrip.origin_lon != null ? [selectedTrip.origin_lat, selectedTrip.origin_lon] : null}
+                        destination={selectedTrip.destination_lat != null && selectedTrip.destination_lon != null ? [selectedTrip.destination_lat, selectedTrip.destination_lon] : null}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Performance</h4>
+                <div className="details-grid">
+                  <div className="detail-item"><span>Distance</span><strong>{selectedTrip.distance_km?.toFixed(1) || "0.0"} km</strong></div>
+                  <div className="detail-item"><span>Duration</span><strong>{formatDuration(selectedTrip.duration_min)}</strong></div>
+                  <div className="detail-item"><span>Average Speed</span><strong>{selectedTrip.avg_speed_kmh?.toFixed(1) || "0.0"} km/h</strong></div>
+                  <div className="detail-item"><span>Idle Time</span><strong>{formatDuration(selectedTrip.idle_min)}</strong></div>
+                </div>
+              </section>
+
+              <section className="modal-detail-section">
+                <h4 className="modal-detail-section__title">Notes</h4>
+                <div className="details-grid">
+                  <div className="detail-item detail-item--full"><span>Trip Notes</span><strong>{selectedTrip.notes || "--"}</strong></div>
+                </div>
+              </section>
             </div>
             <div className="modal__actions"><button className="btn btn--secondary" type="button" onClick={() => setSelectedTripId(null)}>Close</button></div>
           </div>

@@ -4,15 +4,18 @@ import {
     useState,
     useEffect,
     useRef,
+    useCallback,
     ReactNode,
     FormEvent,
 } from "react";
 import { supabase } from "../services/supabase";
-import { apiGet, apiPatch, apiPost } from "../services/api";
+import { apiGet, apiPatch, apiPost, isAuthSessionExpiredError } from "../services/api";
+import { useFeedback } from "./FeedbackContext";
 
 type AuthContextType = {
     accessToken: string | null;
     orgId: string | null;
+    orgName: string;
     role: string | null;
     fullName: string;
     phone: string;
@@ -20,6 +23,7 @@ type AuthContextType = {
     authReady: boolean;
     error: string | null;
     loading: boolean;
+    passwordChangeRequiresLogin: boolean;
     email: string;
     password: string;
     setEmail: (v: string) => void;
@@ -31,27 +35,80 @@ type AuthContextType = {
     handleUpdateProfile: (name: string, phone: string) => Promise<void>;
     handleChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     handleSignOut: () => Promise<void>;
+    clearPasswordChangeRedirect: () => void;
     token: string | undefined;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function getPasswordChangeErrorMessage(error: unknown) {
+    const rawMessage = error instanceof Error ? error.message : String(error || "");
+    try {
+        const parsed = JSON.parse(rawMessage);
+        const detail = parsed?.detail;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail?.password_errors) && detail.password_errors.length > 0) {
+            return detail.password_errors[0];
+        }
+    } catch {
+        // Non-JSON errors already have the message we need.
+    }
+    return rawMessage || "Could not update your password.";
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const feedback = useFeedback();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [orgId, setOrgId] = useState<string | null>(null);
+    const [orgName, setOrgName] = useState(() => localStorage.getItem("fleetlanka.profile.orgName") || "");
     const [role, setRole] = useState<string | null>(null);
     const [fullName, setFullName] = useState(() => localStorage.getItem("fleetlanka.profile.name") || "");
     const [phone, setPhone] = useState(() => localStorage.getItem("fleetlanka.profile.phone") || "");
     const [profileLoading, setProfileLoading] = useState(false);
     const [authReady, setAuthReady] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setErrorState] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [passwordChangeRequiresLogin, setPasswordChangeRequiresLogin] = useState(false);
     const pendingSignOutRef = useRef(false);
     const suppressListenerRef = useRef(false);
+    const sessionExpiredNotifiedRef = useRef(false);
 
     const token = accessToken ?? undefined;
+
+    const setError = useCallback((value: string | null) => {
+        setErrorState(null);
+        if (value) {
+            feedback.error("Action failed", value);
+        }
+    }, [feedback]);
+
+    const clearAuthState = useCallback(() => {
+        setAccessToken(null);
+        setOrgId(null);
+        setOrgName("");
+        setRole(null);
+        setFullName("");
+        setPhone("");
+        localStorage.removeItem("fleetlanka.profile.name");
+        localStorage.removeItem("fleetlanka.profile.phone");
+        localStorage.removeItem("fleetlanka.profile.orgName");
+    }, []);
+
+    const clearPasswordChangeRedirect = useCallback(() => {
+        setPasswordChangeRequiresLogin(false);
+    }, []);
+
+    const handleExpiredSession = useCallback(async () => {
+        if (sessionExpiredNotifiedRef.current) return;
+        sessionExpiredNotifiedRef.current = true;
+        pendingSignOutRef.current = true;
+        await supabase.auth.signOut().catch(() => undefined);
+        clearAuthState();
+        pendingSignOutRef.current = false;
+        feedback.error("Session expired", "Please sign in again to continue.");
+    }, [clearAuthState, feedback]);
 
     useEffect(() => {
         let isMounted = true;
@@ -80,8 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAccessToken(session?.access_token ?? null);
             setEmail(session?.user?.email ?? "");
             if (!session && event === "SIGNED_OUT") {
-                setOrgId(null);
-                setRole(null);
+                clearAuthState();
                 pendingSignOutRef.current = false;
             }
         });
@@ -90,10 +146,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isMounted = false;
             authListener.subscription.unsubscribe();
         };
-    }, []);
+    }, [clearAuthState]);
+
+    useEffect(() => {
+        const onExpiredSession = () => {
+            handleExpiredSession();
+        };
+        window.addEventListener("fleetlanka:auth-session-expired", onExpiredSession);
+        return () => window.removeEventListener("fleetlanka:auth-session-expired", onExpiredSession);
+    }, [handleExpiredSession]);
 
     async function handleInactiveDriverSignOut() {
-        setError("This account is inactive. Please contact your manager.");
+        feedback.error("Account inactive", "This account is inactive. Please contact your manager.");
         pendingSignOutRef.current = true;
         await supabase.auth.signOut();
         setAccessToken(null);
@@ -102,18 +166,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function fetchProfileForToken(accessTokenValue: string) {
-        return apiGet<{ org_id: string; role: string; status?: string; full_name?: string; phone?: string }>(
+        return apiGet<{ org_id: string; org_name?: string; role: string; status?: string; full_name?: string; phone?: string }>(
             "/profiles/me",
             accessTokenValue
         );
     }
 
-    async function applyProfile(profile: { org_id: string; role: string; status?: string; full_name?: string; phone?: string }) {
+    async function applyProfile(profile: { org_id: string; org_name?: string; role: string; status?: string; full_name?: string; phone?: string }) {
         if ((profile.role === "driver" || profile.role === "service") && profile.status !== "active") {
             await handleInactiveDriverSignOut();
             return false;
         }
         setOrgId(profile.org_id);
+        const orgNameValue = profile.org_name || "";
+        setOrgName(orgNameValue);
         setRole(profile.role);
         const nameValue = profile.full_name || "";
         const phoneValue = profile.phone || "";
@@ -121,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPhone(phoneValue);
         localStorage.setItem("fleetlanka.profile.name", nameValue);
         localStorage.setItem("fleetlanka.profile.phone", phoneValue);
+        localStorage.setItem("fleetlanka.profile.orgName", orgNameValue);
         return true;
     }
 
@@ -136,6 +203,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await handleInactiveDriverSignOut();
                 return;
             }
+            if (isAuthSessionExpiredError(err)) {
+                await handleExpiredSession();
+                return;
+            }
             throw err;
         } finally {
             setProfileLoading(false);
@@ -144,8 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (!token) return;
-        loadProfile().catch((e) => setError(e.message));
-    }, [token]);
+        loadProfile().catch((e) => {
+            if (isAuthSessionExpiredError(e)) return;
+            feedback.error("Profile load failed", e.message);
+        });
+    }, [handleExpiredSession, token]);
 
     async function handleLogin(e: FormEvent) {
         e.preventDefault();
@@ -164,10 +238,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const profile = await fetchProfileForToken(sessionToken);
             const allowed = await applyProfile(profile);
             if (!allowed) return;
+            sessionExpiredNotifiedRef.current = false;
+            setPasswordChangeRequiresLogin(false);
             setAccessToken(sessionToken);
             setEmail(data.session?.user?.email ?? "");
         } catch (err: any) {
-            setError(err.message || "Login failed");
+            feedback.error("Login failed", err.message || "Check your email and password, then try again.");
         } finally {
             suppressListenerRef.current = false;
             setLoading(false);
@@ -196,15 +272,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             if (authError) throw authError;
             if (data.session) {
+                sessionExpiredNotifiedRef.current = false;
+                setPasswordChangeRequiresLogin(false);
                 setAccessToken(data.session.access_token);
                 setEmail(data.session.user?.email ?? "");
                 setFullName(fullName);
+                setOrgName(resolvedOrgName);
+                feedback.success("Account created", "Your manager workspace is ready.");
             } else {
                 // Email confirmation may be required
-                setError("Account created! Please check your email to confirm.");
+                feedback.success("Account created", "Please check your email to confirm your account.");
             }
         } catch (err: any) {
-            setError(err.message || "Signup failed");
+            feedback.error("Signup failed", err.message || "Could not create your account.");
         } finally {
             suppressListenerRef.current = false;
             setLoading(false);
@@ -220,19 +300,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 full_name: name || undefined,
                 phone: phoneValue || undefined,
             };
-            const updated = await apiPatch<{ full_name?: string; phone?: string }>(
+            const updated = await apiPatch<{ full_name?: string; phone?: string; org_name?: string }>(
                 "/profiles/me",
                 payload,
                 token
             );
             const nameValue = updated.full_name || "";
             const updatedPhone = updated.phone || "";
+            const updatedOrgName = updated.org_name || orgName;
             setFullName(nameValue);
             setPhone(updatedPhone);
+            setOrgName(updatedOrgName);
             localStorage.setItem("fleetlanka.profile.name", nameValue);
             localStorage.setItem("fleetlanka.profile.phone", updatedPhone);
+            localStorage.setItem("fleetlanka.profile.orgName", updatedOrgName);
+            feedback.success("Profile updated");
         } catch (err: any) {
-            setError(err.message || "Profile update failed");
+            feedback.error("Profile update failed", err.message || "Could not update your profile.");
         } finally {
             setLoading(false);
         }
@@ -248,8 +332,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 { current_password: currentPassword, new_password: newPassword },
                 token
             );
+            feedback.success("Password updated", "Please sign in again with your new password.");
+            setPasswordChangeRequiresLogin(true);
+            pendingSignOutRef.current = true;
+            await supabase.auth.signOut().catch(() => undefined);
+            clearAuthState();
+            pendingSignOutRef.current = false;
         } catch (err: any) {
-            setError(err.message || "Password update failed");
+            throw new Error(getPasswordChangeErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -258,14 +348,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function handleSignOut() {
         pendingSignOutRef.current = true;
         await supabase.auth.signOut();
-        setAccessToken(null);
-        setOrgId(null);
-        setRole(null);
-        setFullName("");
-        setPhone("");
-        localStorage.removeItem("fleetlanka.profile.name");
-        localStorage.removeItem("fleetlanka.profile.phone");
+        clearAuthState();
         pendingSignOutRef.current = false;
+        feedback.info("Signed out");
     }
 
     return (
@@ -273,6 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             value={{
                 accessToken,
                 orgId,
+                orgName,
                 role,
                 fullName,
                 phone,
@@ -280,6 +366,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 authReady,
                 error,
                 loading,
+                passwordChangeRequiresLogin,
                 email,
                 password,
                 setEmail,
@@ -291,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 handleUpdateProfile,
                 handleChangePassword,
                 handleSignOut,
+                clearPasswordChangeRedirect,
                 token,
             }}
         >

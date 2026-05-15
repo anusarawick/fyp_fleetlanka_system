@@ -38,9 +38,17 @@ class DocumentUpdate(BaseModel):
     doc_number: Optional[str] = None
     expiry_date: Optional[str] = None
     file_url: Optional[str] = None
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
+    file_mime_type: Optional[str] = None
+    file_size_bytes: Optional[int] = None
 
     @model_validator(mode="after")
     def validate_owner(self) -> "DocumentUpdate":
         if self.vehicle_id and self.driver_id:
             raise ValueError("Only one of vehicle_id or driver_id can be provided")
         return self
+
+
+class DocumentFileUrlOut(BaseModel):
+    url: str

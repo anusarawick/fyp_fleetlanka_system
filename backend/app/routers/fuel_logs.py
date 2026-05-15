@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import DRIVER_ROLES, get_bearer_token, get_current_profile
 from app.schemas.fuel_logs import FuelLogCreate, FuelLogOut, FuelLogUpdate
+from app.services.notifications import manager_profiles, notify_profiles
 from app.services.supabase_client import get_supabase_client
 from app.services.vehicle_feature_sync import sync_fuel_vehicle_features
 
@@ -53,7 +54,27 @@ def create_fuel_log(
         raise HTTPException(status_code=400, detail="Insert failed")
     if response.data[0].get("vehicle_id"):
         sync_fuel_vehicle_features(supabase, response.data[0]["vehicle_id"])
-    return response.data[0]
+    fuel_log = response.data[0]
+    if profile.get("role") in DRIVER_ROLES:
+        notify_profiles(
+            supabase,
+            manager_profiles(supabase, org_id),
+            org_id=org_id,
+            source_key=f"event:fuel_log:{fuel_log['id']}:created",
+            alert_type="driver_fuel_logged",
+            title="Driver fuel log submitted",
+            message=f"A driver submitted {fuel_log.get('liters')} L fuel log.",
+            severity="info",
+            category="fuel",
+            action_url="/fuel",
+            related_entity="fuel_logs",
+            related_id=fuel_log["id"],
+            source_table="fuel_logs",
+            source_id=fuel_log["id"],
+            due_date=fuel_log.get("fuel_date"),
+            metadata={"driver_id": profile.get("id"), "vehicle_id": fuel_log.get("vehicle_id")},
+        )
+    return fuel_log
 
 
 @router.patch("/{fuel_id}", response_model=FuelLogOut)

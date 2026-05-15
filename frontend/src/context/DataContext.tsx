@@ -8,11 +8,13 @@ import {
     ReactNode,
     FormEvent,
 } from "react";
-import { apiGet, apiPost, apiPatch, apiDelete } from "../services/api";
+import { apiGet, apiPost, apiPatch, apiPostForm, apiDelete } from "../services/api";
 import { useAuth } from "./AuthContext";
+import { useFeedback } from "./FeedbackContext";
 import {
     Vehicle,
     Driver,
+    DriverInsights,
     Trip,
     FuelLog,
     FuelForecast,
@@ -26,10 +28,35 @@ import {
     LiveTrip,
 } from "../types";
 
+const maintenanceEventLabels: Record<string, string> = {
+    regular_service: "Regular Service",
+    oil_change: "Oil Change",
+    tyre_change: "Tyre Change",
+    brake_service: "Brake Service",
+    battery_service: "Battery Service",
+    fuel_filter_change: "Fuel Filter Change",
+    repair: "Repair",
+    inspection: "Inspection",
+};
+
+function isComponentMaintenanceEvent(value: string) {
+    const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+    return (
+        normalized.includes("service") ||
+        normalized.includes("oil") ||
+        normalized.includes("tyre") ||
+        normalized.includes("tire") ||
+        normalized.includes("brake") ||
+        normalized.includes("battery") ||
+        (normalized.includes("fuel") && normalized.includes("filter"))
+    );
+}
+
 type DataContextType = {
     // Entity state
     vehicles: Vehicle[];
     drivers: Driver[];
+    driverInsights: DriverInsights | null;
     trips: Trip[];
     liveTrips: LiveTrip[];
     fuelLogs: FuelLog[];
@@ -44,6 +71,7 @@ type DataContextType = {
     // Computed values
     activeTrips: number;
     fuelCostTotal: number;
+    fuelCostThisMonth: number;
     currency: Intl.NumberFormat;
     geoSupported: boolean;
     upcomingDocs: Document[];
@@ -218,6 +246,8 @@ type DataContextType = {
     setCenterPortalEmail: (v: string) => void;
     centerPortalPassword: string;
     setCenterPortalPassword: (v: string) => void;
+    centerPaymentAccess: boolean;
+    setCenterPaymentAccess: (v: boolean) => void;
     editingCenterId: string | null;
 
     // Booking form state
@@ -244,7 +274,7 @@ type DataContextType = {
     refreshFuelForecasts: () => Promise<void>;
 
     // Handlers
-    handleSaveVehicle: (e: FormEvent) => Promise<void>;
+    handleSaveVehicle: (e: FormEvent, imageFile?: File | null, removeImage?: boolean) => Promise<void>;
     handleEditVehicle: (vehicle: Vehicle) => void;
     handleCancelVehicleEdit: () => void;
     handleDeleteVehicle: (vehicleId: string) => Promise<void>;
@@ -300,10 +330,11 @@ type DataContextType = {
     handleEditMaintenance: (record: Maintenance) => void;
     handleCancelMaintenanceEdit: () => void;
     handleDeleteMaintenance: (maintenanceId: string) => Promise<void>;
-    handleAddDocument: (e: FormEvent) => Promise<void>;
+    handleAddDocument: (e: FormEvent, file?: File | null, removeFile?: boolean) => Promise<void>;
     handleEditDocument: (document: Document) => void;
     handleCancelDocumentEdit: () => void;
     handleDeleteDocument: (documentId: string) => Promise<void>;
+    getDocumentFileUrl: (documentId: string) => Promise<string>;
     handleAddCenter: (e: FormEvent) => Promise<void>;
     handleEditCenter: (center: ServiceCenter) => void;
     handleCancelCenterEdit: () => void;
@@ -314,9 +345,11 @@ type DataContextType = {
     handleDeleteBooking: (bookingId: string) => Promise<void>;
     handleApproveBookingCompletion: (bookingId: string) => Promise<void>;
     handleRejectBookingCompletion: (bookingId: string, note: string) => Promise<void>;
+    handleCreateBookingCheckout: (bookingId: string) => Promise<void>;
     handlePredictMaintenance: (e: FormEvent) => Promise<void>;
     handlePredictFuel: (e: FormEvent) => Promise<void>;
     runVehicleMaintenanceCheck: (vehicleId: string) => Promise<void>;
+    deleteMaintenancePrediction: (predictionId: string) => Promise<void>;
     buildAlerts: () => Alert[];
 
     // Reset on logout
@@ -402,10 +435,12 @@ function applyPendingTripEventsToTrips(rows: Trip[], events: PendingTripEvent[])
 
 export function DataProvider({ children }: { children: ReactNode }) {
     const { token, orgId, role, fullName, setError, setLoading, loading } = useAuth();
+    const feedback = useFeedback();
 
     // Entity state
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [driverInsights, setDriverInsights] = useState<DriverInsights | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [liveTrips, setLiveTrips] = useState<LiveTrip[]>([]);
     const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
@@ -526,6 +561,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [centerAddress, setCenterAddress] = useState("");
     const [centerPortalEmail, setCenterPortalEmail] = useState("");
     const [centerPortalPassword, setCenterPortalPassword] = useState("");
+    const [centerPaymentAccess, setCenterPaymentAccess] = useState(false);
     const [editingCenterId, setEditingCenterId] = useState<string | null>(null);
 
     // Booking form
@@ -573,6 +609,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
     const activeTrips = trips.filter((t) => deriveTripStatus(t) === "in_progress").length;
     const fuelCostTotal = fuelLogs.reduce((sum, f) => sum + (f.cost_lkr || 0), 0);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const fuelCostThisMonth = fuelLogs.reduce((sum, f) => {
+        if (!f.fuel_date) return sum;
+        const fuelDate = new Date(f.fuel_date);
+        if (Number.isNaN(fuelDate.getTime()) || fuelDate < monthStart || fuelDate >= nextMonthStart) return sum;
+        return sum + (f.cost_lkr || 0);
+    }, 0);
 
     const upcomingDocs = documents.filter((d) => {
         if (!d.expiry_date) return false;
@@ -712,7 +757,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const maintenancePredictionMap = useMemo(() => {
         const latestByVehicle: Record<string, MaintenancePrediction> = {};
-        for (const prediction of maintenancePredictions) {
+        for (const prediction of [...maintenancePredictions].sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime())) {
             if (!latestByVehicle[prediction.vehicle_id]) {
                 latestByVehicle[prediction.vehicle_id] = prediction;
             }
@@ -935,7 +980,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                         setPendingTripEvents((prev) => prev.map((event) =>
                             event.trip_id === tripId ? { ...event, error: message } : event
                         ));
-                        setError(message);
+                        feedback.warning("Trip sync delayed", message);
                         return;
                     }
                 }
@@ -976,6 +1021,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     setTripTrackingStatus(activeTrip ? "stale" : "inactive");
                     setTripTrackingLastUpdated(null);
                     setDrivers([]);
+                    setDriverInsights(null);
                     setFuelLogs([]);
                     setMaintenance([]);
                     setDocuments([]);
@@ -991,6 +1037,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 if (role === "service") {
                     setVehicles([]);
                     setDrivers([]);
+                    setDriverInsights(null);
                     setTrips([]);
                     setFuelLogs([]);
                     setMaintenance([]);
@@ -1005,9 +1052,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
-                const [v, d, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
+                const [v, d, di, t, f, m, doc, sc, sb, ds, mp] = await Promise.all([
                     apiGet<Vehicle[]>("/vehicles", token),
                     apiGet<Driver[]>("/drivers", token),
+                    apiGet<DriverInsights>("/drivers/insights", token).catch(() => null),
                     apiGet<Trip[]>("/trips", token),
                     apiGet<FuelLog[]>("/fuel-logs", token),
                     apiGet<Maintenance[]>("/maintenance", token),
@@ -1019,6 +1067,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 ]);
                 setVehicles(v);
                 setDrivers(d);
+                setDriverInsights(di);
                 setTrips(t);
                 setFuelLogs(f);
                 setMaintenance(m);
@@ -1030,7 +1079,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setFuelForecasts([]);
                 setLiveTrips([]);
             } catch (e: any) {
-                setError(e.message);
+                feedback.error("Data load failed", e.message);
             }
         };
         load();
@@ -1059,7 +1108,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             } catch (err: any) {
                 if (!cancelled) {
                     setLiveTrips([]);
-                    setError(err.message || "Failed to load live trips");
+                    feedback.error("Live trips unavailable", err.message || "Failed to load live trips");
                 }
             }
         };
@@ -1083,7 +1132,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!token || role !== "manager") return;
         refreshFuelForecasts().catch((err: any) => {
             setFuelForecasts([]);
-            setError(err.message || "Fuel forecast load failed");
+            feedback.error("Fuel forecast failed", err.message || "Fuel forecast load failed");
         });
     }, [token, role, vehicles.length, fuelLogs.length, trips.length]);
 
@@ -1119,12 +1168,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     ]);
                     setTripTrackingLastUpdated(pointTime);
                     setTripTrackingStatus("error");
-                    setError(e.message || "GPS point saved locally and will retry when connected");
+                    feedback.warning("GPS saved locally", e.message || "GPS point saved locally and will retry when connected");
                 }
             },
             (err) => {
                 setTripTrackingStatus("error");
-                setError(err.message);
+                feedback.error("Location error", err.message);
             },
             { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
         );
@@ -1144,6 +1193,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         setVehicles([]);
         setDrivers([]);
+        setDriverInsights(null);
         setTrips([]);
         setLiveTrips([]);
         setFuelLogs([]);
@@ -1213,13 +1263,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             probability: number;
             threshold_used: number;
             risk_level: "low" | "medium" | "high";
+            saved_prediction?: MaintenancePrediction;
         }>(`/ml/maintenance/by-vehicle/${vehicleId}`, {}, token);
 
-        const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
-        setMaintenancePredictions((prev) => {
-            const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
-            return [...latest, ...rest];
-        });
+        if (result.saved_prediction) {
+            setMaintenancePredictions((prev) =>
+                [result.saved_prediction!, ...prev.filter((item) => item.id !== result.saved_prediction!.id)]
+                    .sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime())
+            );
+        } else {
+            const latest = await apiGet<MaintenancePrediction[]>(`/ml/maintenance/predictions?vehicle_id=${vehicleId}`, token);
+            setMaintenancePredictions((prev) => {
+                const rest = prev.filter((item) => item.vehicle_id !== vehicleId);
+                return [...latest, ...rest].sort((a, b) => new Date(b.predicted_at).getTime() - new Date(a.predicted_at).getTime());
+            });
+        }
 
         if (updateMaintResult) {
             setMaintResult(
@@ -1254,7 +1312,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setBatteryInstalledAt("");
     }
 
-    async function handleSaveVehicle(e: FormEvent) {
+    async function uploadVehicleImage(vehicleId: string, imageFile: File) {
+        const formData = new FormData();
+        formData.append("image", imageFile);
+        return apiPostForm<Vehicle>(`/vehicles/${vehicleId}/image`, formData, token);
+    }
+
+    async function handleSaveVehicle(e: FormEvent, imageFile?: File | null, removeImage?: boolean) {
         e.preventDefault();
         if (!token || !orgId) return;
         setError(null);
@@ -1278,8 +1342,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 engine_size_cc: engineSizeCc ? Number(engineSizeCc) : undefined,
                 accident_history_count: accidentHistoryCount ? Number(accidentHistoryCount) : undefined,
                 fuel_efficiency: fuelEfficiency ? Number(fuelEfficiency) : undefined,
-                maintenance_history: maintenanceHistory || undefined,
-                reported_issues_count: reportedIssuesCount ? Number(reportedIssuesCount) : undefined,
                 tire_condition: tireCondition || undefined,
                 brake_condition: brakeCondition || undefined,
                 battery_status: batteryStatus || undefined,
@@ -1303,15 +1365,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 battery_installed_at: batteryInstalledAt || undefined,
             };
             let savedVehicleId: string;
+            let savedVehicle: Vehicle;
             if (editingVehicleId) {
                 const updated = await apiPatch<Vehicle>(`/vehicles/${editingVehicleId}`, payload, token);
-                setVehicles((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+                savedVehicle = updated;
                 savedVehicleId = updated.id;
             } else {
                 const created = await apiPost<Vehicle>("/vehicles", payload, token);
-                setVehicles((prev) => [created, ...prev]);
+                savedVehicle = created;
                 savedVehicleId = created.id;
             }
+            if (imageFile) {
+                savedVehicle = await uploadVehicleImage(savedVehicleId, imageFile);
+            } else if (removeImage && editingVehicleId) {
+                savedVehicle = await apiDelete<Vehicle>(`/vehicles/${savedVehicleId}/image`, token);
+            }
+            setVehicles((prev) => {
+                const exists = prev.some((v) => v.id === savedVehicle.id);
+                return exists
+                    ? prev.map((v) => (v.id === savedVehicle.id ? savedVehicle : v))
+                    : [savedVehicle, ...prev];
+            });
             await refreshVehicleMaintenancePrediction(savedVehicleId);
             setPlateNo("");
             setMake("");
@@ -1332,8 +1406,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setBatteryStatus("");
             resetVehicleMlFields();
             setEditingVehicleId(null);
+            feedback.success(editingVehicleId ? "Vehicle updated" : "Vehicle created", imageFile ? "Vehicle image uploaded." : removeImage ? "Vehicle image removed." : undefined);
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingVehicleId ? "Vehicle update failed" : "Vehicle create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1426,8 +1501,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingVehicleId === vehicleId) {
                 handleCancelVehicleEdit();
             }
+            feedback.success("Vehicle deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Vehicle delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1449,6 +1525,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 };
                 const updated = await apiPatch<Driver>(`/drivers/${editingDriverId}`, payload, token);
                 setDrivers((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+                void refreshDriverInsights();
             } else {
                 if (!driverEmail.trim() || !driverPassword.trim()) {
                     throw new Error("Driver email and password are required");
@@ -1462,6 +1539,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 };
                 const created = await apiPost<Driver>("/drivers", payload, token);
                 setDrivers((prev) => [created, ...prev]);
+                void refreshDriverInsights();
             }
             setDriverName("");
             setDriverEmail("");
@@ -1469,8 +1547,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setDriverStatus("active");
             setDriverPassword("");
             setEditingDriverId(null);
+            feedback.success(editingDriverId ? "Driver updated" : "Driver created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingDriverId ? "Driver update failed" : "Driver create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1494,6 +1573,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setDriverPassword("");
     }
 
+    async function refreshDriverInsights() {
+        if (!token || role !== "manager") {
+            setDriverInsights(null);
+            return;
+        }
+        try {
+            const insights = await apiGet<DriverInsights>("/drivers/insights", token);
+            setDriverInsights(insights);
+        } catch {
+            setDriverInsights(null);
+        }
+    }
+
     async function handleDeleteDriver(driverId: string) {
         if (!token) return;
         setError(null);
@@ -1501,11 +1593,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             await apiDelete(`/drivers/${driverId}`, token);
             setDrivers((prev) => prev.filter((d) => d.id !== driverId));
+            void refreshDriverInsights();
             if (editingDriverId === driverId) {
                 handleCancelDriverEdit();
             }
+            feedback.success("Driver deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Driver delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1562,7 +1656,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 }
                 setActiveTripId(tripId);
                 setTripTrackingStatus("tracking");
-                setError("Trip started offline. It will sync when the connection returns.");
+                feedback.warning("Trip started offline", "It will sync when the connection returns.");
                 return;
             }
             const payload = { status: "in_progress", start_time: now.toISOString() };
@@ -1571,8 +1665,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setTrips((prev) => prev.map((t) => (t.id === trip.id ? trip : t)));
             setTripTrackingStatus("tracking");
             setTripTrackingLastUpdated(null);
+            feedback.success("Trip started");
         } catch (err: any) {
-            setError(err.message || "Start trip failed");
+            feedback.error("Start trip failed", err.message || "Start trip failed");
         } finally {
             setLoading(false);
         }
@@ -1618,7 +1713,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     navigator.geolocation.clearWatch(watchIdRef.current);
                     watchIdRef.current = null;
                 }
-                setError("Trip ended offline. It will sync when the connection returns.");
+                feedback.warning("Trip ended offline", "It will sync when the connection returns.");
                 return;
             }
             const payload = { status: "completed", end_time: now.toISOString() };
@@ -1631,8 +1726,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 navigator.geolocation.clearWatch(watchIdRef.current);
                 watchIdRef.current = null;
             }
+            feedback.success("Trip completed");
         } catch (err: any) {
-            setError(err.message || "Stop trip failed");
+            feedback.error("Stop trip failed", err.message || "Stop trip failed");
         } finally {
             setLoading(false);
         }
@@ -1661,8 +1757,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             const created = await apiPost<Trip>("/trips", payload, token);
             setTrips((prev) => [created, ...prev]);
+            void refreshDriverInsights();
+            feedback.success("Trip assigned");
         } catch (err: any) {
-            setError(err.message || "Trip assignment failed");
+            feedback.error("Trip assignment failed", err.message || "Trip assignment failed");
         } finally {
             setLoading(false);
         }
@@ -1694,8 +1792,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             const updated = await apiPatch<Trip>(`/trips/${tripId}`, payload, token);
             setTrips((prev) => prev.map((trip) => (trip.id === updated.id ? updated : trip)));
+            void refreshDriverInsights();
+            feedback.success("Trip updated");
         } catch (err: any) {
-            setError(err.message || "Trip update failed");
+            feedback.error("Trip update failed", err.message || "Trip update failed");
         } finally {
             setLoading(false);
         }
@@ -1708,8 +1808,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
             await apiDelete(`/trips/${tripId}`, token);
             setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
+            void refreshDriverInsights();
+            feedback.success("Trip deleted");
         } catch (err: any) {
-            setError(err.message || "Trip delete failed");
+            feedback.error("Trip delete failed", err.message || "Trip delete failed");
         } finally {
             setLoading(false);
         }
@@ -1744,8 +1846,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setFuelOdometer("");
             setFuelVendor("");
             setEditingFuelId(null);
+            feedback.success(editingFuelId ? "Fuel log updated" : "Fuel log created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingFuelId ? "Fuel update failed" : "Fuel create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1781,8 +1884,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingFuelId === fuelId) {
                 handleCancelFuelEdit();
             }
+            feedback.success("Fuel log deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Fuel delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1795,11 +1899,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoading(true);
         try {
             if (!maintDate) throw new Error("Service date is required");
+            const eventType = maintType.trim() || maintEventType || undefined;
+            if (eventType && isComponentMaintenanceEvent(eventType) && !maintOdometer.trim()) {
+                throw new Error("Odometer is required for component maintenance events");
+            }
             const payload = {
                 vehicle_id: maintVehicle,
                 service_date: maintDate,
-                service_type: maintType || undefined,
-                event_type: maintEventType || undefined,
+                service_type: maintType || (maintEventType ? maintenanceEventLabels[maintEventType] || maintEventType : undefined),
+                event_type: eventType,
                 event_category: maintEventCategory || undefined,
                 severity: maintSeverity || undefined,
                 cost_lkr: maintCost ? Number(maintCost) : undefined,
@@ -1825,8 +1933,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setMaintNextDue("");
             setMaintNotes("");
             setEditingMaintenanceId(null);
+            feedback.success(editingMaintenanceId ? "Maintenance updated" : "Maintenance logged");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingMaintenanceId ? "Maintenance update failed" : "Maintenance create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -1870,14 +1979,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingMaintenanceId === maintenanceId) {
                 handleCancelMaintenanceEdit();
             }
+            feedback.success("Maintenance record deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Maintenance delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleAddDocument(e: FormEvent) {
+    async function uploadDocumentFile(documentId: string, file: File) {
+        const formData = new FormData();
+        formData.append("file", file);
+        return apiPostForm<Document>(`/documents/${documentId}/file`, formData, token);
+    }
+
+    async function handleAddDocument(e: FormEvent, file?: File | null, removeFile?: boolean) {
         e.preventDefault();
         if (!token || !docType) return;
         setError(null);
@@ -1897,12 +2013,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 doc_number: docNumber || undefined,
                 expiry_date: docExpiry || undefined,
             };
+            let savedDocument: Document;
             if (editingDocumentId) {
-                const updated = await apiPatch<Document>(`/documents/${editingDocumentId}`, payload, token);
-                setDocuments((prev) => prev.map((doc) => (doc.id === updated.id ? updated : doc)));
+                savedDocument = await apiPatch<Document>(`/documents/${editingDocumentId}`, payload, token);
+                if (file) {
+                    savedDocument = await uploadDocumentFile(editingDocumentId, file);
+                } else if (removeFile) {
+                    savedDocument = await apiDelete<Document>(`/documents/${editingDocumentId}/file`, token);
+                }
+                setDocuments((prev) => prev.map((doc) => (doc.id === savedDocument.id ? savedDocument : doc)));
             } else {
-                const created = await apiPost<Document>("/documents", payload, token);
-                setDocuments((prev) => [created, ...prev]);
+                savedDocument = await apiPost<Document>("/documents", payload, token);
+                if (file) {
+                    savedDocument = await uploadDocumentFile(savedDocument.id, file);
+                }
+                setDocuments((prev) => [savedDocument, ...prev]);
             }
             setDocOwnerType("vehicle");
             setDocVehicle("");
@@ -1911,11 +2036,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setDocNumber("");
             setDocExpiry("");
             setEditingDocumentId(null);
+            feedback.success(editingDocumentId ? "Document updated" : "Document created", file ? "Document file uploaded." : removeFile ? "Document file removed." : undefined);
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingDocumentId ? "Document update failed" : "Document create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
+    }
+
+    async function getDocumentFileUrl(documentId: string) {
+        if (!token) throw new Error("Missing auth token");
+        const response = await apiGet<{ url: string }>(`/documents/${documentId}/file-url`, token);
+        return response.url;
     }
 
     function handleEditDocument(document: Document) {
@@ -1954,8 +2086,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingDocumentId === documentId) {
                 handleCancelDocumentEdit();
             }
+            feedback.success("Document deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Document delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -1968,6 +2101,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setCenterAddress(center.address || "");
         setCenterPortalEmail("");
         setCenterPortalPassword("");
+        setCenterPaymentAccess(Boolean(center.payment_access_enabled));
     }
 
     function handleCancelCenterEdit() {
@@ -1977,6 +2111,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setCenterAddress("");
         setCenterPortalEmail("");
         setCenterPortalPassword("");
+        setCenterPaymentAccess(false);
     }
 
     async function handleAddCenter(e: FormEvent) {
@@ -1989,14 +2124,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (!editingCenterId && ((centerPortalEmail && !centerPortalPassword) || (!centerPortalEmail && centerPortalPassword))) {
                 throw new Error("Portal email and password must both be provided to create a service center login");
             }
-            const payload = {
+            const payload: {
+                name: string;
+                phone?: string;
+                address?: string;
+                portal_email?: string;
+                portal_password?: string;
+                portal_contact_name?: string;
+                payment_access_enabled: boolean;
+            } = {
                 name: centerName,
                 phone: centerPhone || undefined,
                 address: centerAddress || undefined,
                 portal_email: centerPortalEmail || undefined,
                 portal_password: centerPortalPassword || undefined,
-                portal_contact_name: centerName || undefined,
+                payment_access_enabled: centerPaymentAccess,
             };
+            if (!editingCenterId || centerPortalEmail || centerPortalPassword) {
+                payload.portal_contact_name = centerName || undefined;
+            }
             if (editingCenterId) {
                 const updated = await apiPatch<ServiceCenter>(`/service-centers/${editingCenterId}`, payload, token);
                 setServiceCenters((prev) => prev.map((center) => (center.id === updated.id ? updated : center)));
@@ -2004,9 +2150,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 const created = await apiPost<ServiceCenter>("/service-centers", payload, token);
                 setServiceCenters((prev) => [created, ...prev]);
             }
+            const refreshedCenters = await apiGet<ServiceCenter[]>("/service-centers", token);
+            setServiceCenters(refreshedCenters);
             handleCancelCenterEdit();
+            feedback.success(editingCenterId ? "Service center updated" : "Service center created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingCenterId ? "Service center update failed" : "Service center create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -2022,8 +2171,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingCenterId === centerId) {
                 handleCancelCenterEdit();
             }
+            feedback.success("Service center deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Service center delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2060,8 +2210,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setServiceBookings((prev) => [created, ...prev]);
             }
             handleCancelBookingEdit();
+            feedback.success(editingBookingId ? "Booking updated" : "Booking created");
         } catch (err: any) {
-            setError(err.message || "Create failed");
+            feedback.error(editingBookingId ? "Booking update failed" : "Booking create failed", err.message || "Create failed");
         } finally {
             setLoading(false);
         }
@@ -2093,8 +2244,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             if (editingBookingId === bookingId) {
                 handleCancelBookingEdit();
             }
+            feedback.success("Booking deleted");
         } catch (err: any) {
-            setError(err.message || "Delete failed");
+            feedback.error("Booking delete failed", err.message || "Delete failed");
         } finally {
             setLoading(false);
         }
@@ -2113,8 +2265,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ]);
             setVehicles(vehiclesData);
             setMaintenance(maintenanceData);
+            feedback.success("Booking approved", "Maintenance records and vehicle baselines were updated.");
         } catch (err: any) {
-            setError(err.message || "Approval failed");
+            feedback.error("Booking approval failed", err.message || "Approval failed");
         } finally {
             setLoading(false);
         }
@@ -2131,8 +2284,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 token
             );
             setServiceBookings((prev) => prev.map((booking) => (booking.id === rejected.id ? rejected : booking)));
+            feedback.success("Booking rejected");
         } catch (err: any) {
-            setError(err.message || "Rejection failed");
+            feedback.error("Booking rejection failed", err.message || "Rejection failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleCreateBookingCheckout(bookingId: string) {
+        if (!token) return;
+        setError(null);
+        setLoading(true);
+        try {
+            const response = await apiPost<{ checkout_url: string }>(
+                `/payments/service-bookings/${bookingId}/checkout`,
+                {},
+                token
+            );
+            feedback.info("Opening Stripe Checkout", "Redirecting to payment.");
+            window.location.href = response.checkout_url;
+        } catch (err: any) {
+            feedback.error("Payment checkout failed", err.message || "Payment checkout failed");
         } finally {
             setLoading(false);
         }
@@ -2155,8 +2328,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const features = parseFeatureLines(maintFeatures);
             const res = await apiPost<{ predictions: number[] }>("/ml/maintenance", { features }, token);
             setMaintResult(JSON.stringify(res.predictions));
+            feedback.success("Maintenance prediction complete");
         } catch (err: any) {
-            setError(err.message || "Prediction failed");
+            feedback.error("Maintenance prediction failed", err.message || "Prediction failed");
         } finally {
             setLoading(false);
         }
@@ -2171,8 +2345,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const features = parseFeatureLines(fuelFeatures);
             const res = await apiPost<{ predictions: number[] }>("/ml/fuel", { features }, token);
             setFuelResult(JSON.stringify(res.predictions));
+            feedback.success("Fuel prediction complete");
         } catch (err: any) {
-            setError(err.message || "Prediction failed");
+            feedback.error("Fuel prediction failed", err.message || "Prediction failed");
         } finally {
             setLoading(false);
         }
@@ -2184,8 +2359,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setError(null);
         try {
             await refreshVehicleMaintenancePrediction(vehicleId, true);
+            feedback.success("Vehicle prediction updated");
         } catch (err: any) {
-            setError(err.message || "Vehicle prediction failed");
+            feedback.error("Vehicle prediction failed", err.message || "Vehicle prediction failed");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function deleteMaintenancePrediction(predictionId: string) {
+        if (!token) return;
+        setLoading(true);
+        setError(null);
+        try {
+            await apiDelete(`/ml/maintenance/predictions/${predictionId}`, token);
+            setMaintenancePredictions((prev) => prev.filter((prediction) => prediction.id !== predictionId));
+            feedback.success("Prediction deleted");
+        } catch (err: any) {
+            feedback.error("Prediction delete failed", err.message || "Prediction delete failed");
+            throw err;
         } finally {
             setLoading(false);
         }
@@ -2229,6 +2421,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             value={{
                 vehicles,
                 drivers,
+                driverInsights,
                 trips,
                 liveTrips,
                 fuelLogs,
@@ -2240,6 +2433,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 maintenancePredictions,
                 activeTrips,
                 fuelCostTotal,
+                fuelCostThisMonth,
                 currency,
                 geoSupported,
                 upcomingDocs,
@@ -2395,6 +2589,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 setCenterPortalEmail,
                 centerPortalPassword,
                 setCenterPortalPassword,
+                centerPaymentAccess,
+                setCenterPaymentAccess,
                 editingCenterId,
                 bookingVehicle,
                 setBookingVehicle,
@@ -2441,6 +2637,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleEditDocument,
                 handleCancelDocumentEdit,
                 handleDeleteDocument,
+                getDocumentFileUrl,
                 handleAddCenter,
                 handleEditCenter,
                 handleCancelCenterEdit,
@@ -2451,9 +2648,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 handleDeleteBooking,
                 handleApproveBookingCompletion,
                 handleRejectBookingCompletion,
+                handleCreateBookingCheckout,
                 handlePredictMaintenance,
                 handlePredictFuel,
                 runVehicleMaintenanceCheck,
+                deleteMaintenancePrediction,
                 buildAlerts,
                 resetData,
             }}

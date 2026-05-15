@@ -1,12 +1,22 @@
+from uuid import uuid4
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.vehicles import VehicleCreate, VehicleOut, VehicleUpdate
 from app.services.supabase_client import get_supabase_client
+from app.services.vehicle_ml_defaults import fill_missing_vehicle_ml_defaults
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+
+VEHICLE_IMAGE_BUCKET = "vehicle-images"
+VEHICLE_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+VEHICLE_IMAGE_EXTENSIONS = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 
 OPERATING_PROFILE_FIELDS = {
     "fuel_type",
@@ -88,6 +98,58 @@ def _upsert_vehicle_ml_rows(supabase, org_id: str, vehicle_id: str, operating_da
         ) from exc
 
 
+def _get_vehicle_ml_rows(supabase, vehicle_id: str) -> tuple[dict, dict]:
+    operating_rows = (
+        supabase.table("vehicle_operating_profiles")
+        .select("*")
+        .eq("vehicle_id", vehicle_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    component_rows = (
+        supabase.table("vehicle_component_state")
+        .select("*")
+        .eq("vehicle_id", vehicle_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return (operating_rows[0] if operating_rows else {}, component_rows[0] if component_rows else {})
+
+
+def _get_manager_vehicle(admin_client, vehicle_id: str, org_id: str) -> dict:
+    vehicle_resp = (
+        admin_client.table("vehicles")
+        .select("*")
+        .eq("id", vehicle_id)
+        .eq("org_id", org_id)
+        .single()
+        .execute()
+    )
+    if not vehicle_resp.data:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return vehicle_resp.data
+
+
+def _public_storage_url(storage, path: str) -> str:
+    public_url = storage.from_(VEHICLE_IMAGE_BUCKET).get_public_url(path)
+    if isinstance(public_url, dict):
+        return public_url.get("publicUrl") or public_url.get("public_url") or ""
+    return str(public_url)
+
+
+def _remove_vehicle_image_file(storage, image_path: Optional[str]) -> None:
+    if not image_path:
+        return
+    try:
+        storage.from_(VEHICLE_IMAGE_BUCKET).remove([image_path])
+    except Exception:
+        pass
+
+
 @router.get("", response_model=List[VehicleOut])
 def list_vehicles(token: Optional[str] = Depends(get_bearer_token)) -> List[VehicleOut]:
     if not token:
@@ -111,6 +173,11 @@ def create_vehicle(
     vehicle_data, operating_data, component_data = _split_vehicle_payload(data)
     if vehicle_data.get("odometer_km") is None and vehicle_data.get("mileage") is not None:
         vehicle_data["odometer_km"] = vehicle_data["mileage"]
+    vehicle_data, operating_data, component_data = fill_missing_vehicle_ml_defaults(
+        vehicle_data,
+        operating_data,
+        component_data,
+    )
     vehicle_data["org_id"] = profile["org_id"]
     response = supabase.table("vehicles").insert(vehicle_data).execute()
     if not response.data:
@@ -132,6 +199,26 @@ def update_vehicle(
     supabase = get_supabase_client(token)
     data = payload.model_dump(exclude_none=True)
     vehicle_data, operating_data, component_data = _split_vehicle_payload(data)
+    existing_vehicle_resp = (
+        supabase.table("vehicles")
+        .select("*")
+        .eq("id", vehicle_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    if not existing_vehicle_resp.data:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    existing_operating, existing_component = _get_vehicle_ml_rows(supabase, vehicle_id)
+    default_source_vehicle = {**existing_vehicle_resp.data, **vehicle_data}
+    vehicle_data, operating_data, component_data = fill_missing_vehicle_ml_defaults(
+        default_source_vehicle,
+        operating_data,
+        component_data,
+        existing_operating,
+        existing_component,
+    )
+    vehicle_data = {key: value for key, value in vehicle_data.items() if key in data or key == "vehicle_type"}
     if vehicle_data:
         response = (
             supabase.table("vehicles")
@@ -154,6 +241,70 @@ def update_vehicle(
     return _merge_vehicle_ml_rows(supabase, [response.data[0]])[0]
 
 
+@router.post("/{vehicle_id}/image", response_model=VehicleOut)
+async def upload_vehicle_image(
+    vehicle_id: str,
+    image: UploadFile = File(...),
+    profile: dict = Depends(require_manager_profile),
+) -> VehicleOut:
+    content_type = image.content_type or ""
+    if content_type not in VEHICLE_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Vehicle image must be JPG, PNG, or WebP")
+    contents = await image.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Vehicle image is empty")
+    if len(contents) > VEHICLE_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Vehicle image must be 5MB or smaller")
+
+    admin_client = get_supabase_client(use_service_role=True)
+    vehicle = _get_manager_vehicle(admin_client, vehicle_id, profile["org_id"])
+    storage = admin_client.storage
+    _remove_vehicle_image_file(storage, vehicle.get("image_path"))
+
+    extension = VEHICLE_IMAGE_EXTENSIONS[content_type]
+    image_path = f"{profile['org_id']}/{vehicle_id}/{uuid4().hex}.{extension}"
+    try:
+        storage.from_(VEHICLE_IMAGE_BUCKET).upload(
+            image_path,
+            contents,
+            {"content-type": content_type, "upsert": "true"},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Vehicle image upload failed: {exc}") from exc
+
+    image_url = _public_storage_url(storage, image_path)
+    updated_resp = (
+        admin_client.table("vehicles")
+        .update({"image_url": image_url, "image_path": image_path})
+        .eq("id", vehicle_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
+    if not updated_resp.data:
+        raise HTTPException(status_code=400, detail="Failed to save vehicle image")
+    return _merge_vehicle_ml_rows(admin_client, [updated_resp.data[0]])[0]
+
+
+@router.delete("/{vehicle_id}/image", response_model=VehicleOut)
+def delete_vehicle_image(
+    vehicle_id: str,
+    profile: dict = Depends(require_manager_profile),
+) -> VehicleOut:
+    admin_client = get_supabase_client(use_service_role=True)
+    vehicle = _get_manager_vehicle(admin_client, vehicle_id, profile["org_id"])
+    _remove_vehicle_image_file(admin_client.storage, vehicle.get("image_path"))
+    updated_resp = (
+        admin_client.table("vehicles")
+        .update({"image_url": None, "image_path": None})
+        .eq("id", vehicle_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
+    if not updated_resp.data:
+        raise HTTPException(status_code=400, detail="Failed to remove vehicle image")
+    return _merge_vehicle_ml_rows(admin_client, [updated_resp.data[0]])[0]
+
+
 @router.delete("/{vehicle_id}")
 def delete_vehicle(
     vehicle_id: str,
@@ -162,6 +313,9 @@ def delete_vehicle(
 ) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
+    admin_client = get_supabase_client(use_service_role=True)
+    vehicle = _get_manager_vehicle(admin_client, vehicle_id, profile["org_id"])
+    _remove_vehicle_image_file(admin_client.storage, vehicle.get("image_path"))
     supabase = get_supabase_client(token)
     response = supabase.table("vehicles").delete().eq("id", vehicle_id).execute()
     if response.data is None:

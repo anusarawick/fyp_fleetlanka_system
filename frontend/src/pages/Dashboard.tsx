@@ -1,23 +1,28 @@
-import { useMemo } from "react";
-import MapView from "../components/MapView";
-import { DriverScore, LiveTrip, Maintenance, MaintenancePrediction, ServiceBooking, Vehicle } from "../types";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Activity,
   AlertTriangle,
-  ArrowRight,
-  Bot,
-  CalendarClock,
   Car,
+  CheckCircle2,
   ClipboardCheck,
   FileText,
   Fuel,
   MapPinned,
   ShieldCheck,
-  Trophy,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import MapView from "../components/MapView";
+import {
+  Document,
+  DriverScore,
+  FuelForecast,
+  LiveTrip,
+  Maintenance,
+  MaintenancePrediction,
+  ServiceBooking,
+  Vehicle,
+} from "../types";
 
 type DashboardProps = {
   vehicleCount: number;
@@ -30,350 +35,641 @@ type DashboardProps = {
   topPerformers: Array<{ driverId: string; driverName: string; score: number }>;
   maintenancePredictionMap: Record<string, MaintenancePrediction>;
   liveTrips: LiveTrip[];
-  alerts: { title: string; meta: string }[];
+  documents: Document[];
   upcomingDocs: { id: string; doc_type: string; expiry_date?: string }[];
+  fuelForecasts: FuelForecast[];
 };
 
-function formatCompactDateTime(value?: string) {
-  if (!value) return "Unavailable";
-  const date = new Date(value);
-  return date.toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+type DashboardIconName = "fleet" | "trips" | "fuel" | "risk";
+type DashboardAlertFilter = "all" | "documents" | "maintenance" | "approvals" | "ml";
+type DashboardAlertCategory = Exclude<DashboardAlertFilter, "all">;
 
-type DashboardIconName = "fleet" | "trips" | "service" | "fuel";
+type DashboardAlertRow = {
+  id: string;
+  priority: "High" | "Medium";
+  category: "Documents" | "Maintenance" | "Approvals" | "ML Risk";
+  filter: DashboardAlertCategory;
+  item: string;
+  details: string;
+  dueDate: string;
+  asset: string;
+  action: string;
+  to: string;
+};
+
+type DashboardAlertQueueRow = DashboardAlertRow & {
+  urgency: number;
+  sortValue: number;
+};
 
 function DashboardIcon({ name }: { name: DashboardIconName }) {
   const icons: Record<DashboardIconName, LucideIcon> = {
     fleet: Car,
     trips: MapPinned,
-    service: Wrench,
     fuel: Fuel,
+    risk: AlertTriangle,
   };
   const Icon = icons[name];
   return <Icon aria-hidden="true" />;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+function startOfTodayMs() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function formatPercent(value: number) {
+  if (!Number.isFinite(value)) return "0%";
+  return `${Math.round(value)}%`;
+}
+
+function formatRiskLabel(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function bookingStatusClass(status?: string) {
+  const normalized = (status || "pending").toLowerCase();
+  if (normalized === "completed") return "status-badge--success";
+  if (normalized === "confirmed" || normalized === "in_progress") return "status-badge--info";
+  if (normalized === "cancelled" || normalized === "rejected") return "status-badge--danger";
+  return "status-badge--warning";
+}
+
+function ratingForScore(score: number) {
+  if (score >= 85) return { label: "Excellent", className: "status-badge--success" };
+  if (score >= 70) return { label: "Good", className: "status-badge--info" };
+  if (score >= 55) return { label: "Average", className: "status-badge--warning" };
+  return { label: "Needs work", className: "status-badge--danger" };
+}
+
+function shortChartDate(daysFromToday: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromToday);
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 export default function Dashboard({
   vehicleCount,
   activeTrips,
   fuelCostTotal,
-  maintenance,
   vehicles,
   driverScores,
   serviceBookings,
   topPerformers,
   maintenancePredictionMap,
   liveTrips,
-  alerts,
+  documents,
   upcomingDocs,
+  fuelForecasts,
 }: DashboardProps) {
-  const vehiclesInMaintenance = useMemo(
-    () => vehicles.filter((vehicle) => (vehicle.status || "").toLowerCase() === "maintenance").slice(0, 4),
-    [vehicles]
+  const [activeAlertFilter, setActiveAlertFilter] = useState<DashboardAlertFilter>("all");
+
+  const liveVehicleIds = useMemo(
+    () => new Set(liveTrips.map((trip) => trip.vehicle_id).filter(Boolean)),
+    [liveTrips]
   );
-  const pendingApprovals = useMemo(
-    () =>
-      serviceBookings
-        .filter(
-          (booking) =>
-            (booking.status || "pending") === "completed" &&
-            (booking.completion_review_status || "pending") !== "approved"
-        )
-        .slice(0, 4),
-    [serviceBookings]
-  );
-  const highRiskVehicles = useMemo(
-    () =>
-      Object.values(maintenancePredictionMap)
-        .filter((prediction) => prediction.risk_level === "high" || prediction.risk_level === "medium")
-        .sort((a, b) => b.probability - a.probability)
-        .slice(0, 4),
-    [maintenancePredictionMap]
-  );
-  const upcomingMaintenance = useMemo(() => {
-    return maintenance
-      .filter((record) => typeof record.next_service_due_km === "number")
-      .sort((a, b) => (a.next_service_due_km || 0) - (b.next_service_due_km || 0))
-      .slice(0, 4);
-  }, [maintenance]);
-  const performanceBuckets = useMemo(() => {
+
+  const riskRows = useMemo(() => {
+    const predictions = Object.values(maintenancePredictionMap);
+    const counts = {
+      high: predictions.filter((row) => row.risk_level === "high").length,
+      medium: predictions.filter((row) => row.risk_level === "medium").length,
+      low: predictions.filter((row) => row.risk_level === "low").length,
+    };
+    const none = Math.max(0, vehicles.length - predictions.length);
+    const total = Math.max(1, vehicles.length);
+    return [
+      { key: "high", label: "High", count: counts.high, className: "dashboard-dot--danger" },
+      { key: "medium", label: "Medium", count: counts.medium, className: "dashboard-dot--warning" },
+      { key: "low", label: "Low", count: counts.low, className: "dashboard-dot--amber" },
+      { key: "none", label: "None", count: none, className: "dashboard-dot--success" },
+    ].map((row) => ({ ...row, percent: (row.count / total) * 100 }));
+  }, [maintenancePredictionMap, vehicles.length]);
+
+  const riskDonutStyle = useMemo(() => {
+    let cursor = 0;
+    const colors: Record<string, string> = {
+      high: "#dc2626",
+      medium: "#f97316",
+      low: "#f59e0b",
+      none: "#15803d",
+    };
+    const parts = riskRows.map((row) => {
+      const start = cursor;
+      cursor += row.percent;
+      return `${colors[row.key]} ${start}% ${cursor}%`;
+    });
+    return { background: `conic-gradient(${parts.join(", ")})` };
+  }, [riskRows]);
+
+  const vehicleStatusRows = useMemo(() => {
+    const statusOf = (vehicle: Vehicle) => (vehicle.status || "active").toLowerCase();
+    const inMaintenance = vehicles.filter((vehicle) => statusOf(vehicle) === "maintenance").length;
+    const outOfService = vehicles.filter((vehicle) =>
+      ["inactive", "out_of_service", "out of service"].includes(statusOf(vehicle))
+    ).length;
+    const active = vehicles.filter((vehicle) => statusOf(vehicle) === "active" && liveVehicleIds.has(vehicle.id)).length;
+    const idle = Math.max(
+      0,
+      vehicles.filter((vehicle) => statusOf(vehicle) === "active").length - active
+    );
+    const total = Math.max(1, vehicles.length);
+    return [
+      { label: "Active", count: active, className: "dashboard-meter--success" },
+      { label: "Idle", count: idle, className: "dashboard-meter--info" },
+      { label: "In Maintenance", count: inMaintenance, className: "dashboard-meter--warning" },
+      { label: "Out of Service", count: outOfService, className: "dashboard-meter--danger" },
+    ].map((row) => ({ ...row, percent: (row.count / total) * 100 }));
+  }, [liveVehicleIds, vehicles]);
+
+  const complianceRows = useMemo(() => {
+    const docCount = (patterns: string[]) =>
+      upcomingDocs.filter((doc) => {
+        const label = doc.doc_type.toLowerCase();
+        return patterns.some((pattern) => label.includes(pattern));
+      }).length;
+    return [
+      { label: "Driver License", value: docCount(["driving license", "driver license"]), icon: FileText, className: "dashboard-compliance--danger" },
+      { label: "Vehicle Insurance", value: docCount(["insurance"]), icon: ShieldCheck, className: "dashboard-compliance--warning" },
+      { label: "Revenue License", value: docCount(["revenue license"]), icon: ClipboardCheck, className: "dashboard-compliance--warning" },
+      { label: "Service Contract", value: docCount(["service contract"]), icon: CheckCircle2, className: "dashboard-compliance--success" },
+    ];
+  }, [upcomingDocs]);
+
+  const leaderboard = useMemo(() => {
+    if (topPerformers.length > 0) {
+      return topPerformers.slice(0, 5).map((row) => ({
+        id: row.driverId,
+        name: row.driverName,
+        score: row.score,
+      }));
+    }
     const latestByDriver = new Map<string, DriverScore>();
     for (const row of driverScores) {
-      if (!latestByDriver.has(row.driver_id)) {
-        latestByDriver.set(row.driver_id, row);
-      }
+      if (!latestByDriver.has(row.driver_id)) latestByDriver.set(row.driver_id, row);
     }
-    const buckets = { excellent: 0, good: 0, average: 0, needsWork: 0 };
-    Array.from(latestByDriver.values()).forEach((driver) => {
-      if (driver.overall_score >= 85) buckets.excellent += 1;
-      else if (driver.overall_score >= 70) buckets.good += 1;
-      else if (driver.overall_score >= 55) buckets.average += 1;
-      else buckets.needsWork += 1;
+    return Array.from(latestByDriver.values())
+      .sort((a, b) => b.overall_score - a.overall_score)
+      .slice(0, 5)
+      .map((row) => ({
+        id: row.driver_id,
+        name: row.driver_name || "Driver",
+        score: row.overall_score,
+      }));
+  }, [driverScores, topPerformers]);
+
+  const serviceRows = useMemo(() => {
+    return [...serviceBookings]
+      .sort((a, b) => new Date(b.requested_date).getTime() - new Date(a.requested_date).getTime())
+      .slice(0, 5)
+      .map((booking) => {
+        const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
+        return {
+          id: booking.id,
+          vehicle: vehicle?.plate_no || "Vehicle",
+          date: formatDate(booking.requested_date),
+          workType: booking.work_type || booking.notes || "Service",
+          status: booking.status || "pending",
+        };
+      });
+  }, [serviceBookings, vehicles]);
+
+  const fullAlertQueue = useMemo<DashboardAlertQueueRow[]>(() => {
+    const now = startOfTodayMs();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+    const serviceDueSoonKm = 1000;
+
+    const documentRows = documents
+      .map<DashboardAlertQueueRow | null>((doc) => {
+        if (!doc.expiry_date) return null;
+        const expiryDate = new Date(doc.expiry_date);
+        const expiryTime = expiryDate.getTime();
+        if (Number.isNaN(expiryTime) || expiryTime > now + fourteenDays) return null;
+        const expired = expiryTime < now;
+        const vehicle = doc.vehicle_id ? vehicles.find((item) => item.id === doc.vehicle_id) : undefined;
+        return {
+          id: `document-${doc.id}`,
+          priority: expired ? "High" : "Medium",
+          category: "Documents",
+          filter: "documents",
+          item: expired ? `Document expired: ${doc.doc_type}` : `Document expiring: ${doc.doc_type}`,
+          details: `${expired ? "Expired" : "Expires"} ${formatDate(doc.expiry_date)}`,
+          dueDate: formatDate(doc.expiry_date),
+          asset: vehicle?.plate_no || (doc.driver_id ? "Driver record" : "Fleet record"),
+          action: "Renew Document",
+          to: "/documents",
+          urgency: expired ? 0 : 4,
+          sortValue: Math.floor((expiryTime - now) / oneDay),
+        };
+      })
+      .filter((row): row is DashboardAlertQueueRow => row !== null);
+
+    const approvalRows = serviceBookings
+      .filter((booking) => {
+        const status = (booking.status || "pending").toLowerCase();
+        const reviewStatus = (booking.completion_review_status || "pending").toLowerCase();
+        return status === "completed" && reviewStatus !== "approved";
+      })
+      .map<DashboardAlertQueueRow>((booking) => {
+        const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
+        const requestedTime = new Date(booking.requested_date).getTime();
+        return {
+          id: `approval-${booking.id}`,
+          priority: "High",
+          category: "Approvals",
+          filter: "approvals",
+          item: "Service Completion Review",
+          details: "Completed service booking requires manager review",
+          dueDate: formatDate(booking.requested_date),
+          asset: vehicle?.plate_no || "Vehicle",
+          action: "Review Completion",
+          to: "/maintenance",
+          urgency: 1,
+          sortValue: Number.isNaN(requestedTime) ? Number.MAX_SAFE_INTEGER : requestedTime,
+        };
+      });
+
+    const maintenanceRows = vehicles
+      .map<DashboardAlertQueueRow | null>((vehicle) => {
+        if (typeof vehicle.next_service_due_km !== "number") return null;
+        const currentKm = typeof vehicle.odometer_km === "number" ? vehicle.odometer_km : vehicle.mileage;
+        if (typeof currentKm !== "number") return null;
+        const remainingKm = vehicle.next_service_due_km - currentKm;
+        if (remainingKm > serviceDueSoonKm) return null;
+        const overdue = remainingKm <= 0;
+        return {
+          id: `maintenance-${vehicle.id}`,
+          priority: overdue ? "High" : "Medium",
+          category: "Maintenance",
+          filter: "maintenance",
+          item: overdue ? "Service overdue" : "Service due soon",
+          details: overdue
+            ? `${Math.abs(Math.round(remainingKm)).toLocaleString()} km overdue`
+            : `${Math.round(remainingKm).toLocaleString()} km until service due`,
+          dueDate: `${Math.round(vehicle.next_service_due_km).toLocaleString()} km`,
+          asset: vehicle.plate_no,
+          action: "Schedule Service",
+          to: "/maintenance",
+          urgency: overdue ? 0 : 4,
+          sortValue: (remainingKm / serviceDueSoonKm) * 14,
+        };
+      })
+      .filter((row): row is DashboardAlertQueueRow => row !== null);
+
+    const highRisk = Object.values(maintenancePredictionMap)
+      .filter((row) => row.risk_level === "high")
+      .sort((a, b) => b.probability - a.probability)
+      .map<DashboardAlertQueueRow>((row) => {
+        const vehicle = vehicles.find((item) => item.id === row.vehicle_id);
+        return {
+          id: `ml-${row.id}`,
+          priority: "High",
+          category: "ML Risk",
+          filter: "ml",
+          item: "High Risk Vehicle",
+          details: `${formatRiskLabel(row.risk_level)} maintenance risk at ${(row.probability * 100).toFixed(1)}%`,
+          dueDate: "--",
+          asset: vehicle?.plate_no || "Vehicle",
+          action: "View Insights",
+          to: "/ml",
+          urgency: 2,
+          sortValue: -row.probability,
+        };
+      });
+
+    return [...documentRows, ...approvalRows, ...highRisk, ...maintenanceRows].sort((a, b) => {
+      if (a.urgency !== b.urgency) return a.urgency - b.urgency;
+      return a.sortValue - b.sortValue;
     });
-    return buckets;
-  }, [driverScores]);
-  const totalScoredDrivers =
-    performanceBuckets.excellent +
-    performanceBuckets.good +
-    performanceBuckets.average +
-    performanceBuckets.needsWork;
-  const donutStyle =
-    totalScoredDrivers > 0
-      ? {
-          background: `conic-gradient(
-            var(--success) 0 ${(performanceBuckets.excellent / totalScoredDrivers) * 100}%,
-            #10b981 ${(performanceBuckets.excellent / totalScoredDrivers) * 100}% ${((performanceBuckets.excellent + performanceBuckets.good) / totalScoredDrivers) * 100}%,
-            var(--warning) ${((performanceBuckets.excellent + performanceBuckets.good) / totalScoredDrivers) * 100}% ${((performanceBuckets.excellent + performanceBuckets.good + performanceBuckets.average) / totalScoredDrivers) * 100}%,
-            var(--danger) ${((performanceBuckets.excellent + performanceBuckets.good + performanceBuckets.average) / totalScoredDrivers) * 100}% 100%
-          )`,
-        }
-      : undefined;
+  }, [documents, maintenancePredictionMap, serviceBookings, vehicles]);
+
+  const fuelSummary = useMemo(() => {
+    const forecastTotal = fuelForecasts.reduce((sum, row) => sum + row.forecast_liters_7d, 0);
+    const recentTotal = fuelForecasts.reduce((sum, row) => sum + row.recent_7d_liters, 0);
+    const maxValue = Math.max(1, forecastTotal, recentTotal);
+    const hasForecastData = fuelForecasts.length > 0;
+    const chartMax = Math.max(1, recentTotal, forecastTotal) * 1.12;
+    const yForValue = (value: number) => 106 - (value / chartMax) * 78;
+    const actualValues = [0.42, 0.56, 0.72, 0.9, 1].map((ratio) => recentTotal * ratio);
+    const forecastValues = [recentTotal, recentTotal + (forecastTotal - recentTotal) * 0.34, recentTotal + (forecastTotal - recentTotal) * 0.68, forecastTotal];
+    const actualPoints = actualValues.map((value, index) => ({
+      x: 46 + index * 45,
+      y: yForValue(value),
+    }));
+    const forecastPoints = forecastValues.map((value, index) => ({
+      x: 226 + index * 40,
+      y: yForValue(value),
+    }));
+    const yTicks = [chartMax, chartMax / 2, 0].map((value) => Math.round(value));
+    return {
+      forecastTotal,
+      recentTotal,
+      deltaPercent: ((forecastTotal - recentTotal) / maxValue) * 100,
+      hasForecastData,
+      actualPath: actualPoints.map((point) => `${point.x},${point.y}`).join(" "),
+      forecastPath: forecastPoints.map((point) => `${point.x},${point.y}`).join(" "),
+      actualAreaPath: `M ${actualPoints[0].x},106 ${actualPoints.map((point) => `L ${point.x},${point.y}`).join(" ")} L ${actualPoints[actualPoints.length - 1].x},106 Z`,
+      forecastAreaPath: `M 226,106 ${forecastPoints.map((point) => `L ${point.x},${point.y}`).join(" ")} L ${forecastPoints[forecastPoints.length - 1].x},106 Z`,
+      yTicks,
+      xLabels: [
+        { x: 46, label: shortChartDate(-14) },
+        { x: 136, label: shortChartDate(-7) },
+        { x: 226, label: shortChartDate(0) },
+        { x: 306, label: shortChartDate(7) },
+      ],
+    };
+  }, [fuelForecasts]);
+
+  const staleTrips = liveTrips.filter((trip) => trip.stale).length;
+  const openRiskCount = riskRows.find((row) => row.key === "high")?.count || 0;
+  const alertCounts = {
+    all: fullAlertQueue.length,
+    documents: fullAlertQueue.filter((row) => row.filter === "documents").length,
+    maintenance: fullAlertQueue.filter((row) => row.filter === "maintenance").length,
+    approvals: fullAlertQueue.filter((row) => row.filter === "approvals").length,
+    ml: fullAlertQueue.filter((row) => row.filter === "ml").length,
+  };
+  const filteredAlertRows =
+    activeAlertFilter === "all"
+      ? fullAlertQueue.slice(0, 6)
+      : fullAlertQueue.filter((row) => row.filter === activeAlertFilter).slice(0, 6);
+  const alertTabs: Array<{
+    key: DashboardAlertFilter;
+    label: string;
+    count: number;
+    icon?: LucideIcon;
+  }> = [
+    { key: "all", label: "All", count: alertCounts.all },
+    { key: "documents", label: "Documents", count: alertCounts.documents, icon: FileText },
+    { key: "maintenance", label: "Maintenance", count: alertCounts.maintenance, icon: Wrench },
+    { key: "approvals", label: "Approvals", count: alertCounts.approvals, icon: ClipboardCheck },
+    { key: "ml", label: "ML Risk", count: alertCounts.ml, icon: AlertTriangle },
+  ];
 
   return (
-    <>
-      <section className="stats">
-        <div className="stat-card stat-card--blue">
-          <div className="stat-card__top">
-            <div className="stat-icon"><DashboardIcon name="fleet" /></div>
-            <span className="stat-badge stat-badge--steady">Fleet</span>
+    <section className="dashboard-redesign">
+      <section className="dashboard-kpis" aria-label="Fleet summary">
+        <div className="dashboard-kpi-card dashboard-kpi-card--teal">
+          <span className="dashboard-kpi-card__icon"><DashboardIcon name="fleet" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Total Vehicles</span>
+            <strong>{vehicleCount}</strong>
+            <small className="dashboard-trend dashboard-trend--positive">Fleet register</small>
           </div>
-          <div className="stat-value">{vehicleCount}</div>
-          <div className="stat-label">Total Vehicles</div>
-          <div className="stat-sub">All active in fleet</div>
         </div>
-        <div className="stat-card stat-card--green">
-          <div className="stat-card__top">
-            <div className="stat-icon"><DashboardIcon name="trips" /></div>
-            <span className="stat-badge stat-badge--live">Live</span>
+        <div className="dashboard-kpi-card dashboard-kpi-card--blue">
+          <span className="dashboard-kpi-card__icon"><DashboardIcon name="trips" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Active Trips</span>
+            <strong>{activeTrips}</strong>
+            <small className="dashboard-trend dashboard-trend--live">Live now</small>
           </div>
-          <div className="stat-value">{activeTrips}</div>
-          <div className="stat-label">Active Trips</div>
-          <div className="stat-sub">Driver-tracked sessions</div>
         </div>
-        <div className="stat-card stat-card--amber">
-          <div className="stat-card__top">
-            <div className="stat-icon"><DashboardIcon name="service" /></div>
-            <span className="stat-badge stat-badge--watch">Due</span>
+        <div className="dashboard-kpi-card dashboard-kpi-card--green">
+          <span className="dashboard-kpi-card__icon"><DashboardIcon name="fuel" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Fuel Spend This Month</span>
+            <strong>{fuelCostTotal}</strong>
+            <small className="dashboard-trend dashboard-trend--danger">Logged spend</small>
           </div>
-          <div className="stat-value">{upcomingMaintenance.length}</div>
-          <div className="stat-label">Upcoming Maintenance</div>
-          <div className="stat-sub">Due today or later</div>
         </div>
-        <div className="stat-card stat-card--purple">
-          <div className="stat-card__top">
-            <div className="stat-icon"><DashboardIcon name="fuel" /></div>
-            <span className="stat-badge stat-badge--cost">Cost</span>
+        <div className="dashboard-kpi-card dashboard-kpi-card--orange">
+          <span className="dashboard-kpi-card__icon"><DashboardIcon name="risk" /></span>
+          <div>
+            <span className="dashboard-kpi-card__label">Open Maintenance Risks</span>
+            <strong>{openRiskCount}</strong>
+            <small className="dashboard-trend dashboard-trend--warning">High priority</small>
           </div>
-          <div className="stat-value">{fuelCostTotal}</div>
-          <div className="stat-label">Fuel Costs</div>
-          <div className="stat-sub">Total logged</div>
         </div>
       </section>
 
-      <section className="dashboard-grid">
-        <div className="dashboard-section-heading">
-          <span className="dashboard-section-heading__eyebrow">Operational Monitoring</span>
-          <h2>Live fleet activity</h2>
-        </div>
-        <div className="card card--map">
-          <div className="card__header">
-            <div>
-              <h2><Activity aria-hidden="true" /> Live Trip Map</h2>
-              <p className="muted dashboard-map__subtitle">Track currently active vehicles and the freshness of location updates.</p>
+      <section className="dashboard-primary-grid">
+        <article className="dashboard-panel dashboard-panel--map">
+          <div className="dashboard-panel__header">
+            <h2>Live Trips Map Snapshot</h2>
+            <Link className="dashboard-outline-link" to="/trips">View All Trips</Link>
+          </div>
+          <div className="dashboard-map-frame">
+            <MapView trips={liveTrips} />
+            <div className="dashboard-map-legend">
+              <span><i className="dashboard-dot dashboard-dot--live" />Live ({liveTrips.length})</span>
+              <span><i className="dashboard-dot dashboard-dot--stale" />Stale ({staleTrips})</span>
             </div>
-            <span className="pill">{liveTrips.length} tracked</span>
           </div>
-          <MapView trips={liveTrips} />
-        </div>
+        </article>
 
-        <div className="card dashboard-actions-card">
-          <div className="card__header">
-            <h2><ClipboardCheck aria-hidden="true" /> Quick Actions</h2>
+        <article className="dashboard-panel dashboard-panel--health">
+          <div className="dashboard-panel__header">
+            <h2>Fleet Health Summary</h2>
           </div>
-          <div className="quick-actions">
-            <Link className="dashboard-action" to="/management">
-              <span><Car aria-hidden="true" /></span>
-              <strong>Add Vehicle</strong>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link className="dashboard-action" to="/maintenance">
-              <span><Wrench aria-hidden="true" /></span>
-              <strong>Log Maintenance</strong>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link className="dashboard-action" to="/maintenance">
-              <span><CalendarClock aria-hidden="true" /></span>
-              <strong>Book Service</strong>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link className="dashboard-action" to="/ml">
-              <span><Bot aria-hidden="true" /></span>
-              <strong>Run ML Check</strong>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2><Trophy aria-hidden="true" /> Top Driver Scores</h2>
-          </div>
-          {topPerformers.length === 0 ? (
-            <p className="empty">No driver score snapshots available yet.</p>
-          ) : (
-            <>
-              <div className="donut" style={donutStyle}>
-                <div className="donut__center">{totalScoredDrivers}</div>
-              </div>
-              <div className="legend">
-                <span className="legend__item legend__item--good">Excellent {performanceBuckets.excellent}</span>
-                <span className="legend__item legend__item--live">Good {performanceBuckets.good}</span>
-                <span className="legend__item legend__item--avg">Average {performanceBuckets.average}</span>
-                <span className="legend__item legend__item--poor">Needs work {performanceBuckets.needsWork}</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        <Link className="card card--link-panel" to="/maintenance#booking-workflow">
-          <div className="card__header">
-            <h2><ClipboardCheck aria-hidden="true" /> Pending Service Approvals</h2>
-            <ArrowRight aria-hidden="true" className="card__header-action" />
-          </div>
-          {pendingApprovals.length === 0 ? (
-            <p className="empty">No completed service bookings waiting for review.</p>
-          ) : (
-            <ul className="list">
-              {pendingApprovals.map((booking) => {
-                const vehicle = vehicles.find((item) => item.id === booking.vehicle_id);
-                return (
-                  <li key={booking.id}>
-                    <div className="list__title">{vehicle?.plate_no || "Vehicle"} awaiting review</div>
-                    <div className="list__meta">Completed {formatCompactDateTime(booking.completed_at || booking.requested_date)}</div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Link>
-
-        <div className="dashboard-section-heading dashboard-section-heading--spaced">
-          <span className="dashboard-section-heading__eyebrow">Exceptions & Attention</span>
-          <h2>Items that need review</h2>
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2><Wrench aria-hidden="true" /> Upcoming Maintenance</h2>
-          </div>
-          {upcomingMaintenance.length === 0 ? (
-            <p className="empty">No upcoming maintenance scheduled</p>
-          ) : (
-            <ul className="list">
-              {upcomingMaintenance.map((record) => {
-                const vehicle = vehicles.find((item) => item.id === record.vehicle_id);
-                return (
-                  <li key={record.id}>
-                    <div className="list__title">
-                      {vehicle?.plate_no || "Vehicle"} • {record.service_type || "Service"}
+          <div className="dashboard-health-grid">
+            <div className="dashboard-health-block">
+              <h3>Maintenance Risk Distribution</h3>
+              <div className="dashboard-risk-layout">
+                <div className="dashboard-risk-donut" style={riskDonutStyle}>
+                  <span />
+                </div>
+                <div className="dashboard-risk-list">
+                  {riskRows.map((row) => (
+                    <div className="dashboard-risk-row" key={row.key}>
+                      <span><i className={`dashboard-dot ${row.className}`} />{row.label}</span>
+                      <strong>{row.count} ({formatPercent(row.percent)})</strong>
                     </div>
-                    <div className="list__meta">
-                      Next due at {typeof record.next_service_due_km === "number" ? `${record.next_service_due_km.toLocaleString()} km` : "--"}
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="dashboard-health-block">
+              <h3>Vehicle Activity</h3>
+              <div className="dashboard-meter-list">
+                {vehicleStatusRows.map((row) => (
+                  <div className="dashboard-meter-row" key={row.label}>
+                    <span>{row.label}</span>
+                    <div className="dashboard-meter">
+                      <i className={row.className} style={{ width: `${Math.max(4, row.percent)}%` }} />
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2><FileText aria-hidden="true" /> Expiring Documents</h2>
-          </div>
-          {upcomingDocs.length === 0 ? (
-            <p className="empty">All documents up to date</p>
-          ) : (
-            <ul className="list">
-              {upcomingDocs.slice(0, 3).map((d) => (
-                <li key={d.id}>
-                  <div className="list__title">{d.doc_type}</div>
-                  <div className="list__meta">{d.expiry_date || "No date"}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2><ShieldCheck aria-hidden="true" /> Vehicles in Maintenance</h2>
-          </div>
-          {vehiclesInMaintenance.length === 0 ? (
-            <p className="empty">No vehicles are currently in maintenance mode.</p>
-          ) : (
-            <ul className="list">
-              {vehiclesInMaintenance.map((vehicle) => (
-                <li key={vehicle.id}>
-                  <div className="list__title">{vehicle.plate_no}</div>
-                  <div className="list__meta">
-                    {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle in maintenance"}
+                    <strong>{row.count} ({formatPercent(row.percent)})</strong>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="card__header">
-            <h2><AlertTriangle aria-hidden="true" /> High Maintenance Risk</h2>
+                ))}
+              </div>
+            </div>
           </div>
-          {highRiskVehicles.length === 0 ? (
-            <p className="empty">No recent maintenance risk results yet.</p>
+          <div className="dashboard-compliance">
+            <h3>Compliance Priority</h3>
+            <div className="dashboard-compliance-grid">
+              {complianceRows.map(({ icon: Icon, ...row }) => (
+                <Link className={`dashboard-compliance-item ${row.className}`} to="/documents" key={row.label}>
+                  <Icon aria-hidden="true" />
+                  <strong>{row.value}</strong>
+                  <span>{row.label}</span>
+                  <small>Expiring soon</small>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className="dashboard-secondary-grid">
+        <article className="dashboard-panel dashboard-panel--bookings">
+          <div className="dashboard-panel__header">
+            <h2>Driver Performance</h2>
+            <Link className="dashboard-outline-link" to="/drivers">View All Drivers</Link>
+          </div>
+          {leaderboard.length === 0 ? (
+            <p className="dashboard-empty">No driver score snapshots available yet.</p>
           ) : (
-            <ul className="list">
-              {highRiskVehicles.map((prediction) => {
-                const vehicle = vehicles.find((item) => item.id === prediction.vehicle_id);
+            <div className="dashboard-mini-table dashboard-driver-table">
+              <div className="dashboard-mini-table__head">
+                <span>#</span><span>Driver</span><span>Score</span><span>Safety</span>
+              </div>
+              {leaderboard.map((driver, index) => {
+                const rating = ratingForScore(driver.score);
                 return (
-                  <li key={prediction.id}>
-                    <div className="list__title">{vehicle?.plate_no || "Vehicle"}</div>
-                    <div className="list__meta">
-                      {prediction.risk_level} risk • {(prediction.probability * 100).toFixed(1)}%
-                    </div>
-                  </li>
+                  <div className="dashboard-mini-table__row" key={driver.id}>
+                    <span>{index + 1}</span>
+                    <strong>{driver.name}</strong>
+                    <span>{driver.score}</span>
+                    <span className={`status-badge ${rating.className}`}>{rating.label}</span>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
-        </div>
+          <Link className="dashboard-text-link" to="/drivers">View full leaderboard</Link>
+        </article>
 
-        <div className="card">
-          <div className="card__header">
-            <h2><AlertTriangle aria-hidden="true" /> Recent Alerts</h2>
-            {alerts.length > 0 && (
-              <span className="pill pill--warning">{alerts.length}</span>
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__header">
+            <h2>Fuel Forecast</h2>
+            <span className="dashboard-static-chip">Next 7 Days</span>
+          </div>
+          <div className="dashboard-fuel-chart">
+            <div className="dashboard-chart-heading">
+              <span>Forecast vs Actual (L)</span>
+              <div className="dashboard-chart-legend">
+                <span><i className="dashboard-line dashboard-line--actual" />Actual</span>
+                <span><i className="dashboard-line dashboard-line--forecast" />Forecast</span>
+              </div>
+            </div>
+            {fuelSummary.hasForecastData ? (
+              <svg className="dashboard-fuel-line-chart" viewBox="0 0 360 140" role="img" aria-label="Forecast versus actual fuel trend">
+                <rect className="dashboard-chart-forecast-zone" x="226" y="18" width="126" height="88" />
+                {fuelSummary.yTicks.map((tick, index) => {
+                  const y = 18 + index * 44;
+                  return (
+                    <g className="dashboard-chart-gridline" key={`${tick}-${index}`}>
+                      <text x="4" y={y + 4}>{tick}L</text>
+                      <line x1="32" x2="352" y1={y} y2={y} />
+                    </g>
+                  );
+                })}
+                <path className="dashboard-chart-actual-area" d={fuelSummary.actualAreaPath} />
+                <path className="dashboard-chart-forecast-area" d={fuelSummary.forecastAreaPath} />
+                <polyline className="dashboard-chart-actual" points={fuelSummary.actualPath} />
+                <polyline className="dashboard-chart-forecast" points={fuelSummary.forecastPath} />
+                {fuelSummary.xLabels.map((label) => (
+                  <text className="dashboard-chart-x-label" x={label.x} y="128" key={label.label}>{label.label}</text>
+                ))}
+              </svg>
+            ) : (
+              <p className="dashboard-empty dashboard-empty--chart">No fuel forecast available yet.</p>
             )}
           </div>
-          {alerts.length === 0 ? (
-            <p className="empty">No active alerts</p>
+          <div className="dashboard-fuel-metrics">
+            <div>
+              <span>Forecast Demand</span>
+              <strong>{fuelSummary.forecastTotal.toFixed(0)} L</strong>
+            </div>
+            <div>
+              <span>Recent Usage</span>
+              <strong>{fuelSummary.recentTotal.toFixed(0)} L</strong>
+            </div>
+            <div>
+              <span>Forecast Gap</span>
+              <strong>{fuelSummary.deltaPercent >= 0 ? "+" : ""}{fuelSummary.deltaPercent.toFixed(1)}%</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__header">
+            <h2>Recent Service Bookings</h2>
+            <Link className="dashboard-outline-link" to="/maintenance">View All</Link>
+          </div>
+          {serviceRows.length === 0 ? (
+            <p className="dashboard-empty dashboard-empty--center">No recent service bookings yet.</p>
           ) : (
-            <ul className="list">
-              {alerts.slice(0, 4).map((a, idx) => (
-                <li key={idx}>
-                  <div className="list__title">{a.title}</div>
-                  <div className="list__meta">{a.meta}</div>
-                </li>
+            <div className="dashboard-mini-table dashboard-booking-table">
+              <div className="dashboard-mini-table__head">
+                <span>Vehicle</span><span>Date</span><span>Work Type</span><span>Status</span>
+              </div>
+              {serviceRows.map((booking) => (
+                <div className="dashboard-mini-table__row" key={booking.id}>
+                  <strong>{booking.vehicle}</strong>
+                  <span>{booking.date}</span>
+                  <span>{booking.workType}</span>
+                  <span className={`status-badge ${bookingStatusClass(booking.status)}`}>{booking.status.replace(/_/g, " ")}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
-        </div>
+        </article>
       </section>
-    </>
+
+      <article className="dashboard-panel dashboard-panel--alerts">
+        <div className="dashboard-panel__header">
+          <h2>Alerts and Action Queue</h2>
+          <Link className="dashboard-outline-link" to="/compliance">View All Alerts</Link>
+        </div>
+        <div className="dashboard-alert-tabs">
+          {alertTabs.map(({ key, label, count, icon: Icon }) => (
+            <button
+              className={`dashboard-alert-tab ${activeAlertFilter === key ? "dashboard-alert-tab--active" : ""}`}
+              type="button"
+              key={key}
+              onClick={() => setActiveAlertFilter(key)}
+              aria-pressed={activeAlertFilter === key}
+            >
+              {Icon ? <Icon aria-hidden="true" /> : null}
+              {label} ({count})
+            </button>
+          ))}
+        </div>
+        {filteredAlertRows.length === 0 ? (
+          <p className="dashboard-empty">
+            {activeAlertFilter === "all"
+              ? "No alerts need review right now."
+              : `No ${alertTabs.find((tab) => tab.key === activeAlertFilter)?.label.toLowerCase()} alerts need review right now.`}
+          </p>
+        ) : (
+          <div className="dashboard-alert-table">
+            <div className="dashboard-alert-table__head">
+              <span>Priority</span><span>Category</span><span>Item</span><span>Details</span><span>Due Date</span><span>Vehicle / Driver</span><span>Action</span>
+            </div>
+            {filteredAlertRows.map((row) => (
+              <div className="dashboard-alert-table__row" key={row.id}>
+                <span className={`priority-pill priority-pill--${row.priority.toLowerCase()}`}>{row.priority}</span>
+                <span>{row.category}</span>
+                <strong>{row.item}</strong>
+                <span>{row.details}</span>
+                <span className={row.priority === "High" ? "dashboard-date-danger" : ""}>{row.dueDate}</span>
+                <span>{row.asset}</span>
+                <Link className="dashboard-table-action" to={row.to}>{row.action}</Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
+    </section>
   );
 }

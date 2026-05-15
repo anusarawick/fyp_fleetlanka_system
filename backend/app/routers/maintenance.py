@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import get_bearer_token, require_manager_profile
 from app.schemas.maintenance import MaintenanceCreate, MaintenanceOut, MaintenanceUpdate
+from app.services.maintenance_sync import requires_component_odometer, sync_manual_maintenance_effects
 from app.services.supabase_client import get_supabase_client
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -13,47 +14,6 @@ def _require_token(token: Optional[str]) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     return token
-
-
-def _maintenance_kind(row: dict) -> str:
-    raw = (row.get("event_type") or row.get("service_type") or "").lower().replace(" ", "_").replace("-", "_")
-    if "oil" in raw:
-        return "oil"
-    if "tyre" in raw or "tire" in raw:
-        return "tyre"
-    if "brake" in raw:
-        return "brake"
-    if "fuel" in raw and "filter" in raw:
-        return "fuel_filter"
-    if "service" in raw:
-        return "service"
-    return raw
-
-
-def _sync_component_state_from_maintenance(supabase, org_id: str, record: dict) -> None:
-    odometer = record.get("odometer_km")
-    if not record.get("vehicle_id") or odometer is None:
-        return
-    updates = {
-        "org_id": org_id,
-        "vehicle_id": record["vehicle_id"],
-    }
-    kind = _maintenance_kind(record)
-    if kind in {"service", "regular_service"}:
-        updates["last_service_odometer_km"] = odometer
-    elif kind == "oil":
-        updates["last_oil_change_odometer_km"] = odometer
-    elif kind == "tyre":
-        updates["last_tyre_change_odometer_km"] = odometer
-    elif kind == "brake":
-        updates["last_brake_service_odometer_km"] = odometer
-    elif kind == "fuel_filter":
-        updates["last_fuel_filter_change_odometer_km"] = odometer
-    if len(updates) > 2:
-        try:
-            supabase.table("vehicle_component_state").upsert(updates, on_conflict="vehicle_id").execute()
-        except Exception:
-            return
 
 
 @router.get("", response_model=List[MaintenanceOut])
@@ -80,10 +40,12 @@ def create_maintenance(
     supabase = get_supabase_client(token)
     data = payload.model_dump()
     data["org_id"] = org_id
+    if requires_component_odometer(data) and data.get("odometer_km") is None:
+        raise HTTPException(status_code=400, detail="Odometer is required for component maintenance events")
     response = supabase.table("maintenance").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
-    _sync_component_state_from_maintenance(supabase, org_id, response.data[0])
+    sync_manual_maintenance_effects(supabase, org_id, response.data[0])
     return response.data[0]
 
 
@@ -96,15 +58,30 @@ def update_maintenance(
 ) -> MaintenanceOut:
     token = _require_token(token)
     supabase = get_supabase_client(token)
+    existing = (
+        supabase.table("maintenance")
+        .select("*")
+        .eq("id", maintenance_id)
+        .eq("org_id", profile["org_id"])
+        .single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Maintenance record not found")
+    updates = payload.model_dump(exclude_none=True)
+    merged = {**existing.data, **updates}
+    if requires_component_odometer(merged) and merged.get("odometer_km") is None:
+        raise HTTPException(status_code=400, detail="Odometer is required for component maintenance events")
     response = (
         supabase.table("maintenance")
-        .update(payload.model_dump(exclude_none=True))
+        .update(updates)
         .eq("id", maintenance_id)
+        .eq("org_id", profile["org_id"])
         .execute()
     )
     if not response.data:
         raise HTTPException(status_code=400, detail="Update failed")
-    _sync_component_state_from_maintenance(supabase, profile["org_id"], response.data[0])
+    sync_manual_maintenance_effects(supabase, profile["org_id"], response.data[0])
     return response.data[0]
 
 

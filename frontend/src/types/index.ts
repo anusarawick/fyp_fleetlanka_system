@@ -20,6 +20,8 @@ export type Vehicle = {
   tire_condition?: string;
   brake_condition?: string;
   battery_status?: string;
+  image_url?: string;
+  image_path?: string;
   last_service_cost_lkr?: number;
   next_service_due_km?: number;
   avg_monthly_km?: number;
@@ -54,6 +56,31 @@ export type Driver = {
   status?: string;
   full_name?: string;
   phone?: string;
+};
+
+export type DriverInsightBucket = {
+  count: number;
+  driver_ids: string[];
+  preview: string[];
+};
+
+export type DriverInsights = {
+  attention: {
+    missing_phone: DriverInsightBucket;
+    missing_email: DriverInsightBucket;
+    inactive_access: DriverInsightBucket;
+  };
+  dispatch_coverage: {
+    available_drivers: number;
+    assigned_now: number;
+    contact_ready: number;
+    active_total: number;
+  };
+  cleanup: {
+    incomplete_profiles: number;
+    missing_names: number;
+    disabled_accounts: number;
+  };
 };
 
 export type Trip = {
@@ -159,6 +186,10 @@ export type Document = {
   doc_number?: string;
   expiry_date?: string;
   file_url?: string;
+  file_path?: string;
+  file_name?: string;
+  file_mime_type?: string;
+  file_size_bytes?: number;
 };
 
 export type ServiceCenter = {
@@ -168,6 +199,9 @@ export type ServiceCenter = {
   name: string;
   phone?: string;
   address?: string;
+  payment_access_enabled?: boolean;
+  stripe_account_id?: string;
+  stripe_onboarding_status?: string;
 };
 
 export type ServiceBooking = {
@@ -188,8 +222,21 @@ export type ServiceBooking = {
   completion_reviewed_at?: string;
   completion_reviewed_by?: string;
   completed_at?: string;
+  completed_odometer_km?: number;
   final_cost_lkr?: number;
   next_service_due_km?: number;
+  payment_status?: string;
+  payment?: {
+    id: string;
+    status?: string;
+    amount_lkr?: number;
+    currency?: string;
+    stripe_checkout_session_id?: string;
+    stripe_payment_intent_id?: string;
+    stripe_transfer_destination?: string;
+    paid_at?: string;
+    created_at?: string;
+  } | null;
 };
 
 export type Alert = {

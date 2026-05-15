@@ -16,6 +16,7 @@ from app.core.deps import (
 )
 from app.schemas.gps_points import GPSPointCreate
 from app.schemas.trips import LiveTripOut, TripCreate, TripOut, TripUpdate
+from app.services.notifications import manager_profiles, notify_profiles, upsert_notification
 from app.services.supabase_client import get_supabase_client
 from app.services.vehicle_feature_sync import sync_trip_vehicle_features
 
@@ -381,7 +382,27 @@ def create_trip(
     response = supabase.table("trips").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Insert failed")
-    return response.data[0]
+    trip = response.data[0]
+    if trip.get("driver_id") and trip.get("status") == "assigned":
+        upsert_notification(
+            supabase,
+            org_id=org_id,
+            recipient_profile_id=trip["driver_id"],
+            source_key=f"event:trip:{trip['id']}:assigned",
+            alert_type="trip_assigned",
+            title="New trip assigned",
+            message=trip.get("trip_title") or "A new trip has been assigned to you.",
+            severity="info",
+            category="trips",
+            action_url="/driver",
+            related_entity="trips",
+            related_id=trip["id"],
+            source_table="trips",
+            source_id=trip["id"],
+            due_date=str(trip.get("scheduled_start") or "")[:10] or None,
+            metadata={"vehicle_id": trip.get("vehicle_id")},
+        )
+    return trip
 
 
 @router.patch("/{trip_id}", response_model=TripOut)
@@ -467,6 +488,49 @@ def update_trip(
                 updated_trip = finalized.data[0]
         if updated_trip.get("status") == "completed" and updated_trip.get("vehicle_id"):
             sync_trip_vehicle_features(supabase, updated_trip["vehicle_id"])
+
+    if not _is_driver(profile) and updated_trip.get("driver_id"):
+        event = "cancelled" if next_status == "cancelled" else "updated"
+        upsert_notification(
+            supabase,
+            org_id=profile["org_id"],
+            recipient_profile_id=updated_trip["driver_id"],
+            source_key=f"event:trip:{trip_id}:{event}",
+            alert_type=f"trip_{event}",
+            title="Trip cancelled" if event == "cancelled" else "Trip updated",
+            message=(
+                f"{updated_trip.get('trip_title') or 'Your trip'} has been cancelled."
+                if event == "cancelled"
+                else f"{updated_trip.get('trip_title') or 'Your trip'} has been updated."
+            ),
+            severity="warning" if event == "cancelled" else "info",
+            category="trips",
+            action_url="/driver",
+            related_entity="trips",
+            related_id=trip_id,
+            source_table="trips",
+            source_id=trip_id,
+            due_date=str(updated_trip.get("scheduled_start") or "")[:10] or None,
+            metadata={"vehicle_id": updated_trip.get("vehicle_id")},
+        )
+    elif _is_driver(profile) and next_status in {"in_progress", "completed"}:
+        notify_profiles(
+            supabase,
+            manager_profiles(supabase, profile["org_id"]),
+            org_id=profile["org_id"],
+            source_key=f"event:trip:{trip_id}:{next_status}",
+            alert_type=f"trip_{next_status}",
+            title="Trip started" if next_status == "in_progress" else "Trip completed",
+            message=f"{updated_trip.get('trip_title') or 'A driver trip'} was {'started' if next_status == 'in_progress' else 'completed'}.",
+            severity="info",
+            category="trips",
+            action_url="/trips",
+            related_entity="trips",
+            related_id=trip_id,
+            source_table="trips",
+            source_id=trip_id,
+            metadata={"driver_id": profile.get("id"), "vehicle_id": updated_trip.get("vehicle_id")},
+        )
 
     return updated_trip
 

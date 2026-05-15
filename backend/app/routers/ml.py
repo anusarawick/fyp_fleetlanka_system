@@ -520,16 +520,37 @@ def list_maintenance_predictions(
     token: Optional[str] = Depends(get_bearer_token),
 ) -> list[dict]:
     token = _require_token(token)
-    supabase = get_supabase_client(token)
+    supabase = get_supabase_client(use_service_role=True)
     query = (
         supabase.table("maintenance_predictions")
         .select("*")
+        .eq("org_id", profile["org_id"])
         .order("predicted_at", desc=True)
     )
     if vehicle_id:
         query = query.eq("vehicle_id", vehicle_id)
     response = query.execute()
     return response.data or []
+
+
+@router.delete("/maintenance/predictions/{prediction_id}")
+def delete_maintenance_prediction(
+    prediction_id: str,
+    profile: dict = Depends(require_manager_profile),
+    token: Optional[str] = Depends(get_bearer_token),
+) -> dict:
+    token = _require_token(token)
+    supabase = get_supabase_client(use_service_role=True)
+    response = (
+        supabase.table("maintenance_predictions")
+        .delete()
+        .eq("id", prediction_id)
+        .eq("org_id", profile["org_id"])
+        .execute()
+    )
+    if response.data is None:
+        raise HTTPException(status_code=400, detail="Delete failed")
+    return {"status": "ok"}
 
 
 @router.post("/maintenance")
@@ -572,6 +593,7 @@ def predict_maintenance_by_vehicle(
 ) -> dict:
     token = _require_token(token)
     supabase = get_supabase_client(token)
+    prediction_store = get_supabase_client(use_service_role=True)
     try:
         record = build_live_maintenance_v3_record(supabase, profile["org_id"], vehicle_id)
     except HTTPException:
@@ -604,7 +626,7 @@ def predict_maintenance_by_vehicle(
         "input_features": record,
     }
     try:
-        save_response = supabase.table("maintenance_predictions").insert(save_payload).execute()
+        save_response = prediction_store.table("maintenance_predictions").insert(save_payload).execute()
         if not save_response.data:
             raise HTTPException(
                 status_code=500,
@@ -625,6 +647,7 @@ def predict_maintenance_by_vehicle(
         "threshold_used": float(threshold),
         "risk_level": risk_level,
         "record": record,
+        "saved_prediction": save_response.data[0],
         "saved": True,
     }
 

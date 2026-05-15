@@ -7,6 +7,7 @@ create extension if not exists "pgcrypto";
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  stripe_customer_id text,
   created_at timestamptz not null default now()
 );
 
@@ -107,6 +108,8 @@ create table if not exists public.vehicles (
   tire_condition text,
   brake_condition text,
   battery_status text,
+  image_url text,
+  image_path text,
   last_service_cost_lkr numeric,
   next_service_due_km numeric,
   avg_monthly_km numeric,
@@ -251,6 +254,10 @@ create table if not exists public.documents (
   doc_number text,
   expiry_date date,
   file_url text,
+  file_path text,
+  file_name text,
+  file_mime_type text,
+  file_size_bytes integer,
   created_at timestamptz not null default now(),
   constraint documents_owner_check check (
     (vehicle_id is not null and driver_id is null)
@@ -262,13 +269,42 @@ create table if not exists public.documents (
 create table if not exists public.alerts (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id),
+  recipient_profile_id uuid references public.profiles(id) on delete cascade,
   alert_type text not null,
+  title text not null,
   related_entity text,
   related_id uuid,
   message text not null,
+  severity text not null default 'info',
+  category text not null default 'general',
+  action_url text,
+  source_table text,
+  source_id uuid,
+  source_key text not null,
   due_date date,
   status text default 'open',
-  created_at timestamptz not null default now()
+  metadata jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  dismissed_at timestamptz,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.notification_preferences (
+  profile_id uuid primary key references public.profiles(id) on delete cascade,
+  org_id uuid not null references public.organizations(id) on delete cascade,
+  documents boolean not null default true,
+  maintenance boolean not null default true,
+  approvals boolean not null default true,
+  ml boolean not null default true,
+  bookings boolean not null default true,
+  payments boolean not null default true,
+  chat boolean not null default true,
+  trips boolean not null default true,
+  fuel boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 -- Service centers
@@ -279,6 +315,9 @@ create table if not exists public.service_centers (
   name text not null,
   phone text,
   address text,
+  payment_access_enabled boolean not null default false,
+  stripe_account_id text,
+  stripe_onboarding_status text not null default 'not_started',
   created_at timestamptz not null default now()
 );
 
@@ -301,10 +340,71 @@ create table if not exists public.service_bookings (
   completion_reviewed_at timestamptz,
   completion_reviewed_by uuid references public.profiles(id) on delete set null,
   completed_at timestamptz,
+  completed_odometer_km numeric,
   final_cost_lkr numeric,
   next_service_due_km numeric,
+  payment_status text not null default 'unpaid',
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.service_booking_payments (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  booking_id uuid not null references public.service_bookings(id) on delete cascade,
+  service_center_id uuid not null references public.service_centers(id) on delete cascade,
+  amount_lkr numeric not null,
+  currency text not null default 'lkr',
+  status text not null default 'pending',
+  stripe_checkout_session_id text,
+  stripe_payment_intent_id text,
+  stripe_transfer_destination text,
+  checkout_url text,
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.chat_conversations (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations(id),
+  service_center_id uuid not null references public.service_centers(id) on delete cascade,
+  service_booking_id uuid references public.service_bookings(id) on delete cascade,
+  conversation_type text not null check (conversation_type in ('service_center', 'booking')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chat_conversation_booking_check check (
+    (conversation_type = 'service_center' and service_booking_id is null)
+    or (conversation_type = 'booking' and service_booking_id is not null)
+  )
+);
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.chat_conversations(id) on delete cascade,
+  org_id uuid not null references public.organizations(id),
+  sender_profile_id uuid not null references public.profiles(id) on delete cascade,
+  sender_role text not null check (sender_role in ('owner','manager','service')),
+  message_text text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.chat_read_states (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.chat_conversations(id) on delete cascade,
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  unique (conversation_id, profile_id)
+);
+
+create unique index if not exists chat_conversations_service_center_unique
+  on public.chat_conversations (org_id, service_center_id)
+  where service_booking_id is null;
+
+create unique index if not exists chat_conversations_booking_unique
+  on public.chat_conversations (org_id, service_booking_id)
+  where service_booking_id is not null;
+
+create index if not exists chat_messages_conversation_time_idx
+  on public.chat_messages (conversation_id, created_at);
 
 -- Driver score snapshots
 create table if not exists public.driver_scores (
@@ -349,8 +449,13 @@ alter table public.fuel_logs enable row level security;
 alter table public.maintenance enable row level security;
 alter table public.documents enable row level security;
 alter table public.alerts enable row level security;
+alter table public.notification_preferences enable row level security;
 alter table public.service_centers enable row level security;
 alter table public.service_bookings enable row level security;
+alter table public.service_booking_payments enable row level security;
+alter table public.chat_conversations enable row level security;
+alter table public.chat_messages enable row level security;
+alter table public.chat_read_states enable row level security;
 alter table public.driver_scores enable row level security;
 alter table public.maintenance_predictions enable row level security;
 alter table public.saved_places enable row level security;
@@ -402,6 +507,19 @@ create policy "alerts_org" on public.alerts
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
 
+create policy "notification_preferences_owner" on public.notification_preferences
+  for all using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
+
+create unique index if not exists alerts_recipient_source_key_unique
+  on public.alerts (recipient_profile_id, source_key);
+
+create index if not exists alerts_recipient_status_idx
+  on public.alerts (recipient_profile_id, dismissed_at, resolved_at, read_at, created_at desc);
+
+create index if not exists notification_preferences_org_idx
+  on public.notification_preferences (org_id);
+
 create policy "centers_org" on public.service_centers
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
@@ -409,6 +527,22 @@ create policy "centers_org" on public.service_centers
 create policy "bookings_org" on public.service_bookings
   for all using (org_id = public.current_org_id())
   with check (org_id = public.current_org_id());
+
+create policy "booking_payments_org" on public.service_booking_payments
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "chat_conversations_org" on public.chat_conversations
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "chat_messages_org" on public.chat_messages
+  for all using (org_id = public.current_org_id())
+  with check (org_id = public.current_org_id());
+
+create policy "chat_read_states_owner" on public.chat_read_states
+  for all using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
 
 create policy "driver_scores_org" on public.driver_scores
   for all using (org_id = public.current_org_id())
